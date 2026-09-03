@@ -167,6 +167,13 @@ export class GuessForm extends LitElement {
           this._selectSuggestion(suggestions[this.activeSuggestion])
         }
         break
+      case 'Tab':
+        // Let focus move on to the next field as normal — just also commit
+        // the highlighted suggestion first, the way Enter does.
+        if (this.activeSuggestion >= 0) {
+          this._selectSuggestion(suggestions[this.activeSuggestion])
+        }
+        break
       case 'Escape':
         this.suggestionsOpen = false
         break
