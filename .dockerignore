@@ -1,0 +1,7 @@
+# Frontend
+frontend/**/node_modules
+frontend/**/elm-stuff
+frontend/**/wwwroot
+
+# Dockerfile.api-cs
+appsettings.*.json

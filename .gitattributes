@@ -1,0 +1,50 @@
+# Normalize line endings across platforms
+* text=auto
+
+# Text files
+*.md text
+*.json text
+*.txt text
+*.html text
+*.css text
+*.scss text
+*.elm text
+*.cs text
+*.fs text
+*.csproj text
+*.fsproj text
+*.sln text eol=crlf
+*.yml text
+*.yaml text
+*.env text
+*.Dockerfile text
+*.gitignore text
+*.gitmodules text
+*.config text
+*.xml text
+*.props text
+*.targets text
+
+# Shell scripts should stay LF on all platforms
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows batch / command files
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Calendar files
+*.ics text eol=crlf
+
+# Binary assets
+*.ico binary
+*.jpg binary
+*.png binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.otf binary
+*.svg binary

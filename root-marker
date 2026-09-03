@@ -1,0 +1,7 @@
+# Marker file for project root discovery
+
+Scripts search upward until they find this file. The directory containing
+this file is treated as the canonical project root.
+
+Do not remove or rename this file unless you also update the scripts that
+depend on it.
