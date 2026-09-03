@@ -1,0 +1,40 @@
+// Mirrors the F# Domain types in backend/Domain/*.fs. Keep in sync by hand
+// for now; consider generating these from the backend if the shape starts
+// drifting often.
+
+export interface Verse {
+  book: string
+  chapter: number
+  verseNumber: number
+  text: string
+  translation: string
+  reference: string
+}
+
+export interface Player {
+  id: string
+  name: string
+  score: number
+}
+
+export type RoundState =
+  | { Case: 'WaitingForPlayers' }
+  | { Case: 'InProgress'; Fields: [Verse] }
+  | { Case: 'Scored'; Fields: [Verse, GuessResult[]] }
+
+export interface GuessResult {
+  playerId: string
+  correct: boolean
+  pointsAwarded: number
+}
+
+export interface Room {
+  code: string
+  players: Player[]
+  round: RoundState
+}
+
+export interface Guess {
+  book: string
+  chapter?: number
+}

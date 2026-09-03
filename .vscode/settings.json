@@ -1,0 +1,94 @@
+{
+  "cSpell.words": [
+    "Anson",
+    "bubblewrap",
+    "buildhelp",
+    "Ceazar",
+    "claude",
+    "csdef",
+    "dbmdl",
+    "dbproj",
+    "debian",
+    "devcontaier",
+    "devcontaineren",
+    "dlldata",
+    "docstates",
+    "dotnet",
+    "ebug",
+    "elease",
+    "eleases",
+    "esult",
+    "github",
+    "ignoreable",
+    "Installshield",
+    "ipch",
+    "jfrog",
+    "Knowit",
+    "localsettings",
+    "Malden",
+    "marp",
+    "nopw",
+    "novnc",
+    "NOVNC",
+    "ntvs",
+    "NUNIT",
+    "omnia",
+    "opendb",
+    "opensdf",
+    "orleans",
+    "pidb",
+    "previewable",
+    "psess",
+    "PTVS",
+    "publishproj",
+    "publishsettings",
+    "ritwickdey",
+    "schemaview",
+    "Silverlight",
+    "socat",
+    "sshtemplate",
+    "svclog",
+    "taskfile",
+    "Taskfile",
+    "ublish",
+    "userkeychain",
+    "userosscache",
+    "userprefs",
+    "vspscc",
+    "vspx",
+    "vssscc",
+    "websockify",
+    "wwwroot",
+    "xpress",
+    "yarp"
+  ],
+  "chat.tools.terminal.autoApprove": {
+    "ss": true,
+    "true": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/test-results/**": true,
+    "**/playwright-report/**": true,
+    "**/.git/objects/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/test-results": true,
+    "**/playwright-report": true
+  },
+  "files.exclude": {
+    "**/node_modules": true
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.markdownlint": "explicit"
+    }
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  }
+}

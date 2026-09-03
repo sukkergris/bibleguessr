@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Api/">
+    <Project Path="Api/BibleGuessr.Api.fsproj" />
+  </Folder>
+  <Folder Name="/Domain/">
+    <Project Path="Domain/BibleGuessr.Domain.fsproj" />
+  </Folder>
+</Solution>

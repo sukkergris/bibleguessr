@@ -18,6 +18,8 @@ fi
 
 "$SCRIPT" ~/.ssh/config
 
+bash "${SCRIPTS_DIR}/install-global-npm-tools.sh"
+
 claude --print "." > /dev/null 2>&1 || true
 
 # Fix permissions on mounted volumes since they are owned by root when created by the container, but we want them to be owned by the container user.
