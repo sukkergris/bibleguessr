@@ -1,7 +1,8 @@
 /// Loads verse data from the bibelen-dk source: one HTML file per chapter,
-/// zipped into a single archive under `bibles/bibelen-dk/src/`. That folder
-/// is gitignored (private local translation data) — this loader reads it
-/// at startup if present.
+/// zipped into a single archive under `bibles/bibelen-dk/src/`. That
+/// translation is public domain, so its source files are tracked in git —
+/// only the unzipped working copy at `bibles/bibelen-dk/Bibelen Files/` is
+/// gitignored. This loader reads `src/` at startup if present.
 ///
 /// File shape:
 ///   <h1>{BookName}[ {ChapterNumber}]</h1>

@@ -26,8 +26,7 @@ mode in the app's setup screen.
 drop in a `.epub` export and it's parsed entirely in your browser (via
 `frontend/src/epub-parser.ts`), cached locally in IndexedDB, and never
 uploaded anywhere. Useful for translations you're only entitled to use
-privately rather than serve to other players — see the note on the NWT
-translation below.
+privately rather than serve to other players from a shared backend.
 
 ## Running it
 
@@ -49,13 +48,14 @@ Other useful tasks — run `task --list-all` for the full list:
 | `task dotnet:kill` | Stop all running `dotnet` processes |
 | `task frontend:build` | Type-check and build the frontend for production |
 | `task frontend:preview` | Preview the production frontend build locally |
+| `task frontend:status` | Show whether a Vite dev server / the dev port is already in use |
+| `task frontend:free-port` | Kill whatever's bound to the dev server port |
+| `task frontend:kill` | Stop all running Vite dev server processes |
 
 ## Translation sources
 
-`bibles/bibelen-dk/` holds a public-domain Danish translation. `bibles/jw/`
-holds the Ny Verden-Oversættelsen (NWT) — Jehovah's Witnesses restrict
-redistribution of this text, so serving it to other players from a shared
-backend deployment is a licensing concern; the "bring your own file" mode
-above exists specifically so the NWT can be used privately (parsed
-client-side, never served to anyone else) instead of loaded server-side for
-everyone.
+`bibles/bibelen-dk/` holds a public-domain Danish translation, loaded and
+served by the backend. Translations the app isn't entitled to redistribute
+(e.g. Jehovah's Witnesses' Ny Verden-Oversættelsen) are never loaded
+server-side at all — they only work through "bring your own file" above,
+where the text stays in the player's own browser.

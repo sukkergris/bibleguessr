@@ -1,15 +1,34 @@
-// Parses a JW NWT-style Bible EPUB into Verse[], entirely client-side.
+// Parses a Bible EPUB export into Verse[], entirely client-side — this is
+// how the app supports translations (e.g. NWT) that can't be loaded and
+// served from the backend for licensing reasons: the player supplies their
+// own file, and it's parsed and kept in their own browser, never uploaded
+// anywhere.
 //
-// Ports backend/Api/JwEpubLoader.fs's algorithm to TypeScript, regex for
-// regex — see that file's doc comment for the chapter-page markup shape
-// this expects. An EPUB is a plain zip archive; the scripture text lives in
-// its OEBPS/*.xhtml entries, one file per chapter. Only entries with the
-// Bible-navigation header below are chapter pages — everything else (title
-// pages, nav pages, cover, images) is skipped.
+// An EPUB is a plain zip archive; the scripture text lives in its
+// OEBPS/*.xhtml entries, one file per chapter, in the markup shape below —
+// this is the shape used by the "JW Library" family of EPUB exports. Only
+// entries with the Bible-navigation header below are chapter pages —
+// everything else (title pages, nav pages, cover, images) is skipped.
 //
-// Kept in sync by hand with JwEpubLoader.fs; if that parser's regexes
-// change, port the change here too (bump PARSER_VERSION in verse-cache.ts
-// so any cached parse gets invalidated).
+// Chapter page shape (whitespace/attributes elided):
+//   <p class="w_navigation w_biblebookname">
+//     <a href="biblebooknav.xhtml">{BookName}</a>
+//     <a href="biblechapternavN.xhtml">{ChapterNumber}</a> :   <!-- omitted for single-chapter books -->
+//     <a href="bibleversenavX_Y.xhtml">1 - N</a>
+//   </p>
+//   ...
+//   <span id="chapter{Chapter}_verse{Num}"></span>{verse text, possibly
+//     spanning multiple <p> tags, with inline footnote markers}...
+//   ...
+//   <div class="groupFootnote">...</div>   <!-- end of verse text -->
+//
+// Verse boundaries come from the `chapter{N}_verse{M}` span ids rather than
+// the rendered verse number, because verse 1 of a chapter is displayed with
+// the *chapter* number as a drop cap (e.g. chapter 65 verse 1 renders "65",
+// not "1") — the id is the only place the real verse number is reliable.
+//
+// Bump PARSER_VERSION in verse-cache.ts if these regexes change, so any
+// cached parse gets invalidated.
 import { unzip } from 'fflate'
 import type { Verse } from './types'
 

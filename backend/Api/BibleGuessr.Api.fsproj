@@ -6,8 +6,6 @@
 
   <ItemGroup>
     <Compile Include="BibelenDkLoader.fs" />
-    <Compile Include="JwEpubLoader.fs" />
-    <Compile Include="JwRtfLoader.fs" />
     <Compile Include="GameHub.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
