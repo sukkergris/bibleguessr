@@ -74,6 +74,13 @@ let main args =
     )
     |> ignore
 
+    app.MapGet(
+        "/api/books",
+        Func<Verse list, string list>(fun verses ->
+            verses |> List.map (fun v -> v.Book) |> List.distinct |> List.sort)
+    )
+    |> ignore
+
     app.MapPost(
         "/api/rooms",
         Func<GameHub.RoomStore, Room>(fun rooms -> rooms.CreateRoom())

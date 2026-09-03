@@ -59,5 +59,6 @@ async function postJson<T>(path: string): Promise<T> {
 export const api = {
   baseUrl: API_BASE_URL,
   getRandomVerse: () => getJson<Verse>('/api/verses/random'),
+  getBooks: () => getJson<string[]>('/api/books'),
   createRoom: () => postJson<Room>('/api/rooms'),
 }
