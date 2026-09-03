@@ -16,6 +16,8 @@ services:
       # 'cached' optimizes mount performance on macOS/Windows.
       - ../..:/xyz:cached
       - bibleguessr-elm-devcontainer:/home/container-user/.elm
+      - bibleguessr-claude-bibleguessr:/home/container-user/.claude
+      - bibleguessr-continue-bibleguessr:/home/container-user/.continue
       # - /var/run/docker.sock:/var/run/docker.sock
       # macOS Docker Desktop: forwards SSH agent via host-services socket.
       # Linux alternative: ${SSH_AUTH_SOCK}:/ssh-agent
@@ -45,6 +47,8 @@ services:
 
 volumes:
   bibleguessr-elm-devcontainer:
+  bibleguessr-claude-bibleguessr:
+  bibleguessr-continue-bibleguessr:
 
 networks:
   internal:
