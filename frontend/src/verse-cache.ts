@@ -10,9 +10,9 @@
 // picker itself.
 import type { Verse } from './types'
 
-// Bump whenever epub-parser.ts's parsing logic changes, so a stale cache
-// (parsed with older, possibly-different logic) is detected and dropped
-// rather than silently served.
+// Bump whenever epub-parser.ts's or rtf-parser.ts's parsing logic changes,
+// so a stale cache (parsed with older, possibly-different logic) is
+// detected and dropped rather than silently served.
 const PARSER_VERSION = 1
 
 const DB_NAME = 'bibleguessr'

@@ -188,8 +188,8 @@ export class GameSetup extends LitElement {
         @dragleave=${() => (this.dragOver = false)}
         @drop=${this._onDrop}
       >
-        <input type="file" accept=".epub" @change=${this._onFileInputChange} />
-        <span>Drop a .epub Bible file here, or click to choose one</span>
+        <input type="file" accept=".epub,.zip" @change=${this._onFileInputChange} />
+        <span>Drop a .epub or .zip (RTF export) Bible file here, or click to choose one</span>
       </label>
     `
   }
@@ -228,24 +228,35 @@ export class GameSetup extends LitElement {
   }
 
   private async _loadFile(file: File) {
-    if (!file.name.toLowerCase().endsWith('.epub')) {
-      this.fileState = { status: 'error', message: 'Please choose a .epub file.' }
+    const lowerName = file.name.toLowerCase()
+    const isEpub = lowerName.endsWith('.epub')
+    const isRtfZip = lowerName.endsWith('.zip')
+
+    if (!isEpub && !isRtfZip) {
+      this.fileState = { status: 'error', message: 'Please choose a .epub or .zip (RTF export) file.' }
       return
     }
 
-    const translation = file.name.replace(/\.epub$/i, '')
+    const translation = file.name.replace(/\.(epub|zip)$/i, '')
     this.fileState = { status: 'parsing', fileName: file.name, processed: 0, total: 1 }
 
     try {
-      const { parseEpub } = await import('../epub-parser')
-      const verses = await parseEpub(file, translation, (progress) => {
-        this.fileState = { status: 'parsing', fileName: file.name, ...progress }
-      })
+      const verses = isEpub
+        ? await (
+            await import('../epub-parser')
+          ).parseEpub(file, translation, (progress) => {
+            this.fileState = { status: 'parsing', fileName: file.name, ...progress }
+          })
+        : await (
+            await import('../rtf-parser')
+          ).parseRtfZip(file, translation, (progress) => {
+            this.fileState = { status: 'parsing', fileName: file.name, ...progress }
+          })
 
       if (verses.length === 0) {
         this.fileState = {
           status: 'error',
-          message: 'This EPUB doesn’t look like a supported Bible export — no recognizable chapters were found.',
+          message: 'This file doesn’t look like a supported Bible export — no recognizable chapters were found.',
         }
         return
       }
@@ -253,10 +264,10 @@ export class GameSetup extends LitElement {
       await writeCache(fingerprintFile(file), translation, verses)
       this.fileState = { status: 'ready', fileName: file.name, translation, verseSource: createLocalVerseSource(verses) }
     } catch (err) {
-      console.error('[game-setup] failed to parse EPUB', err)
+      console.error('[game-setup] failed to parse Bible file', err)
       this.fileState = {
         status: 'error',
-        message: 'This doesn’t look like a valid EPUB file (couldn’t open it as a zip).',
+        message: 'This doesn’t look like a valid file (couldn’t open it as a zip).',
       }
     }
   }
