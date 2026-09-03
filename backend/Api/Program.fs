@@ -137,6 +137,71 @@ let main args =
     )
     |> ignore
 
+    app.MapGet(
+        "/api/chapters",
+        Func<Verse list, HttpRequest, int list>(fun verses request ->
+            // Chapter suggestions are scoped to one book (within a
+            // translation, for the same book-spelling reasons as /api/books)
+            // so the guess form only offers chapter numbers that actually
+            // exist for the book the player has already picked.
+            let translation = request.Query["translation"]
+            let book = request.Query["book"]
+
+            let relevantVerses =
+                if translation.Count = 0 then
+                    verses
+                else
+                    let t = translation.ToString()
+                    verses |> List.filter (fun v -> v.Translation = t)
+
+            if book.Count = 0 then
+                []
+            else
+                let b = book.ToString()
+
+                relevantVerses
+                |> List.filter (fun v -> v.Book = b)
+                |> List.map (fun v -> v.Chapter)
+                |> List.distinct
+                |> List.sort)
+    )
+    |> ignore
+
+    app.MapGet(
+        "/api/verse-numbers",
+        Func<Verse list, HttpRequest, int list>(fun verses request ->
+            // Verse-number suggestions are scoped to one book+chapter (within
+            // a translation, for the same book-spelling reasons as
+            // /api/books) so the guess form only offers verse numbers that
+            // actually exist for the book/chapter the player has already
+            // picked.
+            let translation = request.Query["translation"]
+            let book = request.Query["book"]
+            let chapter = request.Query["chapter"]
+
+            let relevantVerses =
+                if translation.Count = 0 then
+                    verses
+                else
+                    let t = translation.ToString()
+                    verses |> List.filter (fun v -> v.Translation = t)
+
+            if book.Count = 0 || chapter.Count = 0 then
+                []
+            else
+                let b = book.ToString()
+
+                match Int32.TryParse(chapter.ToString()) with
+                | false, _ -> []
+                | true, c ->
+                    relevantVerses
+                    |> List.filter (fun v -> v.Book = b && v.Chapter = c)
+                    |> List.map (fun v -> v.VerseNumber)
+                    |> List.distinct
+                    |> List.sort)
+    )
+    |> ignore
+
     app.MapPost(
         "/api/rooms",
         Func<GameHub.RoomStore, Room>(fun rooms -> rooms.CreateRoom())

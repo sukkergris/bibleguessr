@@ -66,5 +66,17 @@ export const api = {
   // the suggestion list only offers spellings that can actually match it.
   getBooks: (translation?: string) =>
     getJson<string[]>(`/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
+  // Chapter suggestions are scoped to the book the player already guessed.
+  getChapters: (book: string, translation?: string) => {
+    const params = new URLSearchParams({ book })
+    if (translation) params.set('translation', translation)
+    return getJson<number[]>(`/api/chapters?${params}`)
+  },
+  // Verse-number suggestions are scoped to the book+chapter already guessed.
+  getVerseNumbers: (book: string, chapter: number, translation?: string) => {
+    const params = new URLSearchParams({ book, chapter: String(chapter) })
+    if (translation) params.set('translation', translation)
+    return getJson<number[]>(`/api/verse-numbers?${params}`)
+  },
   createRoom: () => postJson<Room>('/api/rooms'),
 } satisfies VerseSource & Record<string, unknown>

@@ -14,5 +14,17 @@ export function createLocalVerseSource(verses: Verse[]): VerseSource {
         : Promise.reject(new Error('No verses loaded from the local file.')),
 
     getBooks: () => Promise.resolve([...new Set(verses.map((v) => v.book))].sort()),
+
+    getChapters: (book: string) =>
+      Promise.resolve(
+        [...new Set(verses.filter((v) => v.book === book).map((v) => v.chapter))].sort((a, b) => a - b),
+      ),
+
+    getVerseNumbers: (book: string, chapter: number) =>
+      Promise.resolve(
+        [...new Set(verses.filter((v) => v.book === book && v.chapter === chapter).map((v) => v.verseNumber))].sort(
+          (a, b) => a - b,
+        ),
+      ),
   }
 }

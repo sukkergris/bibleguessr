@@ -56,4 +56,6 @@ export interface VerseSource {
   getTranslations(): Promise<string[]>
   getRandomVerse(translation?: string): Promise<Verse>
   getBooks(translation?: string): Promise<string[]>
+  getChapters(book: string, translation?: string): Promise<number[]>
+  getVerseNumbers(book: string, chapter: number, translation?: string): Promise<number[]>
 }

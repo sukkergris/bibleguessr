@@ -3,13 +3,18 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
 import type { Guess, VerseSource } from '../types'
 
+type ComboField = 'book' | 'chapter' | 'verseNumber'
+
 /**
  * Fires a `guess-submitted` CustomEvent<Guess> when the player submits.
  *
- * The book field shows a filtered suggestion list as the player types.
- * A native <input list>/<datalist> pair was tried first, but `list=`
- * lookups don't reliably cross into a Lit component's shadow DOM across
- * browsers, so suggestions are rendered manually instead.
+ * The book, chapter, and verse fields each show a filtered suggestion list
+ * as the player types — chapter suggestions are scoped to whichever book is
+ * currently entered, and verse-number suggestions to the entered book +
+ * chapter, so they only ever offer numbers that actually exist there. A
+ * native <input list>/<datalist> pair was tried first, but `list=` lookups
+ * don't reliably cross into a Lit component's shadow DOM across browsers,
+ * so suggestions are rendered manually instead.
  */
 @customElement('bg-guess-form')
 export class GuessForm extends LitElement {
@@ -21,8 +26,8 @@ export class GuessForm extends LitElement {
   @property({ type: String })
   translation?: string
 
-  // Where the book list is loaded from: the backend (default) or a Bible
-  // file the player parsed client-side — see local-verses.ts.
+  // Where the book/chapter lists are loaded from: the backend (default) or
+  // a Bible file the player parsed client-side — see local-verses.ts.
   @property({ attribute: false })
   verseSource: VerseSource = api
 
@@ -39,7 +44,13 @@ export class GuessForm extends LitElement {
   private books: string[] = []
 
   @state()
-  private suggestionsOpen = false
+  private chapters: number[] = []
+
+  @state()
+  private verseNumbers: number[] = []
+
+  @state()
+  private openField: ComboField | undefined
 
   @state()
   private activeSuggestion = -1
@@ -62,19 +73,68 @@ export class GuessForm extends LitElement {
       .catch((error) => console.error('[guess-form] failed to load book list', error))
   }
 
-  private get suggestions(): string[] {
+  private _loadChapters(book: string) {
+    if (!book.trim()) {
+      this.chapters = []
+      return
+    }
+    this.verseSource
+      .getChapters(book.trim(), this.translation)
+      .then((chapters) => (this.chapters = chapters))
+      .catch((error) => console.error('[guess-form] failed to load chapter list', error))
+  }
+
+  private _loadVerseNumbers(book: string, chapter: string) {
+    const chapterNum = chapter ? Number(chapter) : undefined
+    if (!book.trim() || !chapterNum) {
+      this.verseNumbers = []
+      return
+    }
+    this.verseSource
+      .getVerseNumbers(book.trim(), chapterNum, this.translation)
+      .then((verseNumbers) => (this.verseNumbers = verseNumbers))
+      .catch((error) => console.error('[guess-form] failed to load verse-number list', error))
+  }
+
+  private get bookSuggestions(): string[] {
     const query = this.book.trim().toLowerCase()
     if (!query) return []
     return this.books.filter((book) => book.toLowerCase().includes(query)).slice(0, 8)
   }
 
+  private get chapterSuggestions(): string[] {
+    const query = this.chapter.trim()
+    const candidates = this.chapters.map(String)
+    if (!query) return candidates.slice(0, 8)
+    return candidates.filter((chapter) => chapter.startsWith(query)).slice(0, 8)
+  }
+
+  private get verseNumberSuggestions(): string[] {
+    const query = this.verseNumber.trim()
+    const candidates = this.verseNumbers.map(String)
+    if (!query) return candidates.slice(0, 8)
+    return candidates.filter((verseNumber) => verseNumber.startsWith(query)).slice(0, 8)
+  }
+
+  private _suggestionsFor(field: ComboField): string[] {
+    switch (field) {
+      case 'book':
+        return this.bookSuggestions
+      case 'chapter':
+        return this.chapterSuggestions
+      case 'verseNumber':
+        return this.verseNumberSuggestions
+    }
+  }
+
   render() {
-    const suggestions = this.suggestions
-    const showSuggestions = this.suggestionsOpen && suggestions.length > 0
+    const showBookSuggestions = this.openField === 'book' && this.bookSuggestions.length > 0
+    const showChapterSuggestions = this.openField === 'chapter' && this.chapterSuggestions.length > 0
+    const showVerseNumberSuggestions = this.openField === 'verseNumber' && this.verseNumberSuggestions.length > 0
 
     return html`
       <form @submit=${this._onSubmit}>
-        <label class="book-field">
+        <label class="combo-field">
           Book
           <div class="combobox">
             <input
@@ -82,50 +142,43 @@ export class GuessForm extends LitElement {
               name="bg-book-guess-no-autofill"
               placeholder="e.g. Salme"
               role="combobox"
-              aria-expanded=${showSuggestions}
+              aria-expanded=${showBookSuggestions}
               aria-autocomplete="list"
               autocomplete="off"
               autocorrect="off"
               spellcheck="false"
               .value=${this.book}
               @input=${this._onBookInput}
-              @keydown=${this._onBookKeydown}
-              @blur=${this._onBookBlur}
+              @focus=${() => (this.openField = 'book')}
+              @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'book')}
+              @blur=${this._onComboBlur}
               ?disabled=${this.disabled}
               required
             />
-            ${showSuggestions
-              ? html`
-                  <ul class="suggestions" role="listbox">
-                    ${suggestions.map(
-                      (book, i) => html`
-                        <li
-                          role="option"
-                          aria-selected=${i === this.activeSuggestion}
-                          class=${i === this.activeSuggestion ? 'active' : ''}
-                          @mousedown=${(e: Event) => {
-                            e.preventDefault()
-                            this._selectSuggestion(book)
-                          }}
-                        >
-                          ${book}
-                        </li>
-                      `,
-                    )}
-                  </ul>
-                `
-              : null}
+            ${showBookSuggestions ? this._renderSuggestions(this.bookSuggestions, (book) => this._selectBook(book)) : null}
           </div>
         </label>
-        <label>
+        <label class="combo-field">
           Chapter (optional)
-          <input
-            type="number"
-            min="1"
-            .value=${this.chapter}
-            @input=${(e: Event) => (this.chapter = (e.target as HTMLInputElement).value)}
-            ?disabled=${this.disabled}
-          />
+          <div class="combobox">
+            <input
+              type="number"
+              min="1"
+              role="combobox"
+              aria-expanded=${showChapterSuggestions}
+              aria-autocomplete="list"
+              autocomplete="off"
+              .value=${this.chapter}
+              @input=${this._onChapterInput}
+              @focus=${() => (this.openField = 'chapter')}
+              @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'chapter')}
+              @blur=${this._onComboBlur}
+              ?disabled=${this.disabled}
+            />
+            ${showChapterSuggestions
+              ? this._renderSuggestions(this.chapterSuggestions, (chapter) => this._selectChapter(chapter))
+              : null}
+          </div>
         </label>
         <label>
           Verse (optional)
@@ -142,15 +195,47 @@ export class GuessForm extends LitElement {
     `
   }
 
+  private _renderSuggestions(suggestions: string[], onSelect: (value: string) => void) {
+    return html`
+      <ul class="suggestions" role="listbox">
+        ${suggestions.map(
+          (value, i) => html`
+            <li
+              role="option"
+              aria-selected=${i === this.activeSuggestion}
+              class=${i === this.activeSuggestion ? 'active' : ''}
+              @mousedown=${(e: Event) => {
+                e.preventDefault()
+                onSelect(value)
+              }}
+            >
+              ${value}
+            </li>
+          `,
+        )}
+      </ul>
+    `
+  }
+
   private _onBookInput(e: Event) {
     this.book = (e.target as HTMLInputElement).value
-    this.suggestionsOpen = true
+    this.openField = 'book'
+    this.activeSuggestion = -1
+    // The chapter field's suggestions depend on the book, and any
+    // previously-entered chapter may no longer be valid for the new book.
+    this.chapter = ''
+    this._loadChapters(this.book)
+  }
+
+  private _onChapterInput(e: Event) {
+    this.chapter = (e.target as HTMLInputElement).value
+    this.openField = 'chapter'
     this.activeSuggestion = -1
   }
 
-  private _onBookKeydown(e: KeyboardEvent) {
-    const suggestions = this.suggestions
-    if (!this.suggestionsOpen || suggestions.length === 0) return
+  private _onComboKeydown(e: KeyboardEvent, field: ComboField) {
+    const suggestions = this._suggestionsFor(field)
+    if (this.openField !== field || suggestions.length === 0) return
 
     switch (e.key) {
       case 'ArrowDown':
@@ -164,31 +249,44 @@ export class GuessForm extends LitElement {
       case 'Enter':
         if (this.activeSuggestion >= 0) {
           e.preventDefault()
-          this._selectSuggestion(suggestions[this.activeSuggestion])
+          this._selectForField(field, suggestions[this.activeSuggestion])
         }
         break
       case 'Tab':
         // Let focus move on to the next field as normal — just also commit
         // the highlighted suggestion first, the way Enter does.
         if (this.activeSuggestion >= 0) {
-          this._selectSuggestion(suggestions[this.activeSuggestion])
+          this._selectForField(field, suggestions[this.activeSuggestion])
         }
         break
       case 'Escape':
-        this.suggestionsOpen = false
+        this.openField = undefined
         break
     }
   }
 
-  private _onBookBlur() {
-    // Delay so a click on a suggestion (mousedown) still registers before
-    // the list disappears.
-    setTimeout(() => (this.suggestionsOpen = false), 100)
+  private _selectForField(field: ComboField, value: string) {
+    if (field === 'book') this._selectBook(value)
+    else this._selectChapter(value)
   }
 
-  private _selectSuggestion(book: string) {
+  private _onComboBlur() {
+    // Delay so a click on a suggestion (mousedown) still registers before
+    // the list disappears.
+    setTimeout(() => (this.openField = undefined), 100)
+  }
+
+  private _selectBook(book: string) {
     this.book = book
-    this.suggestionsOpen = false
+    this.chapter = ''
+    this.openField = undefined
+    this.activeSuggestion = -1
+    this._loadChapters(book)
+  }
+
+  private _selectChapter(chapter: string) {
+    this.chapter = chapter
+    this.openField = undefined
     this.activeSuggestion = -1
   }
 
@@ -230,7 +328,7 @@ export class GuessForm extends LitElement {
       font-size: 0.9rem;
     }
 
-    .book-field {
+    .combo-field {
       position: relative;
     }
 
