@@ -1,6 +1,7 @@
 /// Loads verse data from the bibelen-dk source: one HTML file per chapter,
-/// under `bibles/bibelen-dk/Bibelen Files/`. That folder is gitignored (private
-/// local translation data) — this loader reads it at startup if present.
+/// zipped into a single archive under `bibles/bibelen-dk/src/`. That folder
+/// is gitignored (private local translation data) — this loader reads it
+/// at startup if present.
 ///
 /// File shape:
 ///   <h1>{BookName}[ {ChapterNumber}]</h1>
@@ -19,6 +20,7 @@ module BibleGuessr.Api.BibelenDkLoader
 
 open System
 open System.IO
+open System.IO.Compression
 open System.Text.RegularExpressions
 open BibleGuessr.Domain
 
@@ -76,17 +78,32 @@ let parseChapterFile (fileName: string) (html: string) : Verse list option =
             Verse.create book chapter (int m.Groups["num"].Value) text TranslationLabel)
         |> Some
 
-/// Loads all verses from every chapter file under `directory`.
-/// Files that don't parse as a chapter page (no <h1>/<pre>) are skipped.
+/// Loads all verses from every `*.html` entry in the zip archive at
+/// `zipPath`. Entries that don't parse as a chapter page (no <h1>/<pre>)
+/// are skipped.
+let loadFromZip (zipPath: string) : Verse list =
+    if not (File.Exists zipPath) then
+        []
+    else
+        use archive = ZipFile.OpenRead(zipPath)
+
+        archive.Entries
+        |> Seq.filter (fun entry -> entry.Name.EndsWith(".html"))
+        |> Seq.toList
+        |> List.collect (fun entry ->
+            use stream = entry.Open()
+            use reader = new StreamReader(stream)
+            let html = reader.ReadToEnd()
+
+            match parseChapterFile entry.Name html with
+            | Some verses -> verses
+            | None -> [])
+
+/// Loads all verses from the first `*.zip` file found under `directory`.
 let loadFromDirectory (directory: string) : Verse list =
     if not (Directory.Exists directory) then
         []
     else
-        Directory.GetFiles(directory, "*.html")
+        Directory.GetFiles(directory, "*.zip")
         |> Array.toList
-        |> List.collect (fun path ->
-            let html = File.ReadAllText(path)
-
-            match parseChapterFile (Path.GetFileName path) html with
-            | Some verses -> verses
-            | None -> [])
+        |> List.collect loadFromZip

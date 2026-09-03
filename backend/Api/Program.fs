@@ -39,15 +39,15 @@ let main args =
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore
 
-    // Verse data lives outside the repo (bibles/bibelen-dk/Bibelen Files/
-    // and bibles/jw/src/ are both gitignored); loaded once at startup and
+    // Verse data lives outside the repo (bibles/bibelen-dk/src/ and
+    // bibles/jw/src/ are both gitignored); loaded once at startup and
     // served from memory. Both translations' verses are pooled into one
     // list — the random-verse endpoint doesn't distinguish between
     // translations.
     let versesDirectory =
         builder.Configuration["Verses:Directory"]
         |> Option.ofObj
-        |> Option.defaultValue "../../bibles/bibelen-dk/Bibelen Files"
+        |> Option.defaultValue "../../bibles/bibelen-dk/src"
 
     let jwDirectory =
         builder.Configuration["Verses:JwDirectory"]
