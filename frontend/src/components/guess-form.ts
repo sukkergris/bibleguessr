@@ -30,6 +30,12 @@ export class GuessForm extends LitElement {
   @state()
   private books: string[] = []
 
+  @state()
+  private suggestionsOpen = false
+
+  @state()
+  private activeSuggestion = -1
+
   connectedCallback() {
     super.connectedCallback()
     this._loadBooks()
@@ -47,12 +53,6 @@ export class GuessForm extends LitElement {
       .then((books) => (this.books = books))
       .catch((error) => console.error('[guess-form] failed to load book list', error))
   }
-
-  @state()
-  private suggestionsOpen = false
-
-  @state()
-  private activeSuggestion = -1
 
   private get suggestions(): string[] {
     const query = this.book.trim().toLowerCase()
