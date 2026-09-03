@@ -1,7 +1,16 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { joinRoom, joinWorldChat, onChatMessage, onHubError, onPlayerJoined, sendChatMessage } from '../signalr-client'
+import {
+  joinRoom,
+  joinWorldChat,
+  onChatMessage,
+  onConnectionStateChange,
+  onHubError,
+  onPlayerJoined,
+  sendChatMessage,
+  type ConnectionState,
+} from '../signalr-client'
 import type { ChatMessage } from '../types'
 import './chat-panel'
 
@@ -36,14 +45,19 @@ export class RoomSetup extends LitElement {
   @state()
   private error?: string
 
+  @state()
+  private connectionState: ConnectionState = 'connected'
+
   private _unsubscribePlayerJoined?: () => void
   private _unsubscribeChatMessage?: () => void
   private _unsubscribeHubError?: () => void
+  private _unsubscribeConnectionState?: () => void
 
   disconnectedCallback() {
     this._unsubscribePlayerJoined?.()
     this._unsubscribeChatMessage?.()
     this._unsubscribeHubError?.()
+    this._unsubscribeConnectionState?.()
     super.disconnectedCallback()
   }
 
@@ -107,10 +121,15 @@ export class RoomSetup extends LitElement {
   }
 
   private _renderRoom(roomCode: string | undefined) {
+    const isDisconnected = this.connectionState === 'disconnected'
+
     return html`
       <div class="room">
-        <h1>${roomCode ? html`Room <span class="code">${roomCode}</span>` : 'World chat'}</h1>
+        <h1 class=${isDisconnected ? 'disconnected' : ''}>
+          ${roomCode ? html`Room <span class="code">${roomCode}</span>` : 'World chat'}
+        </h1>
 
+        ${isDisconnected ? html`<p class="error">Lost connection to the server — trying to reconnect…</p>` : null}
         ${this.error ? html`<p class="error">${this.error}</p>` : null}
 
         <bg-chat-panel
@@ -118,6 +137,8 @@ export class RoomSetup extends LitElement {
           .messages=${this.messages}
           @chat-submit=${this._onChatSubmit}
         ></bg-chat-panel>
+
+        <button type="button" class="secondary" @click=${this._onLeaveRoom}>Back to chat selection</button>
       </div>
     `
   }
@@ -170,6 +191,9 @@ export class RoomSetup extends LitElement {
     this._unsubscribeHubError = onHubError((message) => {
       this.error = message
     })
+    this._unsubscribeConnectionState = onConnectionStateChange((state) => {
+      this.connectionState = state
+    })
 
     await join()
     this.screen = { step: 'in-room', roomCode, playerName }
@@ -179,6 +203,24 @@ export class RoomSetup extends LitElement {
     sendChatMessage(event.detail).catch((err) => {
       console.error('[bg-room-setup] failed to send chat message', err)
     })
+  }
+
+  // Leaves the current room/World chat back to the create-or-join screen.
+  // The underlying hub connection stays up (it's a shared singleton the
+  // app may reuse elsewhere) — this only stops listening locally and
+  // resets this component's own state, it doesn't tell the server the
+  // player left.
+  private _onLeaveRoom() {
+    this._unsubscribePlayerJoined?.()
+    this._unsubscribeChatMessage?.()
+    this._unsubscribeHubError?.()
+    this._unsubscribeConnectionState?.()
+
+    this.players = []
+    this.messages = []
+    this.error = undefined
+    this.connectionState = 'connected'
+    this.screen = { step: 'choose' }
   }
 
   static styles = css`
@@ -197,6 +239,11 @@ export class RoomSetup extends LitElement {
       font-size: 1.5rem;
       margin: 0;
       text-align: center;
+    }
+
+    h1.disconnected {
+      text-decoration: line-through;
+      opacity: 0.6;
     }
 
     .code {

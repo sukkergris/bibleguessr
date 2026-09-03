@@ -39,6 +39,51 @@ export function getGameHubConnection(): Promise<signalR.HubConnection> {
   return connectionPromise
 }
 
+/** Whether the hub connection is currently up. `signalR`'s own
+ * `withAutomaticReconnect()` handles retrying — this just reports the
+ * current state so the UI can show it (e.g. cross out the chat panel while
+ * disconnected/reconnecting). */
+export type ConnectionState = 'connected' | 'disconnected'
+
+/** Subscribes to connection up/down changes. Fires immediately with the
+ * connection's current state, then again on every state change. Returns an
+ * unsubscribe function.
+ *
+ * Note: HubConnection.onclose/onreconnecting/onreconnected each push onto
+ * an internal callback list (there's no matching `off`), so an
+ * "unsubscribe" here can only stop this handler from firing — it can't
+ * remove the underlying hook from the connection. That's fine in practice:
+ * the connection is a shared singleton for the app's lifetime, so the
+ * handful of hooks registered by however many components have subscribed
+ * over time just sit there harmlessly once cancelled. */
+export function onConnectionStateChange(handler: (state: ConnectionState) => void): () => void {
+  let cancelled = false
+
+  void getGameHubConnection().then((hub) => {
+    if (cancelled) return
+
+    // Report the state as of right now — the connection may already be up
+    // by the time a caller subscribes (getGameHubConnection only resolves
+    // once .start() has succeeded), and onclose/onreconnecting only fire on
+    // a LATER transition, not for "already connected".
+    handler('connected')
+
+    hub.onclose(() => {
+      if (!cancelled) handler('disconnected')
+    })
+    hub.onreconnecting(() => {
+      if (!cancelled) handler('disconnected')
+    })
+    hub.onreconnected(() => {
+      if (!cancelled) handler('connected')
+    })
+  })
+
+  return () => {
+    cancelled = true
+  }
+}
+
 export async function joinRoom(roomCode: string, playerName: string): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('JoinRoom', roomCode, playerName)
