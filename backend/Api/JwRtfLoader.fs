@@ -75,6 +75,13 @@ let private chapterHeadingRegex =
         RegexOptions.Compiled
     )
 
+// Psalms alone is subdivided into five "books" (Første/Anden/Tredje/Fjerde/
+// Femte Bog), each introduced by a heading of this shape right before the
+// next Psalm's chapter heading. Not scripture text — must be excluded from
+// the preceding verse the same way a chapter heading is.
+let private psalmsBookDividerRegex =
+    Regex(@"\\f2\\cf\d+ (?:Første|Anden|Tredje|Fjerde|Femte) Bog\\par\}", RegexOptions.Compiled)
+
 let private verseMarkerRegex =
     Regex(@"\\f1\\cf\d+ (?<num>\d+)\}\{[^}]*?\\f2\\cf\d+ ", RegexOptions.Compiled)
 
@@ -129,9 +136,15 @@ let parseBookFile (bookNumber: int) (rtf: string) : Verse list =
 
         // The last verse of a chapter has no following verse marker to stop
         // at within that chapter — the next token in the file is the next
-        // chapter's heading, which must not be swept into the verse text.
-        let nextHeadingAfter (pos: int) =
-            headings |> List.tryPick (fun (hpos, _) -> if hpos > pos then Some hpos else None)
+        // chapter's heading (or, in Psalms, a book-divider right before
+        // that heading) — neither of which may be swept into the verse text.
+        let nonVerseStopPositions =
+            (headings |> List.map fst)
+            @ (psalmsBookDividerRegex.Matches(rtf) |> Seq.cast<Match> |> Seq.map (fun m -> m.Index) |> List.ofSeq)
+            |> List.sort
+
+        let nextStopAfter (pos: int) =
+            nonVerseStopPositions |> List.tryFind (fun stopPos -> stopPos > pos)
 
         markers
         |> List.mapi (fun i m ->
@@ -143,8 +156,8 @@ let parseBookFile (bookNumber: int) (rtf: string) : Verse list =
                     rtf.Length
 
             let textEnd =
-                match nextHeadingAfter m.Index with
-                | Some headingPos when headingPos < nextMarkerPos -> headingPos
+                match nextStopAfter m.Index with
+                | Some stopPos when stopPos < nextMarkerPos -> stopPos
                 | _ -> nextMarkerPos
 
             let text = rtf.Substring(textStart, textEnd - textStart) |> decodeRtfText
