@@ -17,6 +17,17 @@
     "source=bibleguessr-claude-${localWorkspaceFolderBasename},target=/home/container-user/.claude,type=volume",
     "source=bibleguessr-continue-${localWorkspaceFolderBasename},target=/home/container-user/.continue,type=volume"
   ],
+  "forwardPorts": [5173, 5162],
+  "portsAttributes": {
+    "5173": {
+      "label": "Frontend (Vite)",
+      "onAutoForward": "notify"
+    },
+    "5162": {
+      "label": "Backend (API)",
+      "onAutoForward": "silent"
+    }
+  },
   // Keep customizations for VS Code settings and extensions
   "customizations": {
     "vscode": {
@@ -53,7 +64,8 @@
         "ms-vscode.vscode-chat-customizations-evaluations",
         "rogalmic.bash-debug",
         "csharpier.csharpier-vscode",
-        "google.google-antigravity"
+        "google.google-antigravity",
+        "DavidAnson.vscode-markdownlint"
       ]
     }
   },

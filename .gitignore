@@ -317,7 +317,7 @@ evanescence/*
 env/*
 !env/.gitkeep
 
-.task/checksum/dev-generate-env-file
+.task/
 
 backup/habibi-vip-taxi/backup.env
 backup/habibi-vip-taxi/backup/*

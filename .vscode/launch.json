@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug API (BibleGuessr.Api)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-api",
+      "program": "${workspaceFolder}/backend/Api/bin/Debug/net10.0/BibleGuessr.Api.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/backend/Api",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5162"
+      }
+    },
+    {
+      "name": "Debug Frontend (Vite)",
+      "type": "msedge",
+      "request": "launch",
+      "preLaunchTask": "start-frontend",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "sourceMaps": true
+    }
+  ]
+}
