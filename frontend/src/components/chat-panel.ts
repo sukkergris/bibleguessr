@@ -1,0 +1,145 @@
+import { LitElement, css, html } from 'lit'
+import { customElement, property } from 'lit/decorators.js'
+import type { ChatMessage } from '../types'
+
+/**
+ * The players list + message log + send form shared by any chat surface
+ * (a room's lobby, World chat). Fires a `chat-submit` CustomEvent<string>
+ * with the trimmed message text when the player sends one — the parent
+ * owns the actual SignalR call and the `messages`/`players` state, so this
+ * component stays a plain, reusable view.
+ */
+@customElement('bg-chat-panel')
+export class ChatPanel extends LitElement {
+  @property({ attribute: false })
+  players: string[] = []
+
+  @property({ attribute: false })
+  messages: ChatMessage[] = []
+
+  private _input = ''
+
+  render() {
+    return html`
+      <div class="panel">
+        <div class="players">
+          <h2>Players</h2>
+          <ul>
+            ${this.players.map((name) => html`<li>${name}</li>`)}
+          </ul>
+        </div>
+
+        <div class="chat">
+          <h2>Chat</h2>
+          <ul class="messages">
+            ${this.messages.map(
+              (m) => html`
+                <li>
+                  <strong>${m.playerName}:</strong>
+                  ${m.text}
+                </li>
+              `,
+            )}
+          </ul>
+          <form class="chat-input" @submit=${this._onSubmit}>
+            <input
+              type="text"
+              .value=${this._input}
+              @input=${(e: Event) => (this._input = (e.target as HTMLInputElement).value)}
+              placeholder="Say something…"
+              maxlength="500"
+            />
+            <button type="submit" ?disabled=${!this._input.trim()}>Send</button>
+          </form>
+        </div>
+      </div>
+    `
+  }
+
+  private _onSubmit(event: SubmitEvent) {
+    event.preventDefault()
+    const text = this._input.trim()
+    if (!text) return
+
+    this._input = ''
+    this.requestUpdate()
+    this.dispatchEvent(new CustomEvent<string>('chat-submit', { detail: text, bubbles: true, composed: true }))
+  }
+
+  static styles = css`
+    :host {
+      display: block;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    h2 {
+      font-size: 1rem;
+      margin: 0 0 0.5rem;
+    }
+
+    .players ul,
+    .messages {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .players ul li {
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      background: rgba(170, 59, 255, 0.08);
+    }
+
+    .messages {
+      max-height: 16rem;
+      overflow-y: auto;
+      margin-bottom: 0.5rem;
+    }
+
+    .messages li {
+      font-size: 0.9rem;
+    }
+
+    .chat-input {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 1rem;
+    }
+
+    button {
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      border: none;
+      background: #aa3bff;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  `
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'bg-chat-panel': ChatPanel
+  }
+}

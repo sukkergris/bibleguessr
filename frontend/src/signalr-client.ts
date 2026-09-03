@@ -33,6 +33,12 @@ export async function joinRoom(roomCode: string, playerName: string): Promise<vo
   await hub.invoke('JoinRoom', roomCode, playerName)
 }
 
+/** Joins the always-open World chat room — just a name, no room code. */
+export async function joinWorldChat(playerName: string): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('JoinWorldChat', playerName)
+}
+
 export async function sendChatMessage(text: string): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('SendChatMessage', text)

@@ -5,6 +5,13 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.SignalR
 open BibleGuessr.Domain
 
+/// The always-open room everyone lands in via "World chat" — just pick a
+/// name, no room code needed. Reserved as a non-numeric code so it can
+/// never collide with a randomly generated room code (those are always
+/// 4 digits, see CreateRoom).
+[<Literal>]
+let WorldChatRoomCode = "WORLD"
+
 /// In-memory room registry for multiplayer sessions.
 /// Fine for a single-instance dev/hobby deployment; swap for a distributed
 /// store (Redis backplane + shared state) before scaling out to multiple
@@ -32,6 +39,17 @@ type RoomStore() =
               Round = WaitingForPlayers }
         rooms[code] <- room
         room
+
+    /// Ensures the World chat room exists, creating it on first use. Safe
+    /// to call concurrently — GetOrAdd is atomic per key.
+    member _.GetOrCreateWorldRoom() =
+        rooms.GetOrAdd(
+            WorldChatRoomCode,
+            fun code ->
+                { Code = RoomCode code
+                  Players = []
+                  Round = WaitingForPlayers }
+        )
 
     member _.RegisterConnection(connectionId: string, roomCode: RoomCode, player: Player) =
         connections[connectionId] <- (roomCode, player)
@@ -63,23 +81,36 @@ let private maxChatMessageLength = 500
 type GameHub(rooms: RoomStore) =
     inherit Hub()
 
+    /// Adds the caller to `room` as a new player, registers the connection,
+    /// and broadcasts PlayerJoined — shared by JoinRoom and JoinWorldChat,
+    /// which differ only in how they find/create the room to join.
+    member private this.JoinExistingRoom(room: Room, playerName: string) : Task =
+        task {
+            let (RoomCode roomCode) = room.Code
+
+            let player =
+                { Id = PlayerId(Guid.NewGuid())
+                  Name = playerName
+                  Score = 0 }
+
+            let updated = { room with Players = player :: room.Players }
+            rooms.Set(roomCode, updated)
+            rooms.RegisterConnection(this.Context.ConnectionId, room.Code, player)
+
+            do! this.Groups.AddToGroupAsync(this.Context.ConnectionId, roomCode)
+            do! this.Clients.Group(roomCode).SendAsync(PlayerJoinedEvent, player.Name)
+        }
+
     member this.JoinRoom(roomCode: string, playerName: string) : Task =
         task {
             match rooms.TryGet(roomCode) with
             | None -> do! this.Clients.Caller.SendAsync("Error", "Room not found")
-            | Some room ->
-                let player =
-                    { Id = PlayerId(Guid.NewGuid())
-                      Name = playerName
-                      Score = 0 }
-
-                let updated = { room with Players = player :: room.Players }
-                rooms.Set(roomCode, updated)
-                rooms.RegisterConnection(this.Context.ConnectionId, RoomCode roomCode, player)
-
-                do! this.Groups.AddToGroupAsync(this.Context.ConnectionId, roomCode)
-                do! this.Clients.Group(roomCode).SendAsync(PlayerJoinedEvent, player.Name)
+            | Some room -> do! this.JoinExistingRoom(room, playerName)
         }
+
+    /// Joins the always-open World chat room — just a name, no room code.
+    member this.JoinWorldChat(playerName: string) : Task =
+        this.JoinExistingRoom(rooms.GetOrCreateWorldRoom(), playerName)
 
     member this.SendChatMessage(text: string) : Task =
         task {
