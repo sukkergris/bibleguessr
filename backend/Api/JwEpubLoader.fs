@@ -78,7 +78,11 @@ let parseChapterEntry (entryName: string) (html: string) : Verse list option =
     if not navMatch.Success then
         None
     else
-        let book = navMatch.Groups["book"].Value.Trim()
+        // The source markup uses a non-breaking space in some book names
+        // (e.g. "1. Johannes", to keep the numeral glued to the name)
+        // — collapseWhitespace normalizes it to a regular space so guesses
+        // typed with an ordinary space still match.
+        let book = navMatch.Groups["book"].Value |> collapseWhitespace
 
         let chapter =
             if navMatch.Groups["chapter"].Success then
