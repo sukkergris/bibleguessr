@@ -73,11 +73,7 @@ let parseChapterFile (fileName: string) (html: string) : Verse list option =
             let rawText = body.Substring(textStart, textEnd - textStart)
             let text = rawText |> stripTags |> decodeEntities |> collapseWhitespace
 
-            { Book = book
-              Chapter = chapter
-              VerseNumber = int m.Groups["num"].Value
-              Text = text
-              Translation = TranslationLabel })
+            Verse.create book chapter (int m.Groups["num"].Value) text TranslationLabel)
         |> Some
 
 /// Loads all verses from every chapter file under `directory`.

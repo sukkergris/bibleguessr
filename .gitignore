@@ -1,6 +1,9 @@
 ## Playwright MCP working directory (screenshots, snapshots)
 .playwright-mcp/
 
+## Playwright CLI working directory (screenshots, snapshots, console logs)
+.playwright-cli/
+
 ## VS Code .NET run/discovery cache
 /dotnet/runfile-discovery/
 

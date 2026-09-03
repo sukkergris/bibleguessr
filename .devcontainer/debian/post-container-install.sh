@@ -20,6 +20,16 @@ fi
 
 bash "${SCRIPTS_DIR}/install-global-npm-tools.sh"
 
+# Download the Chromium browser binary for @playwright/cli / @playwright/mcp
+# (installed above). System-level runtime deps for it (libnspr4, libnss3,
+# etc.) are installed in Dockerfile.debian; this step only fetches the
+# browser itself into ~/.cache/ms-playwright, which isn't baked into the image.
+if command -v playwright-cli >/dev/null 2>&1; then
+  playwright-cli install-browser chromium || echo "WARNING: playwright-cli install-browser failed" >&2
+else
+  echo "WARNING: playwright-cli not found on PATH — skipping Chromium browser install" >&2
+fi
+
 claude --print "." > /dev/null 2>&1 || true
 
 # Fix permissions on mounted volumes since they are owned by root when created by the container, but we want them to be owned by the container user.
