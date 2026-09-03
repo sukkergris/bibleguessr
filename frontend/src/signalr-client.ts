@@ -11,21 +11,32 @@ export const HubEvents = {
   Error: 'Error',
 } as const
 
-let connection: signalR.HubConnection | undefined
+// Cache the in-flight START PROMISE, not just the connection object — the
+// object exists (and is truthy) the instant HubConnectionBuilder().build()
+// returns, well before .start() resolves. Several call sites here
+// (onPlayerJoined/onChatMessage/onHubError/joinRoom, etc.) all call
+// getGameHubConnection() synchronously back-to-back on the same tick (e.g.
+// bg-room-setup.ts's _enterRoom), so caching only the object let a second
+// caller grab a connection that was still mid-handshake and invoke on it
+// before .start() finished — SignalR then throws "Cannot send data if the
+// connection is not in the 'Connected' State." Caching the promise instead
+// means every caller awaits the SAME in-flight start, however many arrive
+// before it resolves.
+let connectionPromise: Promise<signalR.HubConnection> | undefined
 
-/** Lazily creates and starts the shared hub connection. */
-export async function getGameHubConnection(): Promise<signalR.HubConnection> {
-  if (connection) {
-    return connection
+/** Lazily creates and starts the shared hub connection. Safe to call
+ * multiple times concurrently — every caller awaits the same start. */
+export function getGameHubConnection(): Promise<signalR.HubConnection> {
+  if (!connectionPromise) {
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(`${api.baseUrl}/hubs/game`)
+      .withAutomaticReconnect()
+      .build()
+
+    connectionPromise = connection.start().then(() => connection)
   }
 
-  connection = new signalR.HubConnectionBuilder()
-    .withUrl(`${api.baseUrl}/hubs/game`)
-    .withAutomaticReconnect()
-    .build()
-
-  await connection.start()
-  return connection
+  return connectionPromise
 }
 
 export async function joinRoom(roomCode: string, playerName: string): Promise<void> {
