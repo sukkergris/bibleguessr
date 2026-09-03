@@ -1,5 +1,5 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, property } from 'lit/decorators.js'
+import { customElement, property, state } from 'lit/decorators.js'
 import type { ChatMessage } from '../types'
 
 /**
@@ -17,6 +17,7 @@ export class ChatPanel extends LitElement {
   @property({ attribute: false })
   messages: ChatMessage[] = []
 
+  @state()
   private _input = ''
 
   render() {
@@ -62,7 +63,6 @@ export class ChatPanel extends LitElement {
     if (!text) return
 
     this._input = ''
-    this.requestUpdate()
     this.dispatchEvent(new CustomEvent<string>('chat-submit', { detail: text, bubbles: true, composed: true }))
   }
 
