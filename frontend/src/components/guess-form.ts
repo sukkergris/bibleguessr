@@ -180,15 +180,29 @@ export class GuessForm extends LitElement {
               : null}
           </div>
         </label>
-        <label>
+        <label class="combo-field">
           Verse (optional)
-          <input
-            type="number"
-            min="1"
-            .value=${this.verseNumber}
-            @input=${(e: Event) => (this.verseNumber = (e.target as HTMLInputElement).value)}
-            ?disabled=${this.disabled}
-          />
+          <div class="combobox">
+            <input
+              type="number"
+              min="1"
+              role="combobox"
+              aria-expanded=${showVerseNumberSuggestions}
+              aria-autocomplete="list"
+              autocomplete="off"
+              .value=${this.verseNumber}
+              @input=${this._onVerseNumberInput}
+              @focus=${() => (this.openField = 'verseNumber')}
+              @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'verseNumber')}
+              @blur=${this._onComboBlur}
+              ?disabled=${this.disabled}
+            />
+            ${showVerseNumberSuggestions
+              ? this._renderSuggestions(this.verseNumberSuggestions, (verseNumber) =>
+                  this._selectVerseNumber(verseNumber),
+                )
+              : null}
+          </div>
         </label>
         <button type="submit" ?disabled=${this.disabled}>Guess</button>
       </form>
@@ -221,15 +235,28 @@ export class GuessForm extends LitElement {
     this.book = (e.target as HTMLInputElement).value
     this.openField = 'book'
     this.activeSuggestion = -1
-    // The chapter field's suggestions depend on the book, and any
-    // previously-entered chapter may no longer be valid for the new book.
+    // The chapter (and, transitively, verse-number) suggestions depend on
+    // the book, and any previously-entered chapter/verse may no longer be
+    // valid for the new book.
     this.chapter = ''
+    this.verseNumber = ''
+    this.verseNumbers = []
     this._loadChapters(this.book)
   }
 
   private _onChapterInput(e: Event) {
     this.chapter = (e.target as HTMLInputElement).value
     this.openField = 'chapter'
+    this.activeSuggestion = -1
+    // The verse-number field's suggestions depend on the chapter, and any
+    // previously-entered verse number may no longer be valid for it.
+    this.verseNumber = ''
+    this._loadVerseNumbers(this.book, this.chapter)
+  }
+
+  private _onVerseNumberInput(e: Event) {
+    this.verseNumber = (e.target as HTMLInputElement).value
+    this.openField = 'verseNumber'
     this.activeSuggestion = -1
   }
 
@@ -266,8 +293,17 @@ export class GuessForm extends LitElement {
   }
 
   private _selectForField(field: ComboField, value: string) {
-    if (field === 'book') this._selectBook(value)
-    else this._selectChapter(value)
+    switch (field) {
+      case 'book':
+        this._selectBook(value)
+        break
+      case 'chapter':
+        this._selectChapter(value)
+        break
+      case 'verseNumber':
+        this._selectVerseNumber(value)
+        break
+    }
   }
 
   private _onComboBlur() {
@@ -279,6 +315,8 @@ export class GuessForm extends LitElement {
   private _selectBook(book: string) {
     this.book = book
     this.chapter = ''
+    this.verseNumber = ''
+    this.verseNumbers = []
     this.openField = undefined
     this.activeSuggestion = -1
     this._loadChapters(book)
@@ -286,6 +324,14 @@ export class GuessForm extends LitElement {
 
   private _selectChapter(chapter: string) {
     this.chapter = chapter
+    this.verseNumber = ''
+    this.openField = undefined
+    this.activeSuggestion = -1
+    this._loadVerseNumbers(this.book, chapter)
+  }
+
+  private _selectVerseNumber(verseNumber: string) {
+    this.verseNumber = verseNumber
     this.openField = undefined
     this.activeSuggestion = -1
   }
