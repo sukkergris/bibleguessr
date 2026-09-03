@@ -58,7 +58,9 @@ async function postJson<T>(path: string): Promise<T> {
 
 export const api = {
   baseUrl: API_BASE_URL,
-  getRandomVerse: () => getJson<Verse>('/api/verses/random'),
+  getTranslations: () => getJson<string[]>('/api/translations'),
+  getRandomVerse: (translation?: string) =>
+    getJson<Verse>(`/api/verses/random${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
   // Book spellings differ by translation (e.g. bibelen-dk's "1.Mosebog" vs.
   // the NWT sources' "1. Mosebog") — pass the current verse's translation so
   // the suggestion list only offers spellings that can actually match it.

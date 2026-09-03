@@ -92,11 +92,27 @@ let main args =
 
     app.MapGet(
         "/api/verses/random",
-        Func<Verse list, Verse>(fun verses ->
-            if verses.IsEmpty then
-                failwith "No verses loaded"
+        Func<Verse list, HttpRequest, Verse>(fun verses request ->
+            let translation = request.Query["translation"]
+
+            let candidates =
+                if translation.Count = 0 then
+                    verses
+                else
+                    let t = translation.ToString()
+                    verses |> List.filter (fun v -> v.Translation = t)
+
+            if candidates.IsEmpty then
+                failwith "No verses loaded for the requested translation"
             else
-                verses[Random.Shared.Next(verses.Length)])
+                candidates[Random.Shared.Next(candidates.Length)])
+    )
+    |> ignore
+
+    app.MapGet(
+        "/api/translations",
+        Func<Verse list, string list>(fun verses ->
+            verses |> List.map (fun v -> v.Translation) |> List.distinct |> List.sort)
     )
     |> ignore
 

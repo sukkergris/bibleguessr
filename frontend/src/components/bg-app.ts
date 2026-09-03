@@ -1,14 +1,37 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import type { Guess, Verse } from '../types'
+import type { Guess, RoundResult, Verse } from '../types'
 import './verse-card'
 import './guess-form'
+import './game-setup'
+import type { GameOptions } from './game-setup'
+import './game-results'
 
-type Feedback = { correct: boolean; verse: Verse } | undefined
+type Feedback = { points: number; verse: Verse } | undefined
+
+// Points awarded per level of a guess, gated on every level before it being
+// correct — mirrors backend/Domain/Game.fs's Scoring.pointsForVerseGuess.
+const BOOK_POINTS = 1000
+const CHAPTER_POINTS = 100
+const VERSE_NUMBER_POINTS = 10
+
+type GamePhase = 'setup' | 'playing' | 'gameOver'
 
 @customElement('bg-app')
 export class BgApp extends LitElement {
+  @state()
+  private phase: GamePhase = 'setup'
+
+  @state()
+  private translation = ''
+
+  @state()
+  private roundCount = 0
+
+  @state()
+  private roundIndex = 0
+
   @state()
   private verse?: Verse
 
@@ -16,14 +39,21 @@ export class BgApp extends LitElement {
   private feedback: Feedback
 
   @state()
-  private score = 0
+  private rounds: RoundResult[] = []
 
   @state()
   private error?: string
 
-  connectedCallback() {
-    super.connectedCallback()
-    this.addEventListener('guess-submitted', this._onGuessSubmitted as EventListener)
+  private get score() {
+    return this.rounds.reduce((sum, r) => sum + r.points, 0)
+  }
+
+  private _onGameStarted = (event: CustomEvent<GameOptions>) => {
+    this.translation = event.detail.translation
+    this.roundCount = event.detail.roundCount
+    this.roundIndex = 0
+    this.rounds = []
+    this.phase = 'playing'
     void this._loadNextVerse()
   }
 
@@ -31,7 +61,7 @@ export class BgApp extends LitElement {
     this.error = undefined
     this.feedback = undefined
     try {
-      this.verse = await api.getRandomVerse()
+      this.verse = await api.getRandomVerse(this.translation)
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load a verse.'
     }
@@ -41,39 +71,82 @@ export class BgApp extends LitElement {
     if (!this.verse) return
 
     const guess = event.detail
-    const bookMatches = guess.book.trim().toLowerCase() === this.verse.book.trim().toLowerCase()
-    const chapterMatches = guess.chapter === undefined || guess.chapter === this.verse.chapter
-    const correct = bookMatches && chapterMatches
+    const points = this._scoreGuess(this.verse, guess)
 
-    if (correct) {
-      this.score += 1
+    this.rounds = [...this.rounds, { verse: this.verse, guess, points }]
+    this.feedback = { points, verse: this.verse }
+  }
+
+  // Mirrors backend/Domain/Game.fs's Scoring.pointsForVerseGuess: each level
+  // only counts if every level before it was also guessed correctly.
+  private _scoreGuess(verse: Verse, guess: Guess): number {
+    const bookCorrect = guess.book.trim().toLowerCase() === verse.book.trim().toLowerCase()
+    if (!bookCorrect) return 0
+
+    const chapterCorrect = guess.chapter !== undefined && guess.chapter === verse.chapter
+    if (!chapterCorrect) return BOOK_POINTS
+
+    const verseNumberCorrect = guess.verseNumber !== undefined && guess.verseNumber === verse.verseNumber
+    if (!verseNumberCorrect) return BOOK_POINTS + CHAPTER_POINTS
+
+    return BOOK_POINTS + CHAPTER_POINTS + VERSE_NUMBER_POINTS
+  }
+
+  private _onNextRound = () => {
+    const isLastRound = this.roundIndex + 1 >= this.roundCount
+    if (isLastRound) {
+      this.phase = 'gameOver'
+      this.verse = undefined
+      this.feedback = undefined
+    } else {
+      this.roundIndex += 1
+      void this._loadNextVerse()
     }
+  }
 
-    this.feedback = { correct, verse: this.verse }
+  private _onPlayAgain = () => {
+    this.phase = 'setup'
+    this.rounds = []
   }
 
   render() {
     return html`
       <main>
-        <header>
-          <h1>bibleguessr</h1>
-          <p class="score">Score: ${this.score}</p>
-        </header>
-
-        ${this.error ? html`<p class="error">${this.error}</p>` : null}
-
-        <bg-verse-card .verse=${this.verse} .revealed=${!!this.feedback}></bg-verse-card>
-
-        ${this.feedback
-          ? html`
-              <div class="feedback ${this.feedback.correct ? 'correct' : 'incorrect'}">
-                ${this.feedback.correct ? '✓ Correct!' : '✗ Not quite.'} It was
-                ${this.feedback.verse.reference}.
-              </div>
-              <button class="next" @click=${this._loadNextVerse}>Next verse</button>
-            `
-          : html`<bg-guess-form .disabled=${!this.verse} .translation=${this.verse?.translation}></bg-guess-form>`}
+        ${this.phase === 'setup'
+          ? html`<bg-game-setup @game-started=${this._onGameStarted}></bg-game-setup>`
+          : this.phase === 'playing'
+            ? this._renderPlaying()
+            : html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`}
       </main>
+    `
+  }
+
+  private _renderPlaying() {
+    return html`
+      <header>
+        <p class="round">Verse ${this.roundIndex + 1} / ${this.roundCount}</p>
+        <p class="score">Score: ${this.score}</p>
+      </header>
+
+      ${this.error ? html`<p class="error">${this.error}</p>` : null}
+
+      <bg-verse-card .verse=${this.verse} .revealed=${!!this.feedback}></bg-verse-card>
+
+      ${this.feedback
+        ? html`
+            <div class="feedback ${this.feedback.points > 0 ? 'correct' : 'incorrect'}">
+              ${this.feedback.points > 0 ? `+${this.feedback.points} points` : 'No points'} — it was
+              ${this.feedback.verse.reference}.
+            </div>
+            <button class="next" @click=${this._onNextRound}>
+              ${this.roundIndex + 1 >= this.roundCount ? 'See results' : 'Next verse'}
+            </button>
+          `
+        : html`<bg-guess-form
+            .disabled=${!this.verse}
+            .translation=${this.verse?.translation}
+            @guess-submitted=${this._onGuessSubmitted}
+          ></bg-guess-form>`}
     `
   }
 
@@ -93,8 +166,8 @@ export class BgApp extends LitElement {
       margin-bottom: 1.5rem;
     }
 
-    h1 {
-      font-size: 1.75rem;
+    .round {
+      font-weight: 600;
       margin: 0;
     }
 

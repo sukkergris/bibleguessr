@@ -10,11 +10,14 @@ type Player =
       Name: string
       Score: int }
 
-/// A guess a player submits for the current round's verse.
+/// A guess a player submits for the current round's verse. Chapter and
+/// VerseNumber are optional — a player can guess just the book — but
+/// VerseNumber only makes sense alongside a Chapter guess.
 type Guess =
     { PlayerId: PlayerId
       Book: string
       Chapter: int option
+      VerseNumber: int option
       SubmittedAt: DateTimeOffset }
 
 /// Result of scoring one player's guess against the round's actual verse.
@@ -55,3 +58,37 @@ module Scoring =
         match guess.Chapter with
         | Some chapter -> bookMatches && chapter = verse.Chapter
         | None -> bookMatches
+
+    /// Points awarded per level of a guess, each gated on every level before
+    /// it being correct: the book alone is worth 1000; the chapter only
+    /// counts (100 more) if the book was also right; the verse number only
+    /// counts (10 more) if both book and chapter were right. An omitted
+    /// Chapter/VerseNumber guess simply can't earn that level's points.
+    let private bookPoints = 1000
+    let private chapterPoints = 100
+    let private verseNumberPoints = 10
+
+    let pointsForVerseGuess (verse: Verse) (guess: Guess) =
+        let bookCorrect =
+            String.Equals(guess.Book, verse.Book, StringComparison.OrdinalIgnoreCase)
+
+        if not bookCorrect then
+            0
+        else
+            let chapterCorrect =
+                match guess.Chapter with
+                | Some chapter -> chapter = verse.Chapter
+                | None -> false
+
+            if not chapterCorrect then
+                bookPoints
+            else
+                let verseNumberCorrect =
+                    match guess.VerseNumber with
+                    | Some verseNumber -> verseNumber = verse.VerseNumber
+                    | None -> false
+
+                if verseNumberCorrect then
+                    bookPoints + chapterPoints + verseNumberPoints
+                else
+                    bookPoints + chapterPoints

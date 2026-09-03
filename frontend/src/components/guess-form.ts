@@ -28,6 +28,9 @@ export class GuessForm extends LitElement {
   private chapter = ''
 
   @state()
+  private verseNumber = ''
+
+  @state()
   private books: string[] = []
 
   @state()
@@ -119,6 +122,16 @@ export class GuessForm extends LitElement {
             ?disabled=${this.disabled}
           />
         </label>
+        <label>
+          Verse (optional)
+          <input
+            type="number"
+            min="1"
+            .value=${this.verseNumber}
+            @input=${(e: Event) => (this.verseNumber = (e.target as HTMLInputElement).value)}
+            ?disabled=${this.disabled}
+          />
+        </label>
         <button type="submit" ?disabled=${this.disabled}>Guess</button>
       </form>
     `
@@ -174,6 +187,7 @@ export class GuessForm extends LitElement {
     const guess: Guess = {
       book: this.book.trim(),
       chapter: this.chapter ? Number(this.chapter) : undefined,
+      verseNumber: this.verseNumber ? Number(this.verseNumber) : undefined,
     }
 
     this.dispatchEvent(

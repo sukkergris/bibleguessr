@@ -37,4 +37,12 @@ export interface Room {
 export interface Guess {
   book: string
   chapter?: number
+  verseNumber?: number
+}
+
+/** One completed round's outcome, kept around to build the end-of-game summary. */
+export interface RoundResult {
+  verse: Verse
+  guess: Guess
+  points: number
 }
