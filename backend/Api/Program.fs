@@ -1,5 +1,6 @@
 open System
 open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -101,8 +102,22 @@ let main args =
 
     app.MapGet(
         "/api/books",
-        Func<Verse list, string list>(fun verses ->
-            verses |> List.map (fun v -> v.Book) |> List.distinct |> List.sort)
+        Func<Verse list, HttpRequest, string list>(fun verses request ->
+            // Different translations spell some book names differently (e.g.
+            // bibelen-dk's "1.Mosebog" vs. the NWT sources' "1. Mosebog"), so
+            // the book list a guess is checked against must come from the
+            // same translation as the verse being guessed — not the whole
+            // pooled set, which would offer spellings that can never match.
+            let translation = request.Query["translation"]
+
+            let relevantVerses =
+                if translation.Count = 0 then
+                    verses
+                else
+                    let t = translation.ToString()
+                    verses |> List.filter (fun v -> v.Translation = t)
+
+            relevantVerses |> List.map (fun v -> v.Book) |> List.distinct |> List.sort)
     )
     |> ignore
 

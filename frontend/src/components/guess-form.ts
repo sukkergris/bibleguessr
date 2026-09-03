@@ -16,6 +16,11 @@ export class GuessForm extends LitElement {
   @property({ type: Boolean })
   disabled = false
 
+  // The translation of the verse currently being guessed. Determines which
+  // book spellings are offered — see api.ts's getBooks for why this matters.
+  @property({ type: String })
+  translation?: string
+
   @state()
   private book = ''
 
@@ -25,19 +30,29 @@ export class GuessForm extends LitElement {
   @state()
   private books: string[] = []
 
+  connectedCallback() {
+    super.connectedCallback()
+    this._loadBooks()
+  }
+
+  updated(changedProperties: Map<string, unknown>) {
+    if (changedProperties.has('translation')) {
+      this._loadBooks()
+    }
+  }
+
+  private _loadBooks() {
+    api
+      .getBooks(this.translation)
+      .then((books) => (this.books = books))
+      .catch((error) => console.error('[guess-form] failed to load book list', error))
+  }
+
   @state()
   private suggestionsOpen = false
 
   @state()
   private activeSuggestion = -1
-
-  connectedCallback() {
-    super.connectedCallback()
-    api
-      .getBooks()
-      .then((books) => (this.books = books))
-      .catch((error) => console.error('[guess-form] failed to load book list', error))
-  }
 
   private get suggestions(): string[] {
     const query = this.book.trim().toLowerCase()

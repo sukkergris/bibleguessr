@@ -59,6 +59,10 @@ async function postJson<T>(path: string): Promise<T> {
 export const api = {
   baseUrl: API_BASE_URL,
   getRandomVerse: () => getJson<Verse>('/api/verses/random'),
-  getBooks: () => getJson<string[]>('/api/books'),
+  // Book spellings differ by translation (e.g. bibelen-dk's "1.Mosebog" vs.
+  // the NWT sources' "1. Mosebog") — pass the current verse's translation so
+  // the suggestion list only offers spellings that can actually match it.
+  getBooks: (translation?: string) =>
+    getJson<string[]>(`/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
   createRoom: () => postJson<Room>('/api/rooms'),
 }

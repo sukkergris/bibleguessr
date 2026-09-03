@@ -72,7 +72,7 @@ export class BgApp extends LitElement {
               </div>
               <button class="next" @click=${this._loadNextVerse}>Next verse</button>
             `
-          : html`<bg-guess-form .disabled=${!this.verse}></bg-guess-form>`}
+          : html`<bg-guess-form .disabled=${!this.verse} .translation=${this.verse?.translation}></bg-guess-form>`}
       </main>
     `
   }
