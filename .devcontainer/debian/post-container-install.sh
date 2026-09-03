@@ -7,6 +7,12 @@ export NVM_DIR="$HOME/.nvm"
 
 SCRIPTS_DIR="/xyz/.devcontainer/scripts"
 
+# VS Code's Dev Containers extension copies the host's ~/.gitconfig into the
+# container on (re)build. That gitconfig has no safe.directory entry for /xyz,
+# so Git refuses to operate on the repo ("detected dubious ownership") whenever
+# ownership/UID mapping looks even slightly off across the bind mount.
+git config --global --add safe.directory /xyz || true
+
 bash "${SCRIPTS_DIR}/copy-ssh-files.sh"
 
 
