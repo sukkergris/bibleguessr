@@ -1,5 +1,5 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, property, state } from 'lit/decorators.js'
+import { customElement, property, query, state } from 'lit/decorators.js'
 import { api } from '../api'
 import type { Guess, VerseSource } from '../types'
 
@@ -26,8 +26,8 @@ export class GuessForm extends LitElement {
   @property({ type: String })
   translation?: string
 
-  // Where the book/chapter lists are loaded from: the backend (default) or
-  // a Bible file the player parsed client-side — see local-verses.ts.
+  // Where the book/chapter/verse-number lists are loaded from: the backend
+  // (default) or a Bible file the player parsed client-side — see local-verses.ts.
   @property({ attribute: false })
   verseSource: VerseSource = api
 
@@ -55,6 +55,9 @@ export class GuessForm extends LitElement {
   @state()
   private activeSuggestion = -1
 
+  @query('input[name="bg-book-guess-no-autofill"]')
+  private bookInput?: HTMLInputElement
+
   connectedCallback() {
     super.connectedCallback()
     this._loadBooks()
@@ -63,6 +66,13 @@ export class GuessForm extends LitElement {
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
       this._loadBooks()
+    }
+
+    // A new question is ready as soon as the form goes from disabled (still
+    // loading the verse) to enabled — put focus straight on Book so the
+    // player can start typing immediately, no click needed.
+    if (changedProperties.has('disabled') && changedProperties.get('disabled') === true && !this.disabled) {
+      this.bookInput?.focus()
     }
   }
 

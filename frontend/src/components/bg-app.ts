@@ -54,6 +54,28 @@ export class BgApp extends LitElement {
     return this.rounds.reduce((sum, r) => sum + r.points, 0)
   }
 
+  connectedCallback() {
+    super.connectedCallback()
+    window.addEventListener('keydown', this._onKeydown)
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener('keydown', this._onKeydown)
+    super.disconnectedCallback()
+  }
+
+  // While the "Next verse"/"See results" button is showing, Enter activates
+  // it — mirrors what Enter already does inside the guess form (submit),
+  // so pressing Enter keeps moving the game forward without reaching for
+  // the mouse. Listens on window rather than the button itself since focus
+  // is often still on the just-hidden guess form when feedback appears.
+  private _onKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && this.feedback) {
+      e.preventDefault()
+      this._onNextRound()
+    }
+  }
+
   private _onGameStarted = (event: CustomEvent<GameOptions>) => {
     this.translation = event.detail.translation
     this.verseSource = event.detail.verseSource
