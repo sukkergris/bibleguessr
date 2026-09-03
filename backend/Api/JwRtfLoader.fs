@@ -127,14 +127,25 @@ let parseBookFile (bookNumber: int) (rtf: string) : Verse list =
 
         let markers = verseMarkerRegex.Matches(rtf) |> Seq.cast<Match> |> List.ofSeq
 
+        // The last verse of a chapter has no following verse marker to stop
+        // at within that chapter — the next token in the file is the next
+        // chapter's heading, which must not be swept into the verse text.
+        let nextHeadingAfter (pos: int) =
+            headings |> List.tryPick (fun (hpos, _) -> if hpos > pos then Some hpos else None)
+
         markers
         |> List.mapi (fun i m ->
             let textStart = m.Index + m.Length
-            let textEnd =
+            let nextMarkerPos =
                 if i + 1 < markers.Length then
                     markers[i + 1].Index
                 else
                     rtf.Length
+
+            let textEnd =
+                match nextHeadingAfter m.Index with
+                | Some headingPos when headingPos < nextMarkerPos -> headingPos
+                | _ -> nextMarkerPos
 
             let text = rtf.Substring(textStart, textEnd - textStart) |> decodeRtfText
             let chapter = chapterAt m.Index
