@@ -36,6 +36,14 @@ type Room =
       Players: Player list
       Round: RoundState }
 
+/// A chat message sent within a room. Not persisted — kept only in the
+/// hub's broadcast, same lifetime as the room itself.
+type ChatMessage =
+    { PlayerId: PlayerId
+      PlayerName: string
+      Text: string
+      SentAt: DateTimeOffset }
+
 module Scoring =
 
     /// Points for a correct guess, decreasing the longer a player takes to answer.

@@ -34,6 +34,13 @@ export interface Room {
   round: RoundState
 }
 
+export interface ChatMessage {
+  playerId: string
+  playerName: string
+  text: string
+  sentAt: string
+}
+
 export interface Guess {
   book: string
   chapter?: number

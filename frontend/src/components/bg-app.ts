@@ -7,6 +7,9 @@ import './guess-form'
 import './game-setup'
 import type { GameOptions } from './game-setup'
 import './game-results'
+import './mode-select'
+import type { GameMode } from './mode-select'
+import './bg-room-setup'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
@@ -16,12 +19,12 @@ const BOOK_POINTS = 10
 const CHAPTER_POINTS = 100
 const VERSE_NUMBER_POINTS = 1000
 
-type GamePhase = 'setup' | 'playing' | 'gameOver'
+type GamePhase = 'mode-select' | 'setup' | 'playing' | 'gameOver' | 'room-setup'
 
 @customElement('bg-app')
 export class BgApp extends LitElement {
   @state()
-  private phase: GamePhase = 'setup'
+  private phase: GamePhase = 'mode-select'
 
   @state()
   private translation = ''
@@ -74,6 +77,10 @@ export class BgApp extends LitElement {
       e.preventDefault()
       this._onNextRound()
     }
+  }
+
+  private _onModeSelected = (event: CustomEvent<GameMode>) => {
+    this.phase = event.detail === 'singleplayer' ? 'setup' : 'room-setup'
   }
 
   private _onGameStarted = (event: CustomEvent<GameOptions>) => {
@@ -142,18 +149,22 @@ export class BgApp extends LitElement {
   }
 
   private _onPlayAgain = () => {
-    this.phase = 'setup'
+    this.phase = 'mode-select'
     this.rounds = []
   }
 
   render() {
     return html`
       <main>
-        ${this.phase === 'setup'
-          ? html`<bg-game-setup @game-started=${this._onGameStarted}></bg-game-setup>`
-          : this.phase === 'playing'
-            ? this._renderPlaying()
-            : html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`}
+        ${this.phase === 'mode-select'
+          ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
+          : this.phase === 'setup'
+            ? html`<bg-game-setup @game-started=${this._onGameStarted}></bg-game-setup>`
+            : this.phase === 'playing'
+              ? this._renderPlaying()
+              : this.phase === 'gameOver'
+                ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
+                : html`<bg-room-setup></bg-room-setup>`}
       </main>
     `
   }
@@ -245,6 +256,7 @@ export class BgApp extends LitElement {
       font-size: 1rem;
       cursor: pointer;
     }
+
   `
 }
 
