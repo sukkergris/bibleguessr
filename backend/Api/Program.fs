@@ -39,14 +39,39 @@ let main args =
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore
 
-    // Verse data lives outside the repo (bibelen-dk/Bibelen Files/ is
-    // gitignored); loaded once at startup and served from memory.
+    // Verse data lives outside the repo (bibles/bibelen-dk/Bibelen Files/
+    // and bibles/jw/src/ are both gitignored); loaded once at startup and
+    // served from memory. Both translations' verses are pooled into one
+    // list — the random-verse endpoint doesn't distinguish between
+    // translations.
     let versesDirectory =
         builder.Configuration["Verses:Directory"]
         |> Option.ofObj
-        |> Option.defaultValue "../../bibelen-dk/Bibelen Files"
+        |> Option.defaultValue "../../bibles/bibelen-dk/Bibelen Files"
 
-    let verses = BibelenDkLoader.loadFromDirectory versesDirectory
+    let jwDirectory =
+        builder.Configuration["Verses:JwDirectory"]
+        |> Option.ofObj
+        |> Option.defaultValue "../../bibles/jw/src"
+
+    // JwEpubLoader and JwRtfLoader both load the same NWT translation from
+    // different export formats, and name books differently under the
+    // hood — running both at once would pool two conflicting spellings of
+    // the same book for the same translation. Pick exactly one via config
+    // ("epub", the default, or "rtf"); never load both.
+    let jwSource =
+        builder.Configuration["Verses:JwSource"]
+        |> Option.ofObj
+        |> Option.defaultValue "epub"
+
+    let jwVerses =
+        match jwSource.ToLowerInvariant() with
+        | "rtf" -> JwRtfLoader.loadFromDirectory jwDirectory
+        | "epub" -> JwEpubLoader.loadFromDirectory jwDirectory
+        | other -> failwith $"Unknown Verses:JwSource '{other}' — expected \"epub\" or \"rtf\""
+
+    let verses = BibelenDkLoader.loadFromDirectory versesDirectory @ jwVerses
+
     builder.Services.AddSingleton<Verse list>(verses) |> ignore
 
     let app = builder.Build()

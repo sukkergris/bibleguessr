@@ -1,5 +1,5 @@
 /// Loads verse data from the bibelen-dk source: one HTML file per chapter,
-/// under `bibelen-dk/Bibelen Files/`. That folder is gitignored (private
+/// under `bibles/bibelen-dk/Bibelen Files/`. That folder is gitignored (private
 /// local translation data) — this loader reads it at startup if present.
 ///
 /// File shape:
