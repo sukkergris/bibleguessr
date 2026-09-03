@@ -2,6 +2,7 @@ open System
 open Microsoft.AspNetCore.Builder
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
 open BibleGuessr.Domain
 open BibleGuessr.Api
 open System.Text.Json.Serialization
@@ -12,6 +13,15 @@ let main args =
 
     builder.Services.ConfigureHttpJsonOptions(fun options ->
         options.SerializerOptions.Converters.Add(JsonFSharpConverter()))
+    |> ignore
+
+    builder.Services.AddHttpLogging(fun options ->
+        options.LoggingFields <-
+            Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod
+            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath
+            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestQuery
+            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode
+            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration)
     |> ignore
 
     let frontendOrigin =
@@ -41,6 +51,11 @@ let main args =
 
     let app = builder.Build()
 
+    let startupLogger = app.Services.GetRequiredService<ILogger<obj>>()
+    startupLogger.LogInformation("Verses loaded: {Count}", verses.Length)
+    startupLogger.LogInformation("CORS allowed origin: {Origin}", frontendOrigin)
+
+    app.UseHttpLogging() |> ignore
     app.UseCors() |> ignore
 
     app.MapGet(
