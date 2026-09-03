@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   FRONTEND_DIR: frontend
+  DEV_PORT: 5173
 
 tasks:
   install:
@@ -38,3 +39,37 @@ tasks:
       - build
     cmds:
       - npm run preview
+
+  kill:
+    desc: Stop all running Vite dev server processes (repeated `task frontend:dev` runs pile up otherwise)
+    platforms: [linux, darwin]
+    cmds:
+      # vite runs as a plain `node` process, so match on its script path
+      # rather than the process name (pkill -x node would kill unrelated
+      # Node processes too, e.g. VS Code's own tooling).
+      - pkill -f 'node .*/vite$' || true
+
+  free-port:
+    desc: 'Kill whatever process is bound to the dev server port (fixes "port already in use" / stale instances)'
+    platforms: [linux, darwin]
+    cmds:
+      - fuser -k {{.DEV_PORT}}/tcp || true
+
+  status:
+    desc: Show whether a Vite dev server is already running (and if the dev port is taken)
+    platforms: [linux, darwin]
+    cmds:
+      - |
+        pids=$(pgrep -f 'node .*/vite$' || true)
+        if [ -n "$pids" ]; then
+          echo "vite is running:"
+          ps -o pid,etime,cmd -p $(echo "$pids" | tr '\n' ',' | sed 's/,$//')
+        else
+          echo "No vite process is running."
+        fi
+      - |
+        if fuser {{.DEV_PORT}}/tcp > /dev/null 2>&1; then
+          echo "Port {{.DEV_PORT}} is in use (PID $(fuser {{.DEV_PORT}}/tcp 2>/dev/null | tr -d ' '))."
+        else
+          echo "Port {{.DEV_PORT}} is free."
+        fi
