@@ -60,13 +60,13 @@ module Scoring =
         | None -> bookMatches
 
     /// Points awarded per level of a guess, each gated on every level before
-    /// it being correct: the book alone is worth 1000; the chapter only
+    /// it being correct: the book alone is worth 10; the chapter only
     /// counts (100 more) if the book was also right; the verse number only
-    /// counts (10 more) if both book and chapter were right. An omitted
+    /// counts (1000 more) if both book and chapter were right. An omitted
     /// Chapter/VerseNumber guess simply can't earn that level's points.
-    let private bookPoints = 1000
+    let private bookPoints = 10
     let private chapterPoints = 100
-    let private verseNumberPoints = 10
+    let private verseNumberPoints = 1000
 
     let pointsForVerseGuess (verse: Verse) (guess: Guess) =
         let bookCorrect =

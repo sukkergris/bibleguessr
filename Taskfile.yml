@@ -4,6 +4,9 @@ includes:
   frontend:
     taskfile: ./Taskfile.Frontend.yml
     dir: .
+  dotnet:
+    taskfile: ./Taskfile.Dotnet.yml
+    dir: .
 
 tasks:
   default:

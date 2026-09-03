@@ -8,13 +8,13 @@ import './game-setup'
 import type { GameOptions } from './game-setup'
 import './game-results'
 
-type Feedback = { points: number; verse: Verse } | undefined
+type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
 // Points awarded per level of a guess, gated on every level before it being
 // correct — mirrors backend/Domain/Game.fs's Scoring.pointsForVerseGuess.
-const BOOK_POINTS = 1000
+const BOOK_POINTS = 10
 const CHAPTER_POINTS = 100
-const VERSE_NUMBER_POINTS = 10
+const VERSE_NUMBER_POINTS = 1000
 
 type GamePhase = 'setup' | 'playing' | 'gameOver'
 
@@ -74,7 +74,7 @@ export class BgApp extends LitElement {
     const points = this._scoreGuess(this.verse, guess)
 
     this.rounds = [...this.rounds, { verse: this.verse, guess, points }]
-    this.feedback = { points, verse: this.verse }
+    this.feedback = { points, verse: this.verse, guess }
   }
 
   // Mirrors backend/Domain/Game.fs's Scoring.pointsForVerseGuess: each level
@@ -90,6 +90,14 @@ export class BgApp extends LitElement {
     if (!verseNumberCorrect) return BOOK_POINTS + CHAPTER_POINTS
 
     return BOOK_POINTS + CHAPTER_POINTS + VERSE_NUMBER_POINTS
+  }
+
+  // Renders a Guess the same way references are usually written, e.g.
+  // "Matthæus", "Matthæus 1" or "Matthæus 1:1" — however far the player got.
+  private _formatGuess(guess: Guess): string {
+    if (guess.chapter === undefined) return guess.book
+    if (guess.verseNumber === undefined) return `${guess.book} ${guess.chapter}`
+    return `${guess.book} ${guess.chapter}:${guess.verseNumber}`
   }
 
   private _onNextRound = () => {
@@ -135,8 +143,8 @@ export class BgApp extends LitElement {
       ${this.feedback
         ? html`
             <div class="feedback ${this.feedback.points > 0 ? 'correct' : 'incorrect'}">
-              ${this.feedback.points > 0 ? `+${this.feedback.points} points` : 'No points'} — it was
-              ${this.feedback.verse.reference}.
+              ${this.feedback.points > 0 ? `+${this.feedback.points} points` : 'No points'} — you guessed
+              ${this._formatGuess(this.feedback.guess)}, it was ${this.feedback.verse.reference}.
             </div>
             <button class="next" @click=${this._onNextRound}>
               ${this.roundIndex + 1 >= this.roundCount ? 'See results' : 'Next verse'}

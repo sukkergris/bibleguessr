@@ -1,8 +1,8 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import type { RoundResult } from '../types'
+import type { Guess, RoundResult } from '../types'
 
-const MAX_POINTS_PER_ROUND = 1110 // book (1000) + chapter (100) + verse (10)
+const MAX_POINTS_PER_ROUND = 1110 // book (10) + chapter (100) + verse (1000)
 
 /**
  * End-of-game summary: total score, a per-round breakdown, and a "Copy
@@ -36,7 +36,11 @@ export class GameResults extends LitElement {
             (r, i) => html`
               <li>
                 <span class="round-num">#${i + 1}</span>
-                <span class="reference">${r.verse.reference}</span>
+                <span class="reference">
+                  ${r.points > 0
+                    ? html`${r.verse.reference}`
+                    : html`You guessed ${this._formatGuess(r.guess)} — it was ${r.verse.reference}`}
+                </span>
                 <span class="points">${r.points} pts</span>
               </li>
             `,
@@ -51,10 +55,18 @@ export class GameResults extends LitElement {
     `
   }
 
+  // Renders a Guess the same way references are usually written, e.g.
+  // "Matthæus", "Matthæus 1" or "Matthæus 1:1" — however far the player got.
+  private _formatGuess(guess: Guess): string {
+    if (guess.chapter === undefined) return guess.book
+    if (guess.verseNumber === undefined) return `${guess.book} ${guess.chapter}`
+    return `${guess.book} ${guess.chapter}:${guess.verseNumber}`
+  }
+
   private _resultText(): string {
     const lines = this.rounds.map((r) => {
-      const bookRight = r.points >= 1000
-      const chapterRight = r.points >= 1100
+      const bookRight = r.points >= 10
+      const chapterRight = r.points >= 110
       const verseRight = r.points >= 1110
       return `${bookRight ? '📖' : '❌'}${chapterRight ? '📄' : ''}${verseRight ? '🔢' : ''} ${r.points} pts`
     })

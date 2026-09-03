@@ -1,0 +1,59 @@
+version: "3"
+
+vars:
+  BACKEND_DIR: backend
+  API_PORT: 5162
+
+tasks:
+  restore:
+    desc: Restore .NET dependencies
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - dotnet restore
+
+  build:
+    desc: Build the backend
+    dir: "{{.BACKEND_DIR}}"
+    deps:
+      - restore
+    cmds:
+      - dotnet build
+
+  dev:
+    desc: Run the backend API
+    dir: "{{.BACKEND_DIR}}/Api"
+    deps:
+      - build
+    cmds:
+      - dotnet run --no-build
+
+  kill:
+    desc: Stop all running .NET (dotnet) processes
+    platforms: [linux, darwin]
+    cmds:
+      - pkill -x dotnet || true
+
+  free-port:
+    desc: 'Kill whatever process is bound to the API port (fixes "address already in use")'
+    platforms: [linux, darwin]
+    cmds:
+      - fuser -k {{.API_PORT}}/tcp || true
+
+  status:
+    desc: Show whether a dotnet process is already running (and if the API port is taken)
+    platforms: [linux, darwin]
+    cmds:
+      - |
+        pids=$(ps -eo pid,stat,cmd | awk '$3 == "dotnet" && $2 !~ /Z/ { print $1 }')
+        if [ -n "$pids" ]; then
+          echo "dotnet is running:"
+          ps -o pid,etime,cmd -p $(echo "$pids" | tr '\n' ',' | sed 's/,$//')
+        else
+          echo "No dotnet process is running."
+        fi
+      - |
+        if fuser {{.API_PORT}}/tcp > /dev/null 2>&1; then
+          echo "Port {{.API_PORT}} is in use (PID $(fuser {{.API_PORT}}/tcp 2>/dev/null | tr -d ' '))."
+        else
+          echo "Port {{.API_PORT}} is free."
+        fi
