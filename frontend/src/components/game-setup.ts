@@ -1,9 +1,13 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
+import { createLocalVerseSource } from '../local-verses'
+import { fingerprintFile, readCache, writeCache, type CachedBible } from '../verse-cache'
+import type { VerseSource } from '../types'
 
 export interface GameOptions {
   translation: string
+  verseSource: VerseSource
   roundCount: number
 }
 
@@ -11,13 +15,27 @@ const MIN_ROUNDS = 3
 const MAX_ROUNDS = 10
 const DEFAULT_ROUNDS = 5
 
+type Mode = 'server' | 'file'
+
+type FileState =
+  | { status: 'idle' }
+  | { status: 'picking' }
+  | { status: 'parsing'; fileName: string; processed: number; total: number }
+  | { status: 'ready'; fileName: string; translation: string; verseSource: VerseSource }
+  | { status: 'error'; message: string }
+
 /**
- * Pre-game screen: choose a translation and how many verses (3-10) the game
- * will run for. Fires a `game-started` CustomEvent<GameOptions> once both
- * are chosen and the player confirms.
+ * Pre-game screen: choose where verses come from (a translation the backend
+ * serves, or a Bible file the player supplies and parses in their own
+ * browser — see epub-parser.ts) and how many verses (3-10) the game will
+ * run for. Fires a `game-started` CustomEvent<GameOptions> once ready and
+ * the player confirms.
  */
 @customElement('bg-game-setup')
 export class GameSetup extends LitElement {
+  @state()
+  private mode: Mode = 'server'
+
   @state()
   private translations: string[] = []
 
@@ -29,6 +47,15 @@ export class GameSetup extends LitElement {
 
   @state()
   private error?: string
+
+  @state()
+  private fileState: FileState = { status: 'idle' }
+
+  @state()
+  private cached?: CachedBible
+
+  @state()
+  private dragOver = false
 
   connectedCallback() {
     super.connectedCallback()
@@ -43,6 +70,10 @@ export class GameSetup extends LitElement {
       .catch((err) => {
         this.error = err instanceof Error ? err.message : 'Failed to load translations.'
       })
+
+    readCache()
+      .then((cached) => (this.cached = cached))
+      .catch((err) => console.error('[game-setup] failed to read verse cache', err))
   }
 
   render() {
@@ -53,20 +84,29 @@ export class GameSetup extends LitElement {
 
         ${this.error ? html`<p class="error">${this.error}</p>` : null}
 
+        <div class="mode-switch" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected=${this.mode === 'server'}
+            class=${this.mode === 'server' ? 'active' : ''}
+            @click=${() => (this.mode = 'server')}
+          >
+            Server translation
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected=${this.mode === 'file'}
+            class=${this.mode === 'file' ? 'active' : ''}
+            @click=${() => (this.mode = 'file')}
+          >
+            My own Bible file
+          </button>
+        </div>
+
         <form @submit=${this._onSubmit}>
-          <label>
-            Translation
-            <select
-              .value=${this.selectedTranslation}
-              @change=${(e: Event) => (this.selectedTranslation = (e.target as HTMLSelectElement).value)}
-              ?disabled=${this.translations.length === 0}
-              required
-            >
-              ${this.translations.length === 0
-                ? html`<option value="">Loading…</option>`
-                : this.translations.map((t) => html`<option value=${t}>${t}</option>`)}
-            </select>
-          </label>
+          ${this.mode === 'server' ? this._renderServerMode() : this._renderFileMode()}
 
           <label>
             Number of verses
@@ -82,19 +122,161 @@ export class GameSetup extends LitElement {
             </div>
           </label>
 
-          <button type="submit" ?disabled=${!this.selectedTranslation}>Start game</button>
+          <button type="submit" ?disabled=${!this._canStart}>Start game</button>
         </form>
       </div>
     `
   }
 
+  private get _canStart(): boolean {
+    return this.mode === 'server' ? !!this.selectedTranslation : this.fileState.status === 'ready'
+  }
+
+  private _renderServerMode() {
+    return html`
+      <label>
+        Translation
+        <select
+          .value=${this.selectedTranslation}
+          @change=${(e: Event) => (this.selectedTranslation = (e.target as HTMLSelectElement).value)}
+          ?disabled=${this.translations.length === 0}
+          required
+        >
+          ${this.translations.length === 0
+            ? html`<option value="">Loading…</option>`
+            : this.translations.map((t) => html`<option value=${t}>${t}</option>`)}
+        </select>
+      </label>
+    `
+  }
+
+  private _renderFileMode() {
+    if (this.fileState.status === 'idle' && this.cached) {
+      return this._renderCachedCard(this.cached)
+    }
+
+    if (this.fileState.status === 'parsing') {
+      const { fileName, processed, total } = this.fileState
+      return html`
+        <div class="file-status">
+          <p>Parsing ${fileName}…</p>
+          <progress max=${total} value=${processed}></progress>
+          <p class="progress-label">${processed} / ${total} chapters</p>
+        </div>
+      `
+    }
+
+    if (this.fileState.status === 'ready') {
+      return html`
+        <div class="file-status">
+          <p>✓ Using <strong>${this.fileState.fileName}</strong> (${this.fileState.translation})</p>
+          <button type="button" class="secondary" @click=${() => (this.fileState = { status: 'picking' })}>
+            Use a different file
+          </button>
+        </div>
+      `
+    }
+
+    return html`
+      ${this.fileState.status === 'error' ? html`<p class="error">${this.fileState.message}</p>` : null}
+      <label
+        class="dropzone ${this.dragOver ? 'dragover' : ''}"
+        @dragover=${(e: DragEvent) => {
+          e.preventDefault()
+          this.dragOver = true
+        }}
+        @dragleave=${() => (this.dragOver = false)}
+        @drop=${this._onDrop}
+      >
+        <input type="file" accept=".epub" @change=${this._onFileInputChange} />
+        <span>Drop a .epub Bible file here, or click to choose one</span>
+      </label>
+    `
+  }
+
+  private _renderCachedCard(cached: CachedBible) {
+    return html`
+      <div class="file-status">
+        <p>Continue with <strong>${cached.fingerprint.split(':')[0]}</strong> — ${cached.verses.length} verses cached</p>
+        <button type="button" @click=${() => this._useCached(cached)}>Continue</button>
+        <button type="button" class="secondary" @click=${() => (this.fileState = { status: 'picking' })}>
+          Use a different file
+        </button>
+      </div>
+    `
+  }
+
+  private _useCached(cached: CachedBible) {
+    this.fileState = {
+      status: 'ready',
+      fileName: cached.fingerprint.split(':')[0],
+      translation: cached.translation,
+      verseSource: createLocalVerseSource(cached.verses),
+    }
+  }
+
+  private _onFileInputChange = (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (file) void this._loadFile(file)
+  }
+
+  private _onDrop = (e: DragEvent) => {
+    e.preventDefault()
+    this.dragOver = false
+    const file = e.dataTransfer?.files[0]
+    if (file) void this._loadFile(file)
+  }
+
+  private async _loadFile(file: File) {
+    if (!file.name.toLowerCase().endsWith('.epub')) {
+      this.fileState = { status: 'error', message: 'Please choose a .epub file.' }
+      return
+    }
+
+    const translation = file.name.replace(/\.epub$/i, '')
+    this.fileState = { status: 'parsing', fileName: file.name, processed: 0, total: 1 }
+
+    try {
+      const { parseEpub } = await import('../epub-parser')
+      const verses = await parseEpub(file, translation, (progress) => {
+        this.fileState = { status: 'parsing', fileName: file.name, ...progress }
+      })
+
+      if (verses.length === 0) {
+        this.fileState = {
+          status: 'error',
+          message: 'This EPUB doesn’t look like a supported Bible export — no recognizable chapters were found.',
+        }
+        return
+      }
+
+      await writeCache(fingerprintFile(file), translation, verses)
+      this.fileState = { status: 'ready', fileName: file.name, translation, verseSource: createLocalVerseSource(verses) }
+    } catch (err) {
+      console.error('[game-setup] failed to parse EPUB', err)
+      this.fileState = {
+        status: 'error',
+        message: 'This doesn’t look like a valid EPUB file (couldn’t open it as a zip).',
+      }
+    }
+  }
+
   private _onSubmit(event: SubmitEvent) {
     event.preventDefault()
-    if (!this.selectedTranslation) return
+    if (!this._canStart) return
+
+    const detail: GameOptions =
+      this.mode === 'server'
+        ? { translation: this.selectedTranslation, verseSource: api, roundCount: this.roundCount }
+        : {
+            translation: (this.fileState as Extract<FileState, { status: 'ready' }>).translation,
+            verseSource: (this.fileState as Extract<FileState, { status: 'ready' }>).verseSource,
+            roundCount: this.roundCount,
+          }
 
     this.dispatchEvent(
       new CustomEvent<GameOptions>('game-started', {
-        detail: { translation: this.selectedTranslation, roundCount: this.roundCount },
+        detail,
         bubbles: true,
         composed: true,
       }),
@@ -127,6 +309,27 @@ export class GameSetup extends LitElement {
       .tagline {
         color: #9ca3af;
       }
+    }
+
+    .mode-switch {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+
+    .mode-switch button {
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      border: 1px solid #ccc;
+      background: transparent;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .mode-switch button.active {
+      background: #aa3bff;
+      border-color: #aa3bff;
+      color: white;
     }
 
     form {
@@ -182,8 +385,54 @@ export class GameSetup extends LitElement {
       cursor: not-allowed;
     }
 
+    button.secondary {
+      background: transparent;
+      color: #aa3bff;
+      border: 1px solid #aa3bff;
+    }
+
     .error {
       color: #d33;
+    }
+
+    .file-status {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      text-align: center;
+    }
+
+    .dropzone {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 1.5rem 1rem;
+      border: 2px dashed #ccc;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #6b6375;
+    }
+
+    .dropzone.dragover {
+      border-color: #aa3bff;
+      color: #aa3bff;
+    }
+
+    .dropzone input[type='file'] {
+      display: none;
+    }
+
+    progress {
+      width: 100%;
+    }
+
+    .progress-label {
+      margin: 0;
+      font-size: 0.8rem;
+      color: #6b6375;
+      text-align: center;
     }
   `
 }

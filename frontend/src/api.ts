@@ -1,4 +1,4 @@
-import type { Room, Verse } from './types'
+import type { Room, Verse, VerseSource } from './types'
 
 // Configure via a Vite env var (frontend/.env.local) if the backend isn't
 // running on the default dev port, e.g. VITE_API_BASE_URL=http://localhost:5080
@@ -67,4 +67,4 @@ export const api = {
   getBooks: (translation?: string) =>
     getJson<string[]>(`/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
   createRoom: () => postJson<Room>('/api/rooms'),
-}
+} satisfies VerseSource & Record<string, unknown>

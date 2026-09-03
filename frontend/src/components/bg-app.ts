@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import type { Guess, RoundResult, Verse } from '../types'
+import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import './verse-card'
 import './guess-form'
 import './game-setup'
@@ -25,6 +25,12 @@ export class BgApp extends LitElement {
 
   @state()
   private translation = ''
+
+  // Where verses/books come from for the game in progress: the backend
+  // (default) or a Bible file the player parsed client-side — see
+  // local-verses.ts. Chosen per game by bg-game-setup.
+  @state()
+  private verseSource: VerseSource = api
 
   @state()
   private roundCount = 0
@@ -50,6 +56,7 @@ export class BgApp extends LitElement {
 
   private _onGameStarted = (event: CustomEvent<GameOptions>) => {
     this.translation = event.detail.translation
+    this.verseSource = event.detail.verseSource
     this.roundCount = event.detail.roundCount
     this.roundIndex = 0
     this.rounds = []
@@ -61,7 +68,7 @@ export class BgApp extends LitElement {
     this.error = undefined
     this.feedback = undefined
     try {
-      this.verse = await api.getRandomVerse(this.translation)
+      this.verse = await this.verseSource.getRandomVerse(this.translation)
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load a verse.'
     }
@@ -153,6 +160,7 @@ export class BgApp extends LitElement {
         : html`<bg-guess-form
             .disabled=${!this.verse}
             .translation=${this.verse?.translation}
+            .verseSource=${this.verseSource}
             @guess-submitted=${this._onGuessSubmitted}
           ></bg-guess-form>`}
     `

@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
-import type { Guess } from '../types'
+import type { Guess, VerseSource } from '../types'
 
 /**
  * Fires a `guess-submitted` CustomEvent<Guess> when the player submits.
@@ -20,6 +20,11 @@ export class GuessForm extends LitElement {
   // book spellings are offered — see api.ts's getBooks for why this matters.
   @property({ type: String })
   translation?: string
+
+  // Where the book list is loaded from: the backend (default) or a Bible
+  // file the player parsed client-side — see local-verses.ts.
+  @property({ attribute: false })
+  verseSource: VerseSource = api
 
   @state()
   private book = ''
@@ -45,13 +50,13 @@ export class GuessForm extends LitElement {
   }
 
   updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('translation')) {
+    if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
       this._loadBooks()
     }
   }
 
   private _loadBooks() {
-    api
+    this.verseSource
       .getBooks(this.translation)
       .then((books) => (this.books = books))
       .catch((error) => console.error('[guess-form] failed to load book list', error))

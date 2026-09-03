@@ -46,3 +46,14 @@ export interface RoundResult {
   guess: Guess
   points: number
 }
+
+/**
+ * Where the game gets its verses from: the backend (`api`) or a Bible file
+ * the player parsed client-side (`local-verses.ts`'s createLocalVerseSource).
+ * `api` already structurally satisfies this — see api.ts.
+ */
+export interface VerseSource {
+  getTranslations(): Promise<string[]>
+  getRandomVerse(translation?: string): Promise<Verse>
+  getBooks(translation?: string): Promise<string[]>
+}

@@ -44,7 +44,7 @@ tasks:
     platforms: [linux, darwin]
     cmds:
       - |
-        pids=$(ps -eo pid,stat,cmd | awk '$3 == "dotnet" && $2 !~ /Z/ { print $1 }')
+        pids=$(pgrep -x dotnet || true)
         if [ -n "$pids" ]; then
           echo "dotnet is running:"
           ps -o pid,etime,cmd -p $(echo "$pids" | tr '\n' ',' | sed 's/,$//')
