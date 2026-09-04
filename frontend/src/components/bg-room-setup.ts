@@ -196,11 +196,26 @@ export class RoomSetup extends LitElement {
     return html`
       <div class="room">
         <h1 class=${isDisconnected ? 'disconnected' : ''}>
-          ${roomCode ? html`Room <span class="code">${roomCode}</span>` : 'World chat'}
+          ${roomCode
+            ? html`
+                Room
+                <span class="code">${roomCode}</span>
+              `
+            : 'World chat'}
         </h1>
 
-        ${isDisconnected ? html`<p class="error">Lost connection to the server — trying to reconnect…</p>` : null}
-        ${this.error ? html`<p class="error">${this.error}</p>` : null}
+        ${isDisconnected
+          ? html`
+              <p class="error">
+                Lost connection to the server — trying to reconnect…
+              </p>
+            `
+          : null}
+        ${this.error
+          ? html`
+              <p class="error">${this.error}</p>
+            `
+          : null}
 
         <bg-game-type-select
           .verseSource=${api}
@@ -212,6 +227,7 @@ export class RoomSetup extends LitElement {
           .players=${this.players}
           .messages=${this.messages}
           .myPlayerId=${this.myPlayerId}
+          .connectionState=${this.connectionState}
           .disconnectedPlayerIds=${this.disconnectedPlayerIds}
           @chat-submit=${this._onChatSubmit}
           @player-selected=${this._onPlayerSelected}
@@ -225,9 +241,11 @@ export class RoomSetup extends LitElement {
           @deny-play-request=${this._onDenyPlayRequest}
         ></bg-play-requests>
 
-        <button type="button" class="secondary" @click=${this._onLeaveRoom}>Back to chat selection</button>
+        <button type="button" class="secondary" @click=${this._onLeaveRoom}>
+          Back to chat selection
+        </button>
       </div>
-    `
+    `;
   }
 
   private async _onCreateRoom() {

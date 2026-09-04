@@ -1,6 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import type { ChatMessage, Player } from '../types'
+import type { ConnectionState } from '../signalr-client';
 
 /**
  * The players list + message log + send form shared by any chat surface
@@ -15,25 +16,30 @@ import type { ChatMessage, Player } from '../types'
 @customElement('bg-chat-panel')
 export class ChatPanel extends LitElement {
   @property({ attribute: false })
-  players: Player[] = []
+  players: Player[] = [];
 
   @property({ attribute: false })
-  messages: ChatMessage[] = []
+  messages: ChatMessage[] = [];
 
   /** The viewing player's own id, so their own name in the list isn't
    * rendered as a clickable play-request target. */
   @property({ attribute: false })
-  myPlayerId = ''
+  myPlayerId = '';
+
+  /** The local SignalR connection state, used to distinguish known presence
+   * from uncertain presence while this browser is disconnected. */
+  @property({ attribute: false })
+  connectionState: ConnectionState = 'connected';
 
   /** Ids of players whose connection is currently down (but who haven't
    * been removed from `players` yet) — rendered as a status dot next to
    * their name, so everyone can tell "just struggling with their
    * connection" apart from "actually here". */
   @property({ attribute: false })
-  disconnectedPlayerIds: Set<string> = new Set()
+  disconnectedPlayerIds: Set<string> = new Set();
 
   @state()
-  private _input = ''
+  private _input = '';
 
   render() {
     return html`
@@ -42,17 +48,45 @@ export class ChatPanel extends LitElement {
           <h2>Players</h2>
           <ul>
             ${this.players.map((player) => {
-              const isConnected = !this.disconnectedPlayerIds.has(player.id)
-              const dot = html`<span
-                class="status-dot ${isConnected ? 'connected' : 'disconnected'}"
-                title=${isConnected ? 'Connected' : 'Connection trouble'}
-              ></span>`
+              const isMe = player.id === this.myPlayerId;
+              const isDisconnected = this.connectionState === 'disconnected';
+              const statusClass = isDisconnected
+                ? isMe
+                  ? 'disconnected'
+                  : 'unknown'
+                : this.disconnectedPlayerIds.has(player.id)
+                  ? 'disconnected'
+                  : 'connected';
+              const statusLabel =
+                statusClass === 'disconnected'
+                  ? isMe && isDisconnected
+                    ? 'Disconnected'
+                    : 'Connection trouble'
+                  : statusClass === 'unknown'
+                    ? 'Unknown'
+                    : 'Connected';
+              const dot = html`
+                <span
+                  class="status-dot ${statusClass}"
+                  title=${statusLabel}
+                ></span>
+              `;
 
-              return player.id === this.myPlayerId
-                ? html`<li>${dot}${player.name} <span class="you">(you)</span></li>`
-                : html`<li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>
-                    ${dot}${player.name}
-                  </li>`
+              return isMe
+                ? html`
+                    <li>
+                      ${dot}${player.name}
+                      <span class="you">(you)</span>
+                    </li>
+                  `
+                : html`
+                    <li
+                      class="clickable"
+                      @click=${() => this._onPlayerSelected(player.id)}
+                    >
+                      ${dot}${player.name}
+                    </li>
+                  `;
             })}
           </ul>
         </div>
@@ -66,14 +100,15 @@ export class ChatPanel extends LitElement {
                   <strong>${m.playerName}:</strong>
                   ${m.text}
                 </li>
-              `,
+              `
             )}
           </ul>
           <form class="chat-input" @submit=${this._onSubmit}>
             <input
               type="text"
               .value=${this._input}
-              @input=${(e: Event) => (this._input = (e.target as HTMLInputElement).value)}
+              @input=${(e: Event) =>
+                (this._input = (e.target as HTMLInputElement).value)}
               placeholder="Say something…"
               maxlength="500"
             />
@@ -81,22 +116,32 @@ export class ChatPanel extends LitElement {
           </form>
         </div>
       </div>
-    `
+    `;
   }
 
   private _onSubmit(event: SubmitEvent) {
-    event.preventDefault()
-    const text = this._input.trim()
-    if (!text) return
+    event.preventDefault();
+    const text = this._input.trim();
+    if (!text) return;
 
-    this._input = ''
-    this.dispatchEvent(new CustomEvent<string>('chat-submit', { detail: text, bubbles: true, composed: true }))
+    this._input = '';
+    this.dispatchEvent(
+      new CustomEvent<string>('chat-submit', {
+        detail: text,
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   private _onPlayerSelected(playerId: string) {
     this.dispatchEvent(
-      new CustomEvent<string>('player-selected', { detail: playerId, bubbles: true, composed: true }),
-    )
+      new CustomEvent<string>('player-selected', {
+        detail: playerId,
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   static styles = css`
@@ -149,6 +194,10 @@ export class ChatPanel extends LitElement {
       background: #d33;
     }
 
+    .status-dot.unknown {
+      background: #9ca3af;
+    }
+
     .players ul li.clickable {
       cursor: pointer;
     }
@@ -199,7 +248,7 @@ export class ChatPanel extends LitElement {
       opacity: 0.5;
       cursor: not-allowed;
     }
-  `
+  `;
 }
 
 declare global {
