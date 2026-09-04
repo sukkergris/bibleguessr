@@ -26,6 +26,10 @@ Prefer explicit state models, such as discriminated unions or state objects, whe
 Prefer configuration values over hardcoded values for system settings.
 Avoid inline magic numbers/strings even for internal-only values that don't warrant full configuration — give them a named binding (a `let` constant, a static field) instead.
 
+## Versioning
+
+When a feature is completed, increase the version number for each affected application. Update the frontend version when the feature changes the frontend, update the backend version when it changes the backend, and update both when it affects both applications.
+
 ## Data security
 
 Uploaded verse text must never be sent to the server or to other players. Only the book number, chapter number, and verse number may be transmitted.

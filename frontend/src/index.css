@@ -22,3 +22,123 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
+
+/* See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — the full-screen
+   blink in the final 7 seconds of a multiplayer round's countdown.
+   <bg-multiplayer-game> (shadow-DOM-scoped, can't reach `body` itself)
+   dispatches a countdown-danger-changed event that bg-app.ts listens for
+   and turns into this class + two custom properties:
+     --countdown-danger-speed — the animation-cycle duration, shrinking
+       from 1.2s to 0.34s over the round (_dangerAnimationSeconds), which
+       is what delivers "increasing intensity" as one flash per second
+       crossed comes faster and faster.
+     --countdown-danger-color — which color is "live" right now, pinned
+       to the actual whole second remaining (_dangerFlashColor /
+       COUNTDOWN_DANGER_COLORS), not to a position in the loop — so at
+       7s left the flash is always red, at 6s left always orange, etc.,
+       regardless of how fast the loop itself is currently cycling.
+   The 0.6s/transparent fallbacks only matter before either property is
+   ever set, or if a future caller forgets to set one. */
+body.countdown-danger {
+  animation: var(--countdown-danger-blink-name, countdown-blink-wide) var(--countdown-danger-speed, 0.6s) linear
+    infinite;
+}
+
+/* One short, sharp flash per cycle — back to the normal background well
+   before the next one, not a sustained color hold. The color always
+   comes from --countdown-danger-color (set fresh by bg-app.ts every
+   250ms tick), so none of these blocks hardcode which color appears.
+
+   Four blocks, differing ONLY in how much of the cycle the flash is
+   "on" for: 20% -> 17% -> 14% -> 11%. Note these compound with the
+   cycle ITSELF shrinking (1s down to 0.45s), so in real time the flash
+   goes ~200ms -> ~143ms -> ~98ms -> ~50ms. The range is deliberately
+   compressed rather than proportional: an earlier 15/11/8/4 split put
+   the sharpest flash at ~18ms — about one frame at 60Hz, so it barely
+   registered as a flash at all. ~50ms (~3 frames) is the practical
+   floor for something that should still read as a distinct stab of
+   color. multiplayer-game.ts's
+   _dangerFlashShape picks between them by name via
+   --countdown-danger-blink-name, so the flash gets proportionally
+   SHARPER as the round runs out, not merely more frequent. Four static
+   blocks rather than one parameterized block because keyframe OFFSETS
+   (the "1%"/"15%" selectors) are read at parse time and cannot be
+   driven by a custom property at all — unlike animation-name and
+   animation-timing-function values, which genuinely can (both verified
+   directly in a browser). Discrete tiers get essentially the whole
+   effect without needing a continuous percentage CSS can't express.
+
+   Every block needs BOTH a tight opening pair (transparent -> color one
+   tick later) AND a tight closing pair (color -> back to transparent
+   one tick later). A flash with only an opening edge snaps on but then
+   fades back out slowly across whatever gap remains until the next
+   explicit transparent stop — that bit a previous version of this file,
+   where a close leaning on a stop 51 points away faded over ~0.6s
+   instead of snapping off. Verified by sampling background-color at
+   20ms intervals across a full cycle, not just by reading the CSS. */
+@keyframes countdown-blink-wide {
+  0%,
+  21%,
+  100% {
+    background-color: transparent;
+  }
+  1%,
+  20% {
+    background-color: var(--countdown-danger-color, transparent);
+  }
+}
+
+@keyframes countdown-blink-medium {
+  0%,
+  18%,
+  100% {
+    background-color: transparent;
+  }
+  1%,
+  17% {
+    background-color: var(--countdown-danger-color, transparent);
+  }
+}
+
+@keyframes countdown-blink-narrow {
+  0%,
+  15%,
+  100% {
+    background-color: transparent;
+  }
+  1%,
+  14% {
+    background-color: var(--countdown-danger-color, transparent);
+  }
+}
+
+@keyframes countdown-blink-sharp {
+  0%,
+  12%,
+  100% {
+    background-color: transparent;
+  }
+  1%,
+  11% {
+    background-color: var(--countdown-danger-color, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.countdown-danger {
+    /* Deliberately a fixed rate, NOT driven by --countdown-danger-speed —
+       a reduced-motion user has opted out of motion-intensity changes
+       being used as a signal at all, so this stays constant regardless
+       of how close the round is to timing out. Still tracks
+       --countdown-danger-color (so the color-per-second-remaining still
+       reads as intended), just as a slow low-opacity fade rather than a
+       discrete flash. */
+    animation: countdown-pulse-gentle 2.1s ease-in-out infinite;
+  }
+
+  @keyframes countdown-pulse-gentle {
+    50% {
+      background-color: color-mix(in srgb, var(--countdown-danger-color, transparent) 25%, transparent);
+    }
+  }
+}

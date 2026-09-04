@@ -79,6 +79,7 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 
 export const api = {
   baseUrl: API_BASE_URL,
+  getVersion: () => getJson<{ version: string }>('/api/version'),
   getTranslations: () => getJson<string[]>('/api/translations'),
   // `restriction` narrows the pool of candidate verses to specific
   // books/chapters — see docs/SCRUM/Feature.BibleSelector.md. Encoded as
@@ -86,42 +87,44 @@ export const api = {
   // repeated keys natively), matching this file's existing
   // one-param-per-filter convention rather than introducing a JSON body.
   getRandomVerse: (translation?: string, restriction?: VerseRestriction) => {
-    const params = new URLSearchParams()
-    if (translation) params.append('translation', translation)
+    const params = new URLSearchParams();
+    if (translation) params.append('translation', translation);
 
     for (const book of restriction?.books ?? []) {
-      params.append('book', book)
+      params.append('book', book);
       for (const chapter of restriction?.chaptersByBook[book] ?? []) {
-        params.append('bookChapter', `${book}:${chapter}`)
+        params.append('bookChapter', `${book}:${chapter}`);
       }
     }
 
-    const query = params.toString()
-    return getJson<Verse>(`/api/verses/random${query ? `?${query}` : ''}`)
+    const query = params.toString();
+    return getJson<Verse>(`/api/verses/random${query ? `?${query}` : ''}`);
   },
   // Book spellings differ by translation (e.g. bibelen-dk's "1.Mosebog" vs.
   // the NWT sources' "1. Mosebog") — pass the current verse's translation so
   // the suggestion list only offers spellings that can actually match it.
   getBooks: (translation?: string) =>
-    getJson<string[]>(`/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
+    getJson<string[]>(
+      `/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`
+    ),
   // Same books, in Bible order rather than alphabetical — see
   // docs/SCRUM/Feature.BooksGameSorting.md. Used by the "Books" game
   // type's selection grid.
   getBooksInBibleOrder: (translation?: string) =>
     getJson<string[]>(
-      `/api/books-in-bible-order${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`,
+      `/api/books-in-bible-order${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`
     ),
   // Chapter suggestions are scoped to the book the player already guessed.
   getChapters: (book: string, translation?: string) => {
-    const params = new URLSearchParams({ book })
-    if (translation) params.set('translation', translation)
-    return getJson<number[]>(`/api/chapters?${params}`)
+    const params = new URLSearchParams({ book });
+    if (translation) params.set('translation', translation);
+    return getJson<number[]>(`/api/chapters?${params}`);
   },
   // Verse-number suggestions are scoped to the book+chapter already guessed.
   getVerseNumbers: (book: string, chapter: number, translation?: string) => {
-    const params = new URLSearchParams({ book, chapter: String(chapter) })
-    if (translation) params.set('translation', translation)
-    return getJson<number[]>(`/api/verse-numbers?${params}`)
+    const params = new URLSearchParams({ book, chapter: String(chapter) });
+    if (translation) params.set('translation', translation);
+    return getJson<number[]>(`/api/verse-numbers?${params}`);
   },
   // Resolves a multiplayer round's bare VerseReference (book/chapter/
   // verseNumber, no text — see types.ts's RoundState doc comment) to this
@@ -138,9 +141,9 @@ export const api = {
       bookNumber: String(reference.bookNumber),
       chapter: String(reference.chapter),
       verseNumber: String(reference.verseNumber),
-    })
-    if (translation) params.set('translation', translation)
-    return getJson<Verse>(`/api/verses/lookup?${params}`)
+    });
+    if (translation) params.set('translation', translation);
+    return getJson<Verse>(`/api/verses/lookup?${params}`);
   },
   createRoom: () => postJson<Room>('/api/rooms'),
   // Sends a Bible-file upload error report — see
@@ -149,10 +152,14 @@ export const api = {
   // total/day); a 429 there surfaces here as a thrown Error whose message
   // is the backend's rate-limit detail text (see request()'s
   // problem-details handling above).
-  submitBugReport: (report: { description: string; fileName?: string; errorMessage: string }) =>
+  submitBugReport: (report: {
+    description: string;
+    fileName?: string;
+    errorMessage: string;
+  }) =>
     postJson<{ status: string }>('/api/reports', {
       description: report.description,
       fileName: report.fileName ?? null,
       errorMessage: report.errorMessage,
     }),
-} satisfies VerseSource & Record<string, unknown>
+} satisfies VerseSource & Record<string, unknown>;

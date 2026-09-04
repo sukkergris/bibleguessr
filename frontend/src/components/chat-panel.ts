@@ -38,6 +38,13 @@ export class ChatPanel extends LitElement {
   @property({ attribute: false })
   disconnectedPlayerIds: Set<string> = new Set();
 
+  /** Ids of players currently in a game (anywhere in the room) — shown
+   * as "(in a game)" and deliberately not clickable, since they can't be
+   * challenged. See bg-room-setup.ts's busyPlayerIds for how it's
+   * tracked. */
+  @property({ attribute: false })
+  busyPlayerIds: Set<string> = new Set();
+
   @state()
   private _input = '';
 
@@ -110,16 +117,31 @@ export class ChatPanel extends LitElement {
       statusClass === 'disconnected' ? 'Disconnected' : statusClass === 'unknown' ? 'Unknown' : 'Connected';
     const dot = html` <span class="status-dot ${statusClass}" title=${statusLabel}></span> `;
 
-    return isMe
-      ? html`
-          <li>
-            ${dot}${player.name}
-            <span class="you">(you)</span>
-          </li>
-        `
-      : html`
-          <li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>${dot}${player.name}</li>
-        `;
+    if (isMe) {
+      return html`
+        <li>
+          ${dot}${player.name}
+          <span class="you">(you)</span>
+        </li>
+      `;
+    }
+
+    // A player already in a game can't be invited — the server refuses
+    // it anyway (GameHub.fs's SendPlayRequest guard), so as with the
+    // Offline rows below, no click handler is attached at all rather
+    // than attaching one and guarding inside it.
+    if (this.busyPlayerIds.has(player.id)) {
+      return html`
+        <li class="busy-row">
+          ${dot}${player.name}
+          <span class="busy">(in a game)</span>
+        </li>
+      `;
+    }
+
+    return html`
+      <li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>${dot}${player.name}</li>
+    `;
   }
 
   // Renders one row in the Offline section — no status dot (the section
@@ -244,7 +266,15 @@ export class ChatPanel extends LitElement {
       cursor: default;
     }
 
-    .you {
+    /* Dimmed like an offline row (they're equally un-challengeable), but
+       without the offline background tint — they ARE online, just busy. */
+    .players ul li.busy-row {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .you,
+    .busy {
       opacity: 0.6;
       font-size: 0.85em;
     }

@@ -19,6 +19,9 @@ type ReportRequest =
       FileName: string
       ErrorMessage: string }
 
+[<Literal>]
+let BackendVersion = "0.1.0"
+
 [<EntryPoint>]
 let main args =
     let builder = WebApplication.CreateBuilder(args)
@@ -198,6 +201,12 @@ let main args =
     app.MapGet(
         "/api/health",
         Func<_>(fun () -> {| status = "ok"; versesLoaded = verses.Length |})
+    )
+    |> ignore
+
+    app.MapGet(
+        "/api/version",
+        Func<_>(fun () -> {| version = BackendVersion |})
     )
     |> ignore
 

@@ -41,9 +41,16 @@ export class PlayRequests extends LitElement {
   @property({ attribute: false })
   translation?: string
 
-  // Resolved description text per request, keyed by fromPlayerId — since
-  // describeGameType is async (it resolves book numbers against
-  // verseSource), this can't just be called inline in render().
+  // Resolved description text per request — since describeGameType is
+  // async (it resolves book numbers against verseSource), this can't
+  // just be called inline in render().
+  //
+  // Keyed by player id AND game type, not player id alone: the same
+  // player can send a second request with a DIFFERENT game type (deny
+  // an all-verses challenge, get re-challenged on a specific book), and
+  // a player-id-only key made that second request reuse the first one's
+  // cached text forever — so a Books/Chapters challenge kept displaying
+  // the stale "All verses" from the earlier one.
   @state()
   private _descriptions = new Map<string, string>()
 
@@ -57,20 +64,27 @@ export class PlayRequests extends LitElement {
     }
   }
 
+  /** Cache key for one request's resolved description — see
+   * _descriptions on why the game type has to be part of it. */
+  private _descriptionKey(fromPlayerId: string, gameType: GameType): string {
+    return `${fromPlayerId}:${JSON.stringify(gameType)}`
+  }
+
   private _resolveDescriptions() {
     if (!this.verseSource) return
     const verseSource = this.verseSource
 
     for (const request of this.requests) {
-      if (this._descriptions.has(request.fromPlayerId)) continue
-      this._describeAndStore(request.fromPlayerId, request.gameType, verseSource)
+      const key = this._descriptionKey(request.fromPlayerId, request.gameType)
+      if (this._descriptions.has(key)) continue
+      this._describeAndStore(key, request.gameType, verseSource)
     }
   }
 
-  private _describeAndStore(fromPlayerId: string, gameType: GameType, verseSource: VerseSource) {
+  private _describeAndStore(key: string, gameType: GameType, verseSource: VerseSource) {
     describeGameType(gameType, verseSource, this.translation).then((description) => {
       const updated = new Map(this._descriptions)
-      updated.set(fromPlayerId, description)
+      updated.set(key, description)
       this._descriptions = updated
     })
   }
@@ -99,7 +113,9 @@ export class PlayRequests extends LitElement {
                     <li>
                       <span>
                         <strong>${r.fromPlayerName}</strong> wants to play
-                        <span class="game-type">${this._descriptions.get(r.fromPlayerId) ?? '…'}</span>
+                        <span class="game-type"
+                          >${this._descriptions.get(this._descriptionKey(r.fromPlayerId, r.gameType)) ?? '…'}</span
+                        >
                       </span>
                       <span class="actions">
                         <button type="button" @click=${() => this._onAccept(r.fromPlayerId)}>Accept</button>

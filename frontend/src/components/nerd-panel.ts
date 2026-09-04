@@ -1,5 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
+import { api } from '../api';
 
 /**
  * A debug drawer along the right edge, toggled with Ctrl+Shift+N — the
@@ -22,29 +23,55 @@ import { customElement, state } from 'lit/decorators.js'
 @customElement('bg-nerd-panel')
 export class NerdPanel extends LitElement {
   @state()
-  private open = false
+  private open = false;
+
+  @state()
+  private backendVersion?: string;
+
+  @state()
+  private versionError?: string;
 
   connectedCallback() {
-    super.connectedCallback()
-    window.addEventListener('keydown', this._onKeydown)
+    super.connectedCallback();
+    window.addEventListener('keydown', this._onKeydown);
+    void this._loadVersions();
 
     // Deliberate, permanent console hint — keep this even when trimming
     // other logging elsewhere. The nerd panel has no visible on-page
     // affordance (no button, no menu entry), so the console is the only
     // place a developer/tester learns the shortcut exists at all.
-    console.log('[bg-nerd-panel] Open the nerd panel with Ctrl+Shift+N')
+    console.log('[bg-nerd-panel] Open the nerd panel with Ctrl+Shift+N');
   }
 
   disconnectedCallback() {
-    window.removeEventListener('keydown', this._onKeydown)
-    super.disconnectedCallback()
+    window.removeEventListener('keydown', this._onKeydown);
+    super.disconnectedCallback();
   }
 
   private _onKeydown = (e: KeyboardEvent) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') {
-      e.preventDefault()
-      this.open = !this.open
+      e.preventDefault();
+      this.open = !this.open;
     }
+  };
+
+  private async _loadVersions() {
+    try {
+      const response = await api.getVersion();
+      this.backendVersion = response.version;
+      this.versionError = undefined;
+    } catch (error) {
+      this.versionError =
+        error instanceof Error ? error.message : 'Backend version unavailable.';
+    }
+  }
+
+  private _frontendVersion() {
+    return (
+      document
+        .querySelector('meta[name="application-version"]')
+        ?.getAttribute('content') ?? 'Unknown'
+    );
   }
 
   // Reflects `open` onto a host attribute so the :host([data-open]) width
@@ -52,7 +79,7 @@ export class NerdPanel extends LitElement {
   // style a shadow host based on its own internal @state.
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('open')) {
-      this.toggleAttribute('data-open', this.open)
+      this.toggleAttribute('data-open', this.open);
     }
   }
 
@@ -61,14 +88,41 @@ export class NerdPanel extends LitElement {
       <div class="panel" aria-hidden=${!this.open}>
         <header>
           <h2>Nerd stuff</h2>
-          <button type="button" class="close" @click=${() => (this.open = false)} aria-label="Close">✕</button>
+          <button
+            type="button"
+            class="close"
+            @click=${() => (this.open = false)}
+            aria-label="Close"
+          >
+            ✕
+          </button>
         </header>
         <div class="content">
-          <p class="empty">Nothing here yet.</p>
+          <section class="versions" aria-labelledby="versions-heading">
+            <h3 id="versions-heading">Versions</h3>
+            <dl>
+              <div>
+                <dt>Frontend</dt>
+                <dd>${this._frontendVersion()}</dd>
+              </div>
+              <div>
+                <dt>Backend</dt>
+                <dd>
+                  ${this.backendVersion ??
+                  (this.versionError ? 'Unavailable' : 'Loading…')}
+                </dd>
+              </div>
+            </dl>
+            ${this.versionError
+              ? html`
+                  <p class="error">${this.versionError}</p>
+                `
+              : null}
+          </section>
           <slot></slot>
         </div>
       </div>
-    `
+    `;
   }
 
   static styles = css`
@@ -139,19 +193,57 @@ export class NerdPanel extends LitElement {
       padding: 1rem;
     }
 
-    .empty {
+    .versions {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 0.8rem;
+    }
+
+    h3 {
+      font-size: 0.9rem;
+      margin: 0 0 0.7rem;
+    }
+
+    dl {
+      margin: 0;
+    }
+
+    dl > div {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.3rem 0;
+    }
+
+    dt {
       color: #6b6375;
-      font-size: 0.85rem;
-      text-align: center;
-      margin-top: 2rem;
+    }
+
+    dd {
+      margin: 0;
+      font-family: monospace;
+    }
+
+    .error {
+      color: #b42318;
+      font-size: 0.8rem;
+      margin: 0.7rem 0 0;
     }
 
     @media (prefers-color-scheme: dark) {
-      .empty {
+      .versions {
+        border-color: #3a3440;
+      }
+
+      dt {
         color: #9ca3af;
       }
+
+      .error {
+        color: #fca5a5;
+      }
     }
-  `
+  `;
 }
 
 declare global {

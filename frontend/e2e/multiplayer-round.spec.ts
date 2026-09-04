@@ -80,6 +80,20 @@ async function submitGuess(page: Page, book: string) {
   await page.getByRole('button', { name: 'Guess' }).click()
 }
 
+// Sets the challenge-settings time-per-verse slider to `seconds` before
+// challenging — mirrors setRoundCount's own pattern/rationale exactly.
+// `seconds` is the raw slider position, not necessarily the resulting
+// timeLimitSeconds — see docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md's
+// slider-clamp behavior (dragging to 1 lands on 2, since a genuinely
+// 1-second round is degenerate) — callers testing that clamp should NOT
+// use this helper's own assertion, since it'll fail on a value that gets
+// remapped; drive the slider directly instead (see the clamp test below).
+async function setTimeLimit(page: Page, seconds: number) {
+  const slider = page.getByRole('slider', { name: /Time per verse/ })
+  await slider.fill(String(seconds))
+  await expect(page.locator('bg-challenge-settings .slider-value').last()).toHaveText(`${seconds}s`)
+}
+
 test('accepting a play request starts a synced round with the same verse for both players', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const ctxB = await browser.newContext()
@@ -249,13 +263,19 @@ test('a full short game reaches the multiplayer results screen with matching fin
     await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
 
     for (let round = 1; round <= 3; round++) {
-      await expect(pageA.getByText(`Round ${round} / 3`)).toBeVisible()
+      // Generous timeout because each round's result is deliberately held
+      // on screen for REVEAL_HOLD_MS (1.5s, see multiplayer-game.ts)
+      // before the next round is allowed to replace it — so rounds 2 and
+      // 3 arrive a beat after both guesses land, not immediately.
+      await expect(pageA.getByText(`Round ${round} / 3`)).toBeVisible({ timeout: 10_000 })
       await submitGuess(pageA, 'Genesis')
       await submitGuess(pageB, 'Genesis')
     }
 
-    await expect(pageA.locator('bg-multiplayer-results')).toBeVisible()
-    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible()
+    // Same REVEAL_HOLD_MS beat as inside the loop above — the FINAL
+    // round's reveal is held too, before the results screen replaces it.
+    await expect(pageA.locator('bg-multiplayer-results')).toBeVisible({ timeout: 10_000 })
+    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible({ timeout: 10_000 })
 
     // Each page labels the two rows "me" vs. the opponent's name — the
     // labels differ between pages (Alice's page shows "Alice: N / Bob: M",
@@ -462,12 +482,521 @@ test('a player whose uploaded file spells a book differently than the server can
     await pageA.getByRole('button', { name: 'Guess' }).click()
     await pageB.getByRole('button', { name: 'Guess' }).click()
 
-    await expect(pageA.getByText('Round 2 /')).toBeVisible()
-    await expect(pageB.getByText('Round 2 /')).toBeVisible()
+    // Generous timeout: each round's result is held on screen for
+    // REVEAL_HOLD_MS (1.5s, see multiplayer-game.ts) before the next
+    // round replaces it, so round 2 arrives a beat after both guesses.
+    await expect(pageA.getByText('Round 2 /')).toBeVisible({ timeout: 10_000 })
+    await expect(pageB.getByText('Round 2 /')).toBeVisible({ timeout: 10_000 })
     await expect(pageA.locator('.scoreboard')).not.toContainText(': 0')
     await expect(pageB.locator('.scoreboard')).not.toContainText(': 0')
   } finally {
     await ctxA.close()
     await ctxB.close()
+  }
+})
+
+// See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — a player who
+// doesn't submit a guess before the round's time limit elapses sees
+// "Choked!" in the reveal, and so does their opponent (the reveal always
+// shows both players' outcomes to both sides — see
+// multiplayer-game.ts's _renderRoundReveal doc comment).
+// See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — a player who
+// doesn't submit a guess before the round's time limit elapses sees
+// "Choked!" in the reveal, and so does their opponent (the reveal always
+// shows both players' outcomes to both sides — see
+// multiplayer-game.ts's _renderRoundReveal doc comment). The reveal is
+// also held on screen for a real, fixed minimum duration (REVEAL_HOLD_MS,
+// 1.5s) before the next round replaces it — without this, the server
+// broadcasts RoundScored and the following RoundStarted back-to-back
+// with no gap, so the reveal would otherwise flash for well under 100ms
+// in practice: long enough to be technically present, nowhere near long
+// enough for a player to actually read it.
+test('a player who never guesses sees "Choked!" for themself, and their opponent sees it too, held for a real minimum duration', async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}c`
+    const bobName = `Bob${suffix}c`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+    await setRoundCount(pageA, 3)
+    await setTimeLimit(pageA, 2)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+
+    // Alice guesses; Bob deliberately never does — only the
+    // RoundTimeoutService sweep (1s default interval) will ever resolve
+    // this round once the 2s limit elapses.
+    await submitGuess(pageA, 'Genesis')
+
+    const revealSeenAt = Date.now()
+    await expect(pageA.getByText('Choked!')).toBeVisible({ timeout: 10_000 })
+    await expect(pageB.getByText('Choked!')).toBeVisible({ timeout: 10_000 })
+
+    // Confirm the hold is real, not just "eventually true" — round 2
+    // must NOT have started yet immediately after the reveal appears
+    // (comfortably before the 1.5s hold could have elapsed).
+    await expect(pageA.getByText('Round 2 /')).not.toBeVisible()
+
+    // ...but round 2 DOES start once the hold expires — proving this
+    // isn't stuck forever, just delayed.
+    await expect(pageA.getByText('Round 2 /')).toBeVisible({ timeout: 5_000 })
+    expect(Date.now() - revealSeenAt).toBeGreaterThanOrEqual(1_400) // small margin below the real 1500ms
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+test('the screen blinks in the final 7 seconds of a timed round, and stops once it resolves', async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}b`
+    const bobName = `Bob${suffix}b`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+    // 15s: the danger window is the final 7s, so this leaves ~8s of
+    // "definitely not blinking yet" for the assertion below AND a full
+    // 7s of blinking after. Earlier values (8s, then 12s) left too
+    // little margin on the leading edge — round-start latency under
+    // parallel load could eat it, which caused this test's intermittent
+    // failures.
+    await setTimeLimit(pageA, 15)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+
+    // No blink yet — still well above the 7s threshold this early in a
+    // 12s round.
+    await expect(pageA.locator('body')).not.toHaveClass(/countdown-danger/)
+
+    // Wait for the countdown to fall to 7s or fewer, then confirm the
+    // class appears. Neither player guesses, so the round resolves via
+    // the timeout sweep once the limit elapses, at which point the class
+    // must clear again (the reveal has no countdown to be urgent about).
+    await expect(pageA.locator('body')).toHaveClass(/countdown-danger/, { timeout: 15_000 })
+    // Then assert the class CLEARS, directly — rather than first waiting
+    // on the "Choked!" reveal as a proxy for "the round ended". That
+    // reveal only stays up for REVEAL_HOLD_MS (1.5s) before the next
+    // round replaces it, so waiting on it made this test fail under load
+    // on a timing artifact rather than on the behavior under test. The
+    // budget must still exceed the round's own 12s limit plus the
+    // server's ~1s timeout-sweep interval.
+    await expect(pageA.locator('body')).not.toHaveClass(/countdown-danger/, { timeout: 20_000 })
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+test('a round at or below the blink threshold never triggers the blink', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}n`
+    const bobName = `Bob${suffix}n`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+    // 2s is the slider's actual minimum reachable timed value (see
+    // docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md's slider clamp).
+    // Any round at or below MIN_BLINKABLE_ROUND_SECONDS (7s — equal to
+    // the danger window itself, see multiplayer-game.ts) would otherwise
+    // be entirely "final countdown" from its first instant and blink
+    // start to finish, so it must never blink at all.
+    await setTimeLimit(pageA, 2)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+
+    // Watch the class itself for the whole round rather than waiting on
+    // the "Choked!" reveal as a proxy for "the round finished": that
+    // reveal is only guaranteed on screen for REVEAL_HOLD_MS (1.5s)
+    // before the next round replaces it, so under load a slow check can
+    // miss the window entirely and fail on a timing artifact rather than
+    // on the behavior under test. The class is the actual subject here,
+    // and polling it directly can't miss a transient.
+    const roundEndsBy = Date.now() + 8_000
+    while (Date.now() < roundEndsBy) {
+      const blinking = await pageA.locator('body').evaluate((el) => el.classList.contains('countdown-danger'))
+      expect(blinking, 'a round at or below the blink threshold must never blink').toBe(false)
+      await pageA.waitForTimeout(100)
+    }
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+test('the time-per-verse slider clamps 1 second up to 2', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const pageA = await ctxA.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    await joinWorldChat(pageA, `Alice${suffix}s`)
+
+    const slider = pageA.getByRole('slider', { name: /Time per verse/ })
+    await slider.fill('1')
+
+    await expect(pageA.locator('bg-challenge-settings .slider-value').last()).toHaveText('2s')
+  } finally {
+    await ctxA.close()
+  }
+})
+
+test('checking "Enter epilepsy-inducing stress mode" pushes the blink past the default safe cap, and stays local to the player who checked it', async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}e`
+    const bobName = `Bob${suffix}e`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    // Only Alice opts in — Bob's own screen should stay at the safe cap
+    // regardless, since this is a local, per-player preference (see
+    // flash-intensity-storage.ts), never sent to the server or shared
+    // with the opponent.
+    await pageA.getByRole('checkbox', { name: /Enter epilepsy-inducing stress mode/ }).check()
+    // 15s so the 7s danger window opens a comfortable ~8s in, and stays
+    // open for its full 7s. Shorter rounds (8s, then 10s) left too
+    // little slack before the blink had to appear — round-start latency
+    // under parallel load alone could eat it, which is what made this
+    // test intermittently fail.
+    await setTimeLimit(pageA, 15)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+
+    await expect(pageA.locator('body')).toHaveClass(/countdown-danger/, { timeout: 15_000 })
+
+    // Poll --countdown-danger-speed while the danger window is live and
+    // track the FASTEST (lowest) value each page ever reaches — a fixed
+    // wait risks landing either too early (curves haven't diverged yet,
+    // both near their shared 1s starting point) or too late (the round
+    // has already resolved and the property was cleared — see
+    // bg-app.ts's _onCountdownDangerChanged, which removes both custom
+    // properties on the "leaving" edge specifically so a stale value
+    // can't be read after the fact). Polling the whole window and
+    // keeping the minimum sidesteps both failure modes.
+    const readSpeedSeconds = async (page: typeof pageA) => {
+      const raw = await page.evaluate(() =>
+        getComputedStyle(document.body).getPropertyValue('--countdown-danger-speed').trim(),
+      )
+      const parsed = Number.parseFloat(raw.replace('s', ''))
+      return Number.isNaN(parsed) ? undefined : parsed
+    }
+
+    // Poll until the danger window actually closes, bounded by wall
+    // clock rather than an iteration count: a fixed 30×250ms budget
+    // could expire while the window was still open (the window is the
+    // final 7s of a 10s round, and this loop only starts once the class
+    // appears), leaving both readings near their shared 1s starting
+    // point where the two curves haven't diverged yet — which made the
+    // comparison below a coin flip under load.
+    let aliceFastest = Number.POSITIVE_INFINITY
+    let bobFastest = Number.POSITIVE_INFINITY
+    const pollUntil = Date.now() + 15_000
+    while (Date.now() < pollUntil) {
+      const [aliceSpeed, bobSpeed] = await Promise.all([readSpeedSeconds(pageA), readSpeedSeconds(pageB)])
+      if (aliceSpeed !== undefined) aliceFastest = Math.min(aliceFastest, aliceSpeed)
+      if (bobSpeed !== undefined) bobFastest = Math.min(bobFastest, bobSpeed)
+      if (!(await pageA.locator('body').evaluate((el) => el.classList.contains('countdown-danger')))) break
+      await pageA.waitForTimeout(250)
+    }
+    expect(aliceFastest, 'never sampled a live speed for Alice').toBeLessThan(Number.POSITIVE_INFINITY)
+    expect(bobFastest, 'never sampled a live speed for Bob').toBeLessThan(Number.POSITIVE_INFINITY)
+
+    // A direct relative comparison, not a fixed absolute number: the
+    // server's ~1s timeout-sweep interval means the round can resolve
+    // anywhere within that slop after the true 0s-remaining deadline, so
+    // a 250ms poll isn't guaranteed to ever catch a reading at the exact
+    // theoretical minimum (0.34s safe / 0.1s stress) before the property
+    // is cleared — but it reliably catches BOTH curves diverging well
+    // before that point (see the safe-vs-stress table this feature's
+    // design was verified against: at 1s remaining alone, safe=0.56s vs
+    // stress=0.39s, already a clear gap). Alice (opted in) must be
+    // reliably faster than Bob (never touched the setting) by then —
+    // that relationship is what "stays local to the player who checked
+    // it" actually means, and it's what's robust to test, not the exact
+    // endpoint value.
+    expect(aliceFastest).toBeLessThan(bobFastest)
+    // Bob never opted in, so he must never go below the safe floor —
+    // BLINK_CYCLE_FASTEST_SECONDS_SAFE in multiplayer-game.ts.
+    expect(bobFastest).toBeGreaterThanOrEqual(0.45)
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// Regression test for a real bug: <bg-multiplayer-game>'s _onGameOver
+// dispatched 'game-over' but never told bg-app.ts to stop the
+// countdown blink. A normal Completed ending masked this — the round is
+// already Scored by then, so _revealed is true and updated() has
+// already reported active:false — but a Forfeited ending arrives
+// mid-round, with the countdown still live and _revealed still false,
+// so nothing ever cleared document.body's countdown-danger class and
+// the whole screen kept blinking over the results screen.
+test('the blink stops when the game ends by forfeit mid-countdown', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}fb`
+    const bobName = `Bob${suffix}fb`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+    // Comfortably above MIN_BLINKABLE_ROUND_SECONDS so the round DOES
+    // blink, but long enough that the forfeit below lands while the
+    // countdown is still running rather than after it has expired.
+    await setTimeLimit(pageA, 10)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+
+    // Wait until the blink is genuinely running on Bob's screen (the
+    // player who will REMAIN — he's the one whose screen must recover).
+    await expect(pageB.locator('body')).toHaveClass(/countdown-danger/, { timeout: 20_000 })
+
+    pageA.once('dialog', (dialog) => void dialog.accept())
+    await pageA.getByRole('button', { name: 'Forfeit' }).click()
+
+    // Bob reaches the results screen — and his screen must stop blinking.
+    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible()
+    await expect(pageB.locator('body')).not.toHaveClass(/countdown-danger/)
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// Regression test for a real bug: <bg-play-requests> cached each
+// request's resolved game-type description keyed ONLY by fromPlayerId,
+// and never invalidated that cache. The first request from a given
+// player therefore "stuck" — a later request from the SAME player with
+// a different game type kept showing the first one's description. In
+// practice that meant a Books/Chapters challenge kept displaying the
+// "All verses" text cached from an earlier all-verses request.
+test('a Books-scoped play request shows the actual books, not a stale "All verses"', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}gt`
+    const bobName = `Bob${suffix}gt`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    // First: an all-verses request, which Bob denies. This is what
+    // populates the stale cache entry under Alice's player id.
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const firstRequest = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await expect(firstRequest).toContainText('All verses')
+    await firstRequest.getByRole('button', { name: 'Deny' }).click()
+    await expect(firstRequest).toBeHidden()
+
+    // Now Alice picks a specific book and challenges again. Bob must see
+    // THAT book, not the "All verses" cached from the denied request.
+    await pageA.getByRole('tab', { name: 'Books', exact: true }).click()
+    const firstBook = pageA.locator('bg-book-selector .book').first()
+    await expect(firstBook).toBeVisible()
+    await firstBook.locator('input[type="checkbox"]').check()
+    const chosenBook = (await firstBook.innerText()).trim()
+
+    await bobInRoster.click()
+
+    const secondRequest = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await expect(secondRequest).toBeVisible()
+    await expect(secondRequest).toContainText(chosenBook)
+    await expect(secondRequest).not.toContainText('All verses')
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// The opponent must reach the results screen when a forfeit arrives
+// while their own screen is mid reveal-hold (see REVEAL_HOLD_MS in
+// multiplayer-game.ts) — the hold buffers a Completed GameOver by
+// design, and this pins down that a Forfeited one still cuts through.
+test('the opponent still reaches results when a forfeit lands during a reveal hold', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}fh`
+    const bobName = `Bob${suffix}fh`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+    await setRoundCount(pageA, 5)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageA.getByText('Round 1 / 5')).toBeVisible({ timeout: 10_000 })
+
+    // Both guess, which scores the round and starts the 1.5s hold on
+    // both screens. Alice forfeits immediately, inside that window.
+    await submitGuess(pageA, 'Genesis')
+    await submitGuess(pageB, 'Genesis')
+
+    pageA.once('dialog', (dialog) => void dialog.accept())
+    await pageA.getByRole('button', { name: 'Forfeit' }).click()
+
+    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible({ timeout: 10_000 })
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// Same as the Forfeit-button case but from the ACCEPTING player's side —
+// Bob accepted the challenge, then forfeits; Alice must reach results.
+test('the challenger reaches results when the accepting player forfeits', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}fa`
+    const bobName = `Bob${suffix}fa`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageB.getByText('Round 1 /')).toBeVisible()
+
+    pageB.once('dialog', (dialog) => void dialog.accept())
+    await pageB.getByRole('button', { name: 'Forfeit' }).click()
+
+    await expect(pageA.locator('bg-multiplayer-results')).toBeVisible({ timeout: 10_000 })
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// A player already in a game must not be offerable as a challenge
+// target. The backend already refuses this ("That player is already in
+// a game" — see GameHub.fs's SendPlayRequest guard), but the roster used
+// to still present them as clickable, so the only feedback was an error
+// after the fact. RoundStarted/GameOver are both broadcast to the whole
+// room group and carry both player ids, so every client can track who's
+// busy without any extra backend payload.
+test('a player already in a game is shown as busy and cannot be challenged', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const ctxC = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+  const pageC = await ctxC.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}bz`
+    const bobName = `Bob${suffix}bz`
+    const carolName = `Carol${suffix}bz`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+    await joinWorldChat(pageC, carolName)
+
+    // Alice and Bob start a game; Carol watches from the lobby.
+    const bobInAlicesRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInAlicesRoster.click()
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+
+    // On Carol's screen both of them must now read as busy/unavailable.
+    const aliceInCarolsRoster = pageC.getByRole('listitem').filter({ hasText: aliceName })
+    const bobInCarolsRoster = pageC.getByRole('listitem').filter({ hasText: bobName })
+    await expect(aliceInCarolsRoster).toContainText(/in a game/i, { timeout: 10_000 })
+    await expect(bobInCarolsRoster).toContainText(/in a game/i)
+
+    // And Carol must not be able to send them a request at all.
+    await aliceInCarolsRoster.click()
+    await expect(pageA.getByText(`${carolName} wants to play`)).toBeHidden()
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+    await ctxC.close()
   }
 })

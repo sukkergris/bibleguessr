@@ -11,6 +11,7 @@ import {
   onChatHistory,
   onChatMessage,
   onConnectionStateChange,
+  onGameOver,
   onHubError,
   onPlayerDisconnected,
   onPlayerJoined,
@@ -99,6 +100,17 @@ export class RoomSetup extends LitElement {
   @state()
   private disconnectedPlayerIds = new Set<string>()
 
+  /** Ids of players currently in a game — anywhere in the room, not just
+   * mine. Tracked purely from RoundStarted/GameOver, both of which are
+   * broadcast to the whole room group and carry both player ids, so no
+   * extra server payload is needed to know this. Used to show them as
+   * busy and refuse to challenge them: the server already rejects such a
+   * request (GameHub.fs's SendPlayRequest guard, "That player is already
+   * in a game"), but without this the roster still offered them as
+   * targets and the only feedback was that error after the fact. */
+  @state()
+  private busyPlayerIds = new Set<string>()
+
   @state()
   private messages: ChatMessage[] = []
 
@@ -167,6 +179,10 @@ export class RoomSetup extends LitElement {
   private _unsubscribePlayerDisconnected?: () => void
   private _unsubscribePlayerLeft?: () => void
   private _unsubscribeRoundStarted?: () => void
+  /** Separate from <bg-multiplayer-game>'s own GameOver subscription —
+   * this one is room-wide busy-tracking (see busyPlayerIds), not this
+   * player's own game ending. */
+  private _unsubscribeGameOverBusy?: () => void
 
   disconnectedCallback() {
     // This element is torn down wholesale (not via _onLeaveRoom's own
@@ -195,6 +211,7 @@ export class RoomSetup extends LitElement {
     this._unsubscribePlayerDisconnected?.()
     this._unsubscribePlayerLeft?.()
     this._unsubscribeRoundStarted?.()
+    this._unsubscribeGameOverBusy?.()
     super.disconnectedCallback()
   }
 
@@ -310,6 +327,7 @@ export class RoomSetup extends LitElement {
                   .myPlayerId=${this.myPlayerId}
                   .connectionState=${this.connectionState}
                   .disconnectedPlayerIds=${this.disconnectedPlayerIds}
+                  .busyPlayerIds=${this.busyPlayerIds}
                   @chat-submit=${this._onChatSubmit}
                   @player-selected=${this._onPlayerSelected}
                 ></bg-chat-panel>
@@ -468,10 +486,23 @@ export class RoomSetup extends LitElement {
     // room can have other concurrent games (e.g. World chat) broadcasting
     // the same event.
     this._unsubscribeRoundStarted = onRoundStarted((session) => {
+      // Busy-tracking first, and deliberately BEFORE the "is this my
+      // game?" guard below — every game in the room marks its two
+      // players busy for everyone else's roster, not just mine.
+      this.busyPlayerIds = new Set(this.busyPlayerIds).add(session.playerA).add(session.playerB)
+
       const opponentId = this.activeGameOpponent?.id
       if (!opponentId) return
       const pair = new Set([session.playerA, session.playerB])
       if (pair.has(this.myPlayerId) && pair.has(opponentId)) this.initialSession = session
+    })
+    this._unsubscribeGameOverBusy = onGameOver((_scores, playerA, playerB) => {
+      // Whatever ended it (completed or forfeited), both players are
+      // available again — same room-wide scope as the RoundStarted side.
+      const stillBusy = new Set(this.busyPlayerIds)
+      stillBusy.delete(playerA)
+      stillBusy.delete(playerB)
+      this.busyPlayerIds = stillBusy
     })
     this._unsubscribePlayRequestDenied = onPlayRequestDenied((fromPlayerId, toPlayerId) => {
       this._resolvePlayRequest(fromPlayerId, toPlayerId)
@@ -525,6 +556,10 @@ export class RoomSetup extends LitElement {
     // lands a frame before a PlayerDisconnected re-render removes the
     // handler (see docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md).
     if (this.disconnectedPlayerIds.has(targetId)) return
+    // Same defense in depth for a player already in a game — the server
+    // rejects it anyway (GameHub.fs's SendPlayRequest guard), but there's
+    // no reason to send a request that can only come back as an error.
+    if (this.busyPlayerIds.has(targetId)) return
 
     const { scope, restriction, roundCount, timeLimitSeconds } = this.challengeSettings
     const verseSource = this.myTranslationChoice?.verseSource
@@ -609,6 +644,7 @@ export class RoomSetup extends LitElement {
     this._unsubscribePlayerDisconnected?.()
     this._unsubscribePlayerLeft?.()
     this._unsubscribeRoundStarted?.()
+    this._unsubscribeGameOverBusy?.()
 
     this.players = []
     this.messages = []
@@ -620,6 +656,7 @@ export class RoomSetup extends LitElement {
     this.initialSession = undefined
     this.mpResults = undefined
     this.disconnectedPlayerIds = new Set()
+    this.busyPlayerIds = new Set()
     this.error = undefined
     this.connectionState = 'connected'
     this.screen = { step: 'choose' }

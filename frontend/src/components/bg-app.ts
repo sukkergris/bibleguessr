@@ -226,6 +226,62 @@ export class BgApp extends LitElement {
     this.verse = undefined
     this.feedback = undefined
     this.error = undefined
+    // Defensive belt-and-braces cleanup — <bg-multiplayer-game>'s own
+    // disconnectedCallback already dispatches a final "leaving" event on
+    // unmount (see that component), but this covers the case where
+    // navigating Home races past that cleanup somehow, so the blink
+    // never lingers on document.body after leaving the room screen.
+    this._clearCountdownDanger()
+  }
+
+  // See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — the full-screen
+  // blink in the final 7 seconds of a round's countdown. <bg-multiplayer-game>
+  // is scoped to its own shadow root (Lit's default), so it can't reach
+  // `body`'s background itself — this listener is the escape hatch:
+  // toggles a class (and the speed custom property that drives the
+  // intensity ramp) on document.body directly, a real unscoped DOM call,
+  // matching the existing `game-over` event's composed:true/bubbles:true
+  // shape (this component doesn't need to re-dispatch anything itself;
+  // those event flags already let it listen on a non-direct-child
+  // element like <bg-room-setup>). The actual @keyframes live in the
+  // already-global frontend/src/index.css, not any component's own styles.
+  private _onCountdownDangerChanged(
+    event: CustomEvent<{ active: boolean; animationSeconds?: number; flashColor?: string; flashShape?: string }>,
+  ) {
+    document.body.classList.toggle('countdown-danger', event.detail.active)
+    // On the "leaving" edge (active: false), animationSeconds/flashColor/
+    // flashShape are always undefined (see multiplayer-game.ts's
+    // _dangerAnimationSeconds/_dangerFlashColor/_dangerFlashShape, all
+    // undefined once revealed) — actively remove all three properties
+    // here rather than just skipping the set, so they don't linger at
+    // whatever value they last held mid-flash. The class alone being
+    // gone hides the effect visually either way, but a stale property
+    // value is still real leftover state that anything reading these
+    // properties directly (e.g. an e2e assertion) would otherwise see
+    // indefinitely, until the next round's danger window happens to
+    // overwrite it.
+    if (event.detail.animationSeconds !== undefined) {
+      document.body.style.setProperty('--countdown-danger-speed', `${event.detail.animationSeconds}s`)
+    } else {
+      document.body.style.removeProperty('--countdown-danger-speed')
+    }
+    if (event.detail.flashColor !== undefined) {
+      document.body.style.setProperty('--countdown-danger-color', event.detail.flashColor)
+    } else {
+      document.body.style.removeProperty('--countdown-danger-color')
+    }
+    if (event.detail.flashShape !== undefined) {
+      document.body.style.setProperty('--countdown-danger-blink-name', event.detail.flashShape)
+    } else {
+      document.body.style.removeProperty('--countdown-danger-blink-name')
+    }
+  }
+
+  private _clearCountdownDanger() {
+    document.body.classList.remove('countdown-danger')
+    document.body.style.removeProperty('--countdown-danger-speed')
+    document.body.style.removeProperty('--countdown-danger-color')
+    document.body.style.removeProperty('--countdown-danger-blink-name')
   }
 
   render() {
@@ -249,7 +305,7 @@ export class BgApp extends LitElement {
                 ? this._renderPlaying()
                 : this.phase === 'gameOver'
                   ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
-                  : html`<bg-room-setup></bg-room-setup>`}
+                  : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
         </main>
         <bg-nerd-panel></bg-nerd-panel>
       </div>
