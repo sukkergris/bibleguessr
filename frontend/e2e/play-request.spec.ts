@@ -33,17 +33,21 @@ test('player can send and withdraw a play request', async ({ browser }) => {
     await joinWorldChat(pageA, aliceName)
     await joinWorldChat(pageB, bobName)
 
-    // Alice's roster syncs to include Bob (PlayerJoined broadcast).
-    await expect(pageA.getByText(bobName, { exact: true })).toBeVisible()
+    // Alice's roster syncs to include Bob (PlayerJoined broadcast). Scope
+    // to the players list specifically — Bob's name also shows up as a
+    // chat message sender once he joins ("<strong>Bob…:</strong>"), which
+    // would otherwise make a bare text lookup ambiguous.
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await expect(bobInRoster).toBeVisible()
 
     // Alice clicks Bob's name in the players list -> sends a play request.
-    await pageA.getByText(bobName, { exact: true }).click()
+    await bobInRoster.click()
 
     // Bob sees the request appear in his play-requests list.
     await expect(pageB.getByText(`${aliceName} wants to play`)).toBeVisible()
 
     // Alice sees her own outstanding request, with a Withdraw button.
-    await expect(pageA.getByText(bobName, { exact: false })).toBeVisible()
+    await expect(pageA.getByText(`Request sent to ${bobName}`)).toBeVisible()
     await pageA.getByRole('button', { name: 'Withdraw' }).click()
 
     // It disappears for Bob once withdrawn.

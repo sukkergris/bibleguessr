@@ -4,6 +4,10 @@
 ## Playwright CLI working directory (screenshots, snapshots, console logs)
 .playwright-cli/
 
+## Playwright test runner output (traces/screenshots from `npx playwright test`)
+frontend/test-results/
+frontend/playwright-report/
+
 ## VS Code .NET run/discovery cache
 /dotnet/runfile-discovery/
 
