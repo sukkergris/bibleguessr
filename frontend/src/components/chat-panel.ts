@@ -1,21 +1,29 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, Player } from '../types'
 
 /**
  * The players list + message log + send form shared by any chat surface
  * (a room's lobby, World chat). Fires a `chat-submit` CustomEvent<string>
- * with the trimmed message text when the player sends one — the parent
- * owns the actual SignalR call and the `messages`/`players` state, so this
- * component stays a plain, reusable view.
+ * with the trimmed message text when the player sends one, and a
+ * `player-selected` CustomEvent<string> (detail = the clicked player's id)
+ * when the player clicks another player's name in the list — see
+ * docs/SCRUM/Feature.StartMPGame.md. The parent owns the actual SignalR
+ * calls and the `messages`/`players` state, so this component stays a
+ * plain, reusable view.
  */
 @customElement('bg-chat-panel')
 export class ChatPanel extends LitElement {
   @property({ attribute: false })
-  players: string[] = []
+  players: Player[] = []
 
   @property({ attribute: false })
   messages: ChatMessage[] = []
+
+  /** The viewing player's own id, so their own name in the list isn't
+   * rendered as a clickable play-request target. */
+  @property({ attribute: false })
+  myPlayerId = ''
 
   @state()
   private _input = ''
@@ -26,7 +34,11 @@ export class ChatPanel extends LitElement {
         <div class="players">
           <h2>Players</h2>
           <ul>
-            ${this.players.map((name) => html`<li>${name}</li>`)}
+            ${this.players.map((player) =>
+              player.id === this.myPlayerId
+                ? html`<li>${player.name} <span class="you">(you)</span></li>`
+                : html`<li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>${player.name}</li>`,
+            )}
           </ul>
         </div>
 
@@ -66,6 +78,12 @@ export class ChatPanel extends LitElement {
     this.dispatchEvent(new CustomEvent<string>('chat-submit', { detail: text, bubbles: true, composed: true }))
   }
 
+  private _onPlayerSelected(playerId: string) {
+    this.dispatchEvent(
+      new CustomEvent<string>('player-selected', { detail: playerId, bubbles: true, composed: true }),
+    )
+  }
+
   static styles = css`
     :host {
       display: block;
@@ -96,6 +114,19 @@ export class ChatPanel extends LitElement {
       padding: 0.4rem 0.6rem;
       border-radius: 6px;
       background: rgba(170, 59, 255, 0.08);
+    }
+
+    .players ul li.clickable {
+      cursor: pointer;
+    }
+
+    .players ul li.clickable:hover {
+      background: rgba(170, 59, 255, 0.18);
+    }
+
+    .you {
+      opacity: 0.6;
+      font-size: 0.85em;
     }
 
     .messages {

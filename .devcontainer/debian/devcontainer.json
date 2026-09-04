@@ -65,7 +65,8 @@
         "rogalmic.bash-debug",
         "csharpier.csharpier-vscode",
         "google.google-antigravity",
-        "DavidAnson.vscode-markdownlint"
+        "DavidAnson.vscode-markdownlint",
+        "ritwickdey.LiveServer"
       ]
     }
   },

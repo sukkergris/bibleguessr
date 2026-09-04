@@ -40,6 +40,22 @@ tasks:
     cmds:
       - npm run preview
 
+  test:
+    desc: Run frontend unit tests
+    dir: "{{.FRONTEND_DIR}}"
+    deps:
+      - install
+    cmds:
+      - npm run test
+
+  test-e2e:
+    desc: Run end-to-end tests (requires dotnet:dev and frontend:dev already running)
+    dir: "{{.FRONTEND_DIR}}"
+    deps:
+      - install
+    cmds:
+      - npx playwright test
+
   kill:
     desc: Stop all running Vite dev server processes (repeated `task frontend:dev` runs pile up otherwise)
     platforms: [linux, darwin]

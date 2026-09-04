@@ -5,4 +5,7 @@
   <Folder Name="/Domain/">
     <Project Path="Domain/BibleGuessr.Domain.fsproj" />
   </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/BibleGuessr.Tests.fsproj" />
+  </Folder>
 </Solution>

@@ -1,6 +1,6 @@
 import * as signalR from '@microsoft/signalr'
 import { api } from './api'
-import type { ChatMessage } from './types'
+import type { ChatMessage, PlayRequest, Player } from './types'
 
 // Event names must match backend/Api/GameHub.fs's *Event literals.
 export const HubEvents = {
@@ -9,6 +9,9 @@ export const HubEvents = {
   RoundScored: 'RoundScored',
   ChatMessageReceived: 'ChatMessageReceived',
   ChatHistory: 'ChatHistory',
+  RoomPlayers: 'RoomPlayers',
+  PlayRequestReceived: 'PlayRequestReceived',
+  PlayRequestWithdrawn: 'PlayRequestWithdrawn',
   Error: 'Error',
 } as const
 
@@ -99,15 +102,19 @@ export function onConnectionStateChange(handler: (state: ConnectionState) => voi
   }
 }
 
-export async function joinRoom(roomCode: string, playerName: string): Promise<void> {
+/** Joins a room by code. Resolves with the caller's own newly-created
+ * Player (stable id + name) — needed client-side to know which
+ * players-list entry is "me". */
+export async function joinRoom(roomCode: string, playerName: string): Promise<Player> {
   const hub = await getGameHubConnection()
-  await hub.invoke('JoinRoom', roomCode, playerName)
+  return await hub.invoke<Player>('JoinRoom', roomCode, playerName)
 }
 
-/** Joins the always-open World chat room — just a name, no room code. */
-export async function joinWorldChat(playerName: string): Promise<void> {
+/** Joins the always-open World chat room — just a name, no room code.
+ * Resolves with the caller's own newly-created Player. */
+export async function joinWorldChat(playerName: string): Promise<Player> {
   const hub = await getGameHubConnection()
-  await hub.invoke('JoinWorldChat', playerName)
+  return await hub.invoke<Player>('JoinWorldChat', playerName)
 }
 
 export async function sendChatMessage(text: string): Promise<void> {
@@ -149,10 +156,10 @@ export function onChatHistory(handler: (messages: ChatMessage[]) => void): () =>
 }
 
 /** Subscribes to PlayerJoined events. Returns an unsubscribe function. */
-export function onPlayerJoined(handler: (playerName: string) => void): () => void {
+export function onPlayerJoined(handler: (player: Player) => void): () => void {
   let cancelled = false
-  const listener = (playerName: string) => {
-    if (!cancelled) handler(playerName)
+  const listener = (player: Player) => {
+    if (!cancelled) handler(player)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayerJoined, listener))
@@ -160,6 +167,70 @@ export function onPlayerJoined(handler: (playerName: string) => void): () => voi
   return () => {
     cancelled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayerJoined, listener))
+  }
+}
+
+/** Subscribes to the one-time roster snapshot sent right after joining a
+ * room — everyone currently in the room, including yourself. This is a full
+ * snapshot, not a delta: replace your local players list wholesale on
+ * receipt rather than appending. Returns an unsubscribe function. */
+export function onRoomPlayers(handler: (players: Player[]) => void): () => void {
+  let cancelled = false
+  const listener = (players: Player[]) => {
+    if (!cancelled) handler(players)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.RoomPlayers, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.RoomPlayers, listener))
+  }
+}
+
+/** Sends (or retargets) a play request to `toPlayerId`. */
+export async function sendPlayRequest(toPlayerId: string): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('SendPlayRequest', toPlayerId)
+}
+
+/** Withdraws whatever play request the caller currently has pending, if any. */
+export async function withdrawPlayRequest(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('WithdrawPlayRequest')
+}
+
+/** Subscribes to play requests sent/retargeted anywhere in the caller's
+ * room — filter to `request.toPlayerId`/`request.fromPlayerId` matching
+ * your own id, same pattern as filtering ChatMessageReceived by room
+ * membership. Returns an unsubscribe function. */
+export function onPlayRequestReceived(handler: (request: PlayRequest) => void): () => void {
+  let cancelled = false
+  const listener = (request: PlayRequest) => {
+    if (!cancelled) handler(request)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestReceived, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestReceived, listener))
+  }
+}
+
+/** Subscribes to play-request withdrawals — payload is the withdrawing
+ * sender's player id. Returns an unsubscribe function. */
+export function onPlayRequestWithdrawn(handler: (fromPlayerId: string) => void): () => void {
+  let cancelled = false
+  const listener = (fromPlayerId: string) => {
+    if (!cancelled) handler(fromPlayerId)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestWithdrawn, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestWithdrawn, listener))
   }
 }
 

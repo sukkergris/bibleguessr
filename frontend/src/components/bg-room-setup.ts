@@ -9,11 +9,17 @@ import {
   onConnectionStateChange,
   onHubError,
   onPlayerJoined,
+  onPlayRequestReceived,
+  onPlayRequestWithdrawn,
+  onRoomPlayers,
   sendChatMessage,
+  sendPlayRequest,
+  withdrawPlayRequest,
   type ConnectionState,
 } from '../signalr-client'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, PlayRequest, Player } from '../types'
 import './chat-panel'
+import './play-requests'
 
 type Screen =
   | { step: 'choose' }
@@ -38,10 +44,21 @@ export class RoomSetup extends LitElement {
   private playerNameInput = ''
 
   @state()
-  private players: string[] = []
+  private players: Player[] = []
 
   @state()
   private messages: ChatMessage[] = []
+
+  @state()
+  private myPlayerId = ''
+
+  /** Requests addressed to me. */
+  @state()
+  private playRequests: PlayRequest[] = []
+
+  /** My own outstanding sent request's target id, if any. */
+  @state()
+  private sentRequestToId?: string
 
   @state()
   private error?: string
@@ -54,6 +71,9 @@ export class RoomSetup extends LitElement {
   private _unsubscribeChatHistory?: () => void
   private _unsubscribeHubError?: () => void
   private _unsubscribeConnectionState?: () => void
+  private _unsubscribeRoomPlayers?: () => void
+  private _unsubscribePlayRequestReceived?: () => void
+  private _unsubscribePlayRequestWithdrawn?: () => void
 
   disconnectedCallback() {
     this._unsubscribePlayerJoined?.()
@@ -61,6 +81,9 @@ export class RoomSetup extends LitElement {
     this._unsubscribeChatHistory?.()
     this._unsubscribeHubError?.()
     this._unsubscribeConnectionState?.()
+    this._unsubscribeRoomPlayers?.()
+    this._unsubscribePlayRequestReceived?.()
+    this._unsubscribePlayRequestWithdrawn?.()
     super.disconnectedCallback()
   }
 
@@ -138,8 +161,16 @@ export class RoomSetup extends LitElement {
         <bg-chat-panel
           .players=${this.players}
           .messages=${this.messages}
+          .myPlayerId=${this.myPlayerId}
           @chat-submit=${this._onChatSubmit}
+          @player-selected=${this._onPlayerSelected}
         ></bg-chat-panel>
+
+        <bg-play-requests
+          .requests=${this.playRequests}
+          .sentRequestToName=${this._sentRequestToName()}
+          @withdraw-play-request=${this._onWithdrawPlayRequest}
+        ></bg-play-requests>
 
         <button type="button" class="secondary" @click=${this._onLeaveRoom}>Back to chat selection</button>
       </div>
@@ -184,9 +215,13 @@ export class RoomSetup extends LitElement {
     }
   }
 
-  private async _enterRoom(roomCode: string | undefined, playerName: string, join: () => Promise<void>) {
-    this._unsubscribePlayerJoined = onPlayerJoined((name) => {
-      this.players = [...this.players, name]
+  private async _enterRoom(
+    roomCode: string | undefined,
+    playerName: string,
+    join: () => Promise<Player>,
+  ) {
+    this._unsubscribePlayerJoined = onPlayerJoined((player) => {
+      this.players = [...this.players, player]
     })
     this._unsubscribeChatMessage = onChatMessage((message) => {
       this.messages = [...this.messages, message]
@@ -198,6 +233,29 @@ export class RoomSetup extends LitElement {
     this._unsubscribeChatHistory = onChatHistory((history) => {
       this.messages = [...history, ...this.messages]
     })
+    // A full, authoritative roster snapshot — replace wholesale rather
+    // than append, so it self-corrects regardless of what PlayerJoined
+    // appended in between (including a double-add of ourselves).
+    this._unsubscribeRoomPlayers = onRoomPlayers((players) => {
+      this.players = players
+    })
+    this._unsubscribePlayRequestReceived = onPlayRequestReceived((request) => {
+      if (request.fromPlayerId === this.myPlayerId) {
+        // Echo of my own just-sent (or retargeted) request.
+        this.sentRequestToId = request.toPlayerId
+        return
+      }
+      if (request.toPlayerId !== this.myPlayerId) return
+
+      const withoutSameSender = this.playRequests.filter((r) => r.fromPlayerId !== request.fromPlayerId)
+      this.playRequests = [...withoutSameSender, request]
+    })
+    this._unsubscribePlayRequestWithdrawn = onPlayRequestWithdrawn((fromPlayerId) => {
+      if (fromPlayerId === this.myPlayerId) {
+        this.sentRequestToId = undefined
+      }
+      this.playRequests = this.playRequests.filter((r) => r.fromPlayerId !== fromPlayerId)
+    })
     this._unsubscribeHubError = onHubError((message) => {
       this.error = message
     })
@@ -205,7 +263,8 @@ export class RoomSetup extends LitElement {
       this.connectionState = state
     })
 
-    await join()
+    const me = await join()
+    this.myPlayerId = me.id
     this.screen = { step: 'in-room', roomCode, playerName }
   }
 
@@ -213,6 +272,23 @@ export class RoomSetup extends LitElement {
     sendChatMessage(event.detail).catch((err) => {
       console.error('[bg-room-setup] failed to send chat message', err)
     })
+  }
+
+  private _onPlayerSelected(event: CustomEvent<string>) {
+    sendPlayRequest(event.detail).catch((err) => {
+      console.error('[bg-room-setup] failed to send play request', err)
+    })
+  }
+
+  private _onWithdrawPlayRequest() {
+    withdrawPlayRequest().catch((err) => {
+      console.error('[bg-room-setup] failed to withdraw play request', err)
+    })
+  }
+
+  private _sentRequestToName(): string | undefined {
+    if (!this.sentRequestToId) return undefined
+    return this.players.find((p) => p.id === this.sentRequestToId)?.name
   }
 
   // Leaves the current room/World chat back to the create-or-join screen.
@@ -226,9 +302,15 @@ export class RoomSetup extends LitElement {
     this._unsubscribeChatHistory?.()
     this._unsubscribeHubError?.()
     this._unsubscribeConnectionState?.()
+    this._unsubscribeRoomPlayers?.()
+    this._unsubscribePlayRequestReceived?.()
+    this._unsubscribePlayRequestWithdrawn?.()
 
     this.players = []
     this.messages = []
+    this.myPlayerId = ''
+    this.playRequests = []
+    this.sentRequestToId = undefined
     this.error = undefined
     this.connectionState = 'connected'
     this.screen = { step: 'choose' }

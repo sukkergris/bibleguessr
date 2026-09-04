@@ -41,6 +41,16 @@ export interface ChatMessage {
   sentAt: string
 }
 
+/** A "start a game" invite one player sends another — see
+ * docs/SCRUM/Feature.StartMPGame.md. Send/see/withdraw only; accepting a
+ * request depends on round sync, which doesn't exist yet. */
+export interface PlayRequest {
+  fromPlayerId: string
+  fromPlayerName: string
+  toPlayerId: string
+  sentAt: string
+}
+
 export interface Guess {
   book: string
   chapter?: number

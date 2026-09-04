@@ -1,6 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
+import { scoreGuess } from '../scoring'
 import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import './verse-card'
 import './guess-form'
@@ -14,12 +15,6 @@ import './connection-status'
 import './nerd-panel'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
-
-// Points awarded per level of a guess, gated on every level before it being
-// correct — mirrors backend/Domain/Game.fs's Scoring.pointsForVerseGuess.
-const BOOK_POINTS = 10
-const CHAPTER_POINTS = 100
-const VERSE_NUMBER_POINTS = 1000
 
 type GamePhase = 'mode-select' | 'setup' | 'playing' | 'gameOver' | 'room-setup'
 
@@ -109,25 +104,10 @@ export class BgApp extends LitElement {
     if (!this.verse) return
 
     const guess = event.detail
-    const points = this._scoreGuess(this.verse, guess)
+    const points = scoreGuess(this.verse, guess)
 
     this.rounds = [...this.rounds, { verse: this.verse, guess, points }]
     this.feedback = { points, verse: this.verse, guess }
-  }
-
-  // Mirrors backend/Domain/Game.fs's Scoring.pointsForVerseGuess: each level
-  // only counts if every level before it was also guessed correctly.
-  private _scoreGuess(verse: Verse, guess: Guess): number {
-    const bookCorrect = guess.book.trim().toLowerCase() === verse.book.trim().toLowerCase()
-    if (!bookCorrect) return 0
-
-    const chapterCorrect = guess.chapter !== undefined && guess.chapter === verse.chapter
-    if (!chapterCorrect) return BOOK_POINTS
-
-    const verseNumberCorrect = guess.verseNumber !== undefined && guess.verseNumber === verse.verseNumber
-    if (!verseNumberCorrect) return BOOK_POINTS + CHAPTER_POINTS
-
-    return BOOK_POINTS + CHAPTER_POINTS + VERSE_NUMBER_POINTS
   }
 
   // Renders a Guess the same way references are usually written, e.g.

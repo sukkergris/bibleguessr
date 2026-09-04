@@ -27,6 +27,14 @@ tasks:
     cmds:
       - dotnet run --no-build
 
+  test:
+    desc: Run backend tests
+    dir: "{{.BACKEND_DIR}}"
+    deps:
+      - build
+    cmds:
+      - dotnet test
+
   kill:
     desc: Stop all running .NET (dotnet) processes
     platforms: [linux, darwin]

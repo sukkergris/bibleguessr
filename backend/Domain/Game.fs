@@ -40,6 +40,17 @@ type ChatMessage =
       Text: string
       SentAt: DateTimeOffset }
 
+/// A "start a game" invite one player sends another, by clicking their name
+/// in the room's players list (see docs/SCRUM/Feature.StartMPGame.md). Only
+/// send/see/withdraw are in scope for this feature — accepting a request to
+/// actually start a synced game depends on round sync, which doesn't exist
+/// yet, so there's deliberately no accept/decline here.
+type PlayRequest =
+    { FromPlayerId: PlayerId
+      FromPlayerName: string
+      ToPlayerId: PlayerId
+      SentAt: DateTimeOffset }
+
 type Room =
     { Code: RoomCode
       Players: Player list
@@ -48,7 +59,10 @@ type Room =
       /// Room.maxRecentMessages — sent to a player when they join so they
       /// have context instead of a blank chat log, without keeping
       /// unbounded history in memory for a long-lived room.
-      RecentMessages: ChatMessage list }
+      RecentMessages: ChatMessage list
+      /// Play requests currently outstanding in this room. A sender can
+      /// only ever have one — see Room.sendPlayRequest.
+      PendingRequests: PlayRequest list }
 
 module Room =
     let maxRecentMessages = 20
@@ -57,11 +71,28 @@ module Room =
         { Code = code
           Players = []
           Round = WaitingForPlayers
-          RecentMessages = [] }
+          RecentMessages = []
+          PendingRequests = [] }
 
     /// Prepends a new message and trims back down to maxRecentMessages.
     let addMessage (message: ChatMessage) (room: Room) =
         { room with RecentMessages = message :: room.RecentMessages |> List.truncate maxRecentMessages }
+
+    /// Adds `request`, first dropping any existing request from the same
+    /// sender (REPLACE semantics: a sender only ever has one outstanding
+    /// request, so retargeting a different player silently supersedes the
+    /// old request rather than requiring an explicit withdraw first).
+    let sendPlayRequest (request: PlayRequest) (room: Room) =
+        let others = room.PendingRequests |> List.filter (fun r -> r.FromPlayerId <> request.FromPlayerId)
+        { room with PendingRequests = request :: others }
+
+    /// Removes whatever request `fromPlayerId` currently has pending, if any.
+    let withdrawPlayRequest (fromPlayerId: PlayerId) (room: Room) =
+        { room with PendingRequests = room.PendingRequests |> List.filter (fun r -> r.FromPlayerId <> fromPlayerId) }
+
+    /// All requests currently addressed to `toPlayerId`.
+    let pendingRequestsFor (toPlayerId: PlayerId) (room: Room) =
+        room.PendingRequests |> List.filter (fun r -> r.ToPlayerId = toPlayerId)
 
 module Scoring =
 

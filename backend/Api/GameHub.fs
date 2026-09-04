@@ -71,6 +71,28 @@ let ChatMessageReceivedEvent = "ChatMessageReceived"
 [<Literal>]
 let ChatHistoryEvent = "ChatHistory"
 
+/// Sent only to a newly-joined player, once, right after they join — a
+/// full snapshot of everyone currently in the room (including the joiner
+/// themself), so players who joined earlier are visible/clickable right
+/// away instead of only ever appearing via a future PlayerJoined.
+[<Literal>]
+let RoomPlayersEvent = "RoomPlayers"
+
+/// Sent to the room when a play request (see docs/SCRUM/Feature.StartMPGame.md)
+/// is sent or retargeted. Broadcast to the whole group rather than routed to
+/// just the target — RoomStore has no PlayerId->connectionId reverse index
+/// today, and clients simply ignore requests not addressed to them. Not a
+/// privacy guarantee (a determined client could see it via devtools), just a
+/// pragmatic simplification for a hobby project's trust model.
+[<Literal>]
+let PlayRequestReceivedEvent = "PlayRequestReceived"
+
+/// Sent to the room when a play request is withdrawn — payload is just the
+/// withdrawing sender's PlayerId, enough for clients to filter their local
+/// list by FromPlayerId.
+[<Literal>]
+let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
+
 /// Chat messages are capped to keep a single overlong paste from bloating
 /// every other client's message list; empty/whitespace-only messages are
 /// dropped rather than broadcast.
@@ -82,8 +104,11 @@ type GameHub(rooms: RoomStore) =
     /// Adds the caller to `room` as a new player, registers the connection,
     /// broadcasts PlayerJoined, and sends the joiner (only) recent chat
     /// history — shared by JoinRoom and JoinWorldChat, which differ only in
-    /// how they find/create the room to join.
-    member private this.JoinExistingRoom(room: Room, playerName: string) : Task =
+    /// how they find/create the room to join. Returns the newly-created
+    /// Player (via the invoke's return value) so the caller learns its own
+    /// stable id — needed client-side to know which players-list entry is
+    /// "me" (see chat-panel.ts's myPlayerId) and to target play requests.
+    member private this.JoinExistingRoom(room: Room, playerName: string) : Task<Player> =
         task {
             let (RoomCode roomCode) = room.Code
 
@@ -97,23 +122,32 @@ type GameHub(rooms: RoomStore) =
             rooms.RegisterConnection(this.Context.ConnectionId, room.Code, player)
 
             do! this.Groups.AddToGroupAsync(this.Context.ConnectionId, roomCode)
-            do! this.Clients.Group(roomCode).SendAsync(PlayerJoinedEvent, player.Name)
+            do! this.Clients.Group(roomCode).SendAsync(PlayerJoinedEvent, player)
 
             // RecentMessages is stored newest-first (see Room.addMessage);
             // reverse so the client receives/renders oldest-first.
             let history = room.RecentMessages |> List.rev
             do! this.Clients.Caller.SendAsync(ChatHistoryEvent, history)
+
+            // Full roster snapshot (including the joiner themself) so
+            // players who joined earlier are visible right away, not just
+            // future PlayerJoined broadcasts.
+            do! this.Clients.Caller.SendAsync(RoomPlayersEvent, updated.Players)
+
+            return player
         }
 
-    member this.JoinRoom(roomCode: string, playerName: string) : Task =
+    member this.JoinRoom(roomCode: string, playerName: string) : Task<Player> =
         task {
             match rooms.TryGet(roomCode) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "Room not found")
-            | Some room -> do! this.JoinExistingRoom(room, playerName)
+            | None ->
+                do! this.Clients.Caller.SendAsync("Error", "Room not found")
+                return failwith "Room not found"
+            | Some room -> return! this.JoinExistingRoom(room, playerName)
         }
 
     /// Joins the always-open World chat room — just a name, no room code.
-    member this.JoinWorldChat(playerName: string) : Task =
+    member this.JoinWorldChat(playerName: string) : Task<Player> =
         this.JoinExistingRoom(rooms.GetOrCreateWorldRoom(), playerName)
 
     member this.SendChatMessage(text: string) : Task =
@@ -141,4 +175,45 @@ type GameHub(rooms: RoomStore) =
                     | None -> ()
 
                     do! this.Clients.Group(roomCode).SendAsync(ChatMessageReceivedEvent, message)
+        }
+
+    /// Sends (or retargets — see Room.sendPlayRequest's REPLACE semantics)
+    /// a play request from the caller to `toPlayerId`.
+    member this.SendPlayRequest(toPlayerId: string) : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, sender) ->
+                match rooms.TryGet(roomCode) with
+                | None -> do! this.Clients.Caller.SendAsync("Error", "Room not found")
+                | Some room ->
+                    let targetId = PlayerId(Guid.Parse toPlayerId)
+
+                    match room.Players |> List.tryFind (fun p -> p.Id = targetId) with
+                    | None -> do! this.Clients.Caller.SendAsync("Error", "That player is no longer in the room")
+                    | Some _ ->
+                        let request =
+                            { FromPlayerId = sender.Id
+                              FromPlayerName = sender.Name
+                              ToPlayerId = targetId
+                              SentAt = DateTimeOffset.UtcNow }
+
+                        rooms.Set(roomCode, Room.sendPlayRequest request room)
+                        do! this.Clients.Group(roomCode).SendAsync(PlayRequestReceivedEvent, request)
+        }
+
+    /// Withdraws whatever play request the caller currently has pending, if
+    /// any. A no-op (no error) if they don't have one — mirrors the
+    /// forgiving REPLACE semantics of SendPlayRequest.
+    member this.WithdrawPlayRequest() : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, sender) ->
+                match rooms.TryGet(roomCode) with
+                | None -> ()
+                | Some room ->
+                    rooms.Set(roomCode, Room.withdrawPlayRequest sender.Id room)
+                    let (PlayerId senderGuid) = sender.Id
+                    do! this.Clients.Group(roomCode).SendAsync(PlayRequestWithdrawnEvent, string senderGuid)
         }
