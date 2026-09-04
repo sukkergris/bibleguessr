@@ -1,10 +1,9 @@
-# Start game from chat
+# Start a Game from Chat
 
-When a user clicks an other players name
-if the player is online the player shuld send a request to start a mp game with that player.
+When a user clicks another player's name, they should be able to send a request to start a multiplayer game if that player is online.
 
-The receiving player should see all request from other players in a list to below. the chat window.
+The receiving player should see all requests from other players in a list below the chat window.
 
-Each player can send 1 and only 1 other online player a play request
+Each player can send a play request to one, and only one, other online player at a time.
 
-The player sending the request should be able to redraw the request   
+The player who sent the request should be able to withdraw it.

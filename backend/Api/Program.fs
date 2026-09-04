@@ -40,6 +40,12 @@ let main args =
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore
 
+    // Periodically removes players who've been disconnected for more than
+    // Room.disconnectGracePeriod, so a closed tab/dropped connection
+    // doesn't leave a stale entry in the room forever — see
+    // GameHub.fs's PlayerCleanupService.
+    builder.Services.AddHostedService<GameHub.PlayerCleanupService>() |> ignore
+
     // Verse data lives outside the repo, under bibles/bibelen-dk/src/
     // (tracked in git — public domain, no redistribution concern); loaded
     // once at startup and served from memory.

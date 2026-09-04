@@ -12,6 +12,8 @@ export const HubEvents = {
   RoomPlayers: 'RoomPlayers',
   PlayRequestReceived: 'PlayRequestReceived',
   PlayRequestWithdrawn: 'PlayRequestWithdrawn',
+  PlayerLeft: 'PlayerLeft',
+  PlayerDisconnected: 'PlayerDisconnected',
   Error: 'Error',
 } as const
 
@@ -231,6 +233,43 @@ export function onPlayRequestWithdrawn(handler: (fromPlayerId: string) => void):
   return () => {
     cancelled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestWithdrawn, listener))
+  }
+}
+
+/** Subscribes to a player's connection dropping (tab closed, network
+ * hiccup, refresh) — payload is their player id. They stay in the room
+ * (still visible/targetable) for a grace period, so use this only to show
+ * a "disconnected" indicator, not to remove them from any local list —
+ * see onPlayerLeft for the actual removal, once the server-side grace
+ * period elapses. Returns an unsubscribe function. */
+export function onPlayerDisconnected(handler: (playerId: string) => void): () => void {
+  let cancelled = false
+  const listener = (playerId: string) => {
+    if (!cancelled) handler(playerId)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayerDisconnected, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayerDisconnected, listener))
+  }
+}
+
+/** Subscribes to a player being removed from the room after being
+ * disconnected for longer than the server's grace period — payload is
+ * their player id. Returns an unsubscribe function. */
+export function onPlayerLeft(handler: (playerId: string) => void): () => void {
+  let cancelled = false
+  const listener = (playerId: string) => {
+    if (!cancelled) handler(playerId)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayerLeft, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayerLeft, listener))
   }
 }
 

@@ -50,6 +50,17 @@ type RoomStore() =
         | true, value -> Some value
         | false, _ -> None
 
+    /// Drops the connectionId -> (room, player) mapping — called from
+    /// OnDisconnectedAsync. The player itself isn't removed from the room
+    /// here; that only happens once PlayerCleanupService's sweep decides
+    /// they've been gone long enough (see Room.removeStaleDisconnections).
+    member _.RemoveConnection(connectionId: string) =
+        connections.TryRemove(connectionId) |> ignore
+
+    /// All rooms currently tracked, for PlayerCleanupService's periodic
+    /// sweep.
+    member _.AllRooms() = rooms.Values |> List.ofSeq
+
 /// Messages the server pushes to clients. Keep in sync with the Lit
 /// frontend's SignalR event handlers (frontend/src/signalr-client.ts).
 [<Literal>]
@@ -92,6 +103,27 @@ let PlayRequestReceivedEvent = "PlayRequestReceived"
 /// list by FromPlayerId.
 [<Literal>]
 let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
+
+/// Sent to the room when a player is removed after being disconnected
+/// longer than Room.disconnectGracePeriod (see PlayerCleanupService) —
+/// payload is just their PlayerId, enough for clients to drop them from
+/// their local roster/play-request lists the same way PlayRequestWithdrawn
+/// is handled.
+[<Literal>]
+let PlayerLeftEvent = "PlayerLeft"
+
+/// Sent to the room the instant a player's connection drops (tab closed,
+/// network hiccup, refresh) — before the grace-period sweep decides
+/// whether to remove them for good. Payload is just their PlayerId, so
+/// clients can show a "disconnected" indicator (e.g. a dot) next to their
+/// name in the players list without waiting for the full PlayerLeft
+/// removal. A later reconnect creates a brand-new Player (there's no
+/// resume-same-identity mechanism today), so there's no matching
+/// "PlayerReconnected" — the old entry either gets swept via PlayerLeft or
+/// the room simply gains a second, freshly-connected entry for the same
+/// person under a new id.
+[<Literal>]
+let PlayerDisconnectedEvent = "PlayerDisconnected"
 
 /// Chat messages are capped to keep a single overlong paste from bloating
 /// every other client's message list; empty/whitespace-only messages are
@@ -216,4 +248,63 @@ type GameHub(rooms: RoomStore) =
                     rooms.Set(roomCode, Room.withdrawPlayRequest sender.Id room)
                     let (PlayerId senderGuid) = sender.Id
                     do! this.Clients.Group(roomCode).SendAsync(PlayRequestWithdrawnEvent, string senderGuid)
+        }
+
+    /// Marks the disconnecting player as disconnected (still visible in the
+    /// room, just flagged) rather than removing them immediately — a page
+    /// refresh or brief network drop shouldn't make someone vanish from
+    /// the roster. PlayerCleanupService's periodic sweep is what actually
+    /// removes them, once they've been gone longer than
+    /// Room.disconnectGracePeriod.
+    // Not calling base.OnDisconnectedAsync here — Hub's default
+    // implementation is Task.CompletedTask (a no-op), and F# doesn't allow
+    // a `base` call inside a computation expression (only directly in a
+    // member body), which a `task { }` here would require.
+    override this.OnDisconnectedAsync(exn: exn) : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> ()
+            | Some(RoomCode roomCode, player) ->
+                rooms.RemoveConnection(this.Context.ConnectionId)
+
+                match rooms.TryGet(roomCode) with
+                | None -> ()
+                | Some room ->
+                    rooms.Set(roomCode, Room.markDisconnected player.Id DateTimeOffset.UtcNow room)
+                    let (PlayerId playerGuid) = player.Id
+                    do! this.Clients.Group(roomCode).SendAsync(PlayerDisconnectedEvent, string playerGuid)
+        }
+
+/// Periodically sweeps every room for players who disconnected more than
+/// Room.disconnectGracePeriod ago and removes them for good, broadcasting
+/// PlayerLeft (and cleaning up their play requests — see
+/// Room.removeStaleDisconnections) so every other client's roster drops
+/// them without needing to wait for their own next RoomPlayers snapshot.
+type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>) =
+    inherit Microsoft.Extensions.Hosting.BackgroundService()
+
+    /// How often to sweep — frequent enough that a removal shows up
+    /// promptly once the grace period elapses, without being wasteful for
+    /// what's normally a small, in-memory room list.
+    let sweepInterval = TimeSpan.FromSeconds 30.0
+
+    override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
+        task {
+            while not stoppingToken.IsCancellationRequested do
+                let cutoff = DateTimeOffset.UtcNow - Room.disconnectGracePeriod
+
+                for room in rooms.AllRooms() do
+                    let (RoomCode roomCode) = room.Code
+                    let updated, removedIds = Room.removeStaleDisconnections cutoff room
+
+                    if not removedIds.IsEmpty then
+                        rooms.Set(roomCode, updated)
+
+                        for PlayerId removedGuid in removedIds do
+                            do! hubContext.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string removedGuid)
+
+                try
+                    do! Task.Delay(sweepInterval, stoppingToken)
+                with :? OperationCanceledException ->
+                    ()
         }

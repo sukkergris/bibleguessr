@@ -1,9 +1,9 @@
-# Select bible
+# Select a Bible
 
-When a bible/translation has ben selected it shuld be possible to select specific books and chapters to quizz from.
+When a Bible or translation has been selected, users should be able to select the specific books and chapters they want to quiz on.
 
 1. Default ALL
-2. Choose Book's
-3. Choose Book and chapter's
+2. Choose books
+3. Choose books and chapters
 
-Make a grid with acronyms from the translation for the checkboxes for the choosing.
+Create a grid of checkboxes using the translation's book acronyms for selection.

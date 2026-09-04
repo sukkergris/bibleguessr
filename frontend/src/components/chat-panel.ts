@@ -25,6 +25,13 @@ export class ChatPanel extends LitElement {
   @property({ attribute: false })
   myPlayerId = ''
 
+  /** Ids of players whose connection is currently down (but who haven't
+   * been removed from `players` yet) — rendered as a status dot next to
+   * their name, so everyone can tell "just struggling with their
+   * connection" apart from "actually here". */
+  @property({ attribute: false })
+  disconnectedPlayerIds: Set<string> = new Set()
+
   @state()
   private _input = ''
 
@@ -34,11 +41,19 @@ export class ChatPanel extends LitElement {
         <div class="players">
           <h2>Players</h2>
           <ul>
-            ${this.players.map((player) =>
-              player.id === this.myPlayerId
-                ? html`<li>${player.name} <span class="you">(you)</span></li>`
-                : html`<li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>${player.name}</li>`,
-            )}
+            ${this.players.map((player) => {
+              const isConnected = !this.disconnectedPlayerIds.has(player.id)
+              const dot = html`<span
+                class="status-dot ${isConnected ? 'connected' : 'disconnected'}"
+                title=${isConnected ? 'Connected' : 'Connection trouble'}
+              ></span>`
+
+              return player.id === this.myPlayerId
+                ? html`<li>${dot}${player.name} <span class="you">(you)</span></li>`
+                : html`<li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>
+                    ${dot}${player.name}
+                  </li>`
+            })}
           </ul>
         </div>
 
@@ -111,9 +126,27 @@ export class ChatPanel extends LitElement {
     }
 
     .players ul li {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       padding: 0.4rem 0.6rem;
       border-radius: 6px;
       background: rgba(170, 59, 255, 0.08);
+    }
+
+    .status-dot {
+      flex: none;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+    }
+
+    .status-dot.connected {
+      background: #22c55e;
+    }
+
+    .status-dot.disconnected {
+      background: #d33;
     }
 
     .players ul li.clickable {

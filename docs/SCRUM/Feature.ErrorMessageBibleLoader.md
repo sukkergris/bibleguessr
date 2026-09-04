@@ -1,9 +1,9 @@
-# Error message
+# Bible Loader Error Message
 
-Let's make sure we help the user if they try to uplad an unknow format.
+Make sure users receive helpful feedback when they try to upload an unknown or unsupported format.
 
-Make a report button where the user can text me the error they incountered.
+Add a report button that allows users to describe the error they encountered.
 
-Add an endpoint for sending me a mail.
+Add an endpoint for sending the report by email.
 
-Add throtteling IP and number of reports pr. day.
+Add rate limiting by IP address and limit the number of reports submitted per day.

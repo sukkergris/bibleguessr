@@ -1,3 +1,3 @@
-# Mulitplayers
+# Multiplayer Timing
 
-Multiplayer spil skal køre på tid pr. vers.
+Multiplayer games should have a time limit for each verse.

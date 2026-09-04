@@ -62,17 +62,33 @@ type Room =
       RecentMessages: ChatMessage list
       /// Play requests currently outstanding in this room. A sender can
       /// only ever have one — see Room.sendPlayRequest.
-      PendingRequests: PlayRequest list }
+      PendingRequests: PlayRequest list
+      /// When each currently-disconnected player went offline. A player
+      /// not in this map is presumed connected. Populated on
+      /// OnDisconnectedAsync and swept by a background service that
+      /// removes anyone who's been here longer than the grace period —
+      /// see Room.markDisconnected/removeStaleDisconnected and
+      /// GameHub.fs's PlayerCleanupService. Kept separate from Players
+      /// itself (rather than, say, a per-player nullable timestamp) so
+      /// "who's connected" stays a simple, cheap membership check.
+      DisconnectedPlayers: Map<PlayerId, DateTimeOffset> }
 
 module Room =
     let maxRecentMessages = 20
+
+    /// How long a disconnected player stays in the room (still visible,
+    /// still targetable for a play request) before being swept out —
+    /// generous enough to survive a page refresh or a brief network drop
+    /// without looking like they left.
+    let disconnectGracePeriod = TimeSpan.FromMinutes 5.0
 
     let create code =
         { Code = code
           Players = []
           Round = WaitingForPlayers
           RecentMessages = []
-          PendingRequests = [] }
+          PendingRequests = []
+          DisconnectedPlayers = Map.empty }
 
     /// Prepends a new message and trims back down to maxRecentMessages.
     let addMessage (message: ChatMessage) (room: Room) =
@@ -93,6 +109,44 @@ module Room =
     /// All requests currently addressed to `toPlayerId`.
     let pendingRequestsFor (toPlayerId: PlayerId) (room: Room) =
         room.PendingRequests |> List.filter (fun r -> r.ToPlayerId = toPlayerId)
+
+    /// Records that `playerId` just disconnected, at `at`. The player
+    /// stays in Players (still visible/targetable) until a later sweep
+    /// removes them for real — see removeStaleDisconnections.
+    let markDisconnected (playerId: PlayerId) (at: DateTimeOffset) (room: Room) =
+        { room with DisconnectedPlayers = room.DisconnectedPlayers |> Map.add playerId at }
+
+    /// Un-marks `playerId` as disconnected, if it was — for a player who
+    /// reconnects before the sweep catches up to them.
+    let markReconnected (playerId: PlayerId) (room: Room) =
+        { room with DisconnectedPlayers = room.DisconnectedPlayers |> Map.remove playerId }
+
+    /// Removes every player who's been disconnected since before `cutoff`
+    /// (i.e. DisconnectedAt < cutoff — call with `DateTimeOffset.UtcNow -
+    /// disconnectGracePeriod`), along with any play requests they sent or
+    /// received (a request naming a since-removed player is meaningless to
+    /// keep around). Returns the updated room plus the ids of everyone
+    /// removed, so the caller can broadcast PlayerLeft for each.
+    let removeStaleDisconnections (cutoff: DateTimeOffset) (room: Room) =
+        let staleIds =
+            room.DisconnectedPlayers
+            |> Map.filter (fun _ disconnectedAt -> disconnectedAt < cutoff)
+            |> Map.toList
+            |> List.map fst
+            |> Set.ofList
+
+        if staleIds.IsEmpty then
+            room, []
+        else
+            let updated =
+                { room with
+                    Players = room.Players |> List.filter (fun p -> not (staleIds.Contains p.Id))
+                    DisconnectedPlayers = room.DisconnectedPlayers |> Map.filter (fun id _ -> not (staleIds.Contains id))
+                    PendingRequests =
+                        room.PendingRequests
+                        |> List.filter (fun r -> not (staleIds.Contains r.FromPlayerId) && not (staleIds.Contains r.ToPlayerId)) }
+
+            updated, staleIds |> Set.toList
 
 module Scoring =
 

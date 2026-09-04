@@ -8,7 +8,9 @@ import {
   onChatMessage,
   onConnectionStateChange,
   onHubError,
+  onPlayerDisconnected,
   onPlayerJoined,
+  onPlayerLeft,
   onPlayRequestReceived,
   onPlayRequestWithdrawn,
   onRoomPlayers,
@@ -18,6 +20,7 @@ import {
   type ConnectionState,
 } from '../signalr-client'
 import type { ChatMessage, PlayRequest, Player } from '../types'
+import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-name-storage'
 import './chat-panel'
 import './play-requests'
 
@@ -40,11 +43,21 @@ export class RoomSetup extends LitElement {
   @state()
   private roomCodeInput = ''
 
+  // Pre-filled from this browser's remembered name (if any) — see
+  // player-name-storage.ts. Just a convenience: the server still mints a
+  // fresh identity on every join, this only saves retyping the name.
   @state()
-  private playerNameInput = ''
+  private playerNameInput = loadRememberedPlayerName()
 
   @state()
   private players: Player[] = []
+
+  /** Ids of players in `players` whose connection is currently down (per
+   * PlayerDisconnected) but who haven't been removed yet (haven't hit
+   * PlayerLeft) — rendered as a "struggling with their connection"
+   * indicator rather than removed outright. */
+  @state()
+  private disconnectedPlayerIds = new Set<string>()
 
   @state()
   private messages: ChatMessage[] = []
@@ -74,6 +87,8 @@ export class RoomSetup extends LitElement {
   private _unsubscribeRoomPlayers?: () => void
   private _unsubscribePlayRequestReceived?: () => void
   private _unsubscribePlayRequestWithdrawn?: () => void
+  private _unsubscribePlayerDisconnected?: () => void
+  private _unsubscribePlayerLeft?: () => void
 
   disconnectedCallback() {
     this._unsubscribePlayerJoined?.()
@@ -84,6 +99,8 @@ export class RoomSetup extends LitElement {
     this._unsubscribeRoomPlayers?.()
     this._unsubscribePlayRequestReceived?.()
     this._unsubscribePlayRequestWithdrawn?.()
+    this._unsubscribePlayerDisconnected?.()
+    this._unsubscribePlayerLeft?.()
     super.disconnectedCallback()
   }
 
@@ -162,6 +179,7 @@ export class RoomSetup extends LitElement {
           .players=${this.players}
           .messages=${this.messages}
           .myPlayerId=${this.myPlayerId}
+          .disconnectedPlayerIds=${this.disconnectedPlayerIds}
           @chat-submit=${this._onChatSubmit}
           @player-selected=${this._onPlayerSelected}
         ></bg-chat-panel>
@@ -262,9 +280,22 @@ export class RoomSetup extends LitElement {
     this._unsubscribeConnectionState = onConnectionStateChange((state) => {
       this.connectionState = state
     })
+    this._unsubscribePlayerDisconnected = onPlayerDisconnected((playerId) => {
+      this.disconnectedPlayerIds = new Set(this.disconnectedPlayerIds).add(playerId)
+    })
+    this._unsubscribePlayerLeft = onPlayerLeft((playerId) => {
+      this.players = this.players.filter((p) => p.id !== playerId)
+      this.playRequests = this.playRequests.filter((r) => r.fromPlayerId !== playerId)
+      if (this.sentRequestToId === playerId) this.sentRequestToId = undefined
+
+      const stillDisconnected = new Set(this.disconnectedPlayerIds)
+      stillDisconnected.delete(playerId)
+      this.disconnectedPlayerIds = stillDisconnected
+    })
 
     const me = await join()
     this.myPlayerId = me.id
+    saveRememberedPlayerName(playerName)
     this.screen = { step: 'in-room', roomCode, playerName }
   }
 
@@ -305,12 +336,15 @@ export class RoomSetup extends LitElement {
     this._unsubscribeRoomPlayers?.()
     this._unsubscribePlayRequestReceived?.()
     this._unsubscribePlayRequestWithdrawn?.()
+    this._unsubscribePlayerDisconnected?.()
+    this._unsubscribePlayerLeft?.()
 
     this.players = []
     this.messages = []
     this.myPlayerId = ''
     this.playRequests = []
     this.sentRequestToId = undefined
+    this.disconnectedPlayerIds = new Set()
     this.error = undefined
     this.connectionState = 'connected'
     this.screen = { step: 'choose' }
