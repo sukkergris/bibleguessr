@@ -46,11 +46,13 @@ type Screen =
 
 /** The player I'm now in a synced game with — set once a PlayRequestAccepted
  * resolves for a request involving me (either as challenger or challenged),
- * cleared once <bg-multiplayer-game> reports the game ended (game-over or
- * game-ended). Owning just "who" here (not the round/score/timer machinery
- * itself, which <bg-multiplayer-game> owns entirely) keeps this identity
- * fact available for the room-level UI (e.g. hiding the challenge
- * affordance) without duplicating state that already lives in the child. */
+ * cleared once <bg-multiplayer-game> reports the game ended (game-over —
+ * the sole event it fires, see that component's own class doc comment for
+ * why it deliberately doesn't also react to the opponent's PlayerLeft).
+ * Owning just "who" here (not the round/score/timer machinery itself,
+ * which <bg-multiplayer-game> owns entirely) keeps this identity fact
+ * available for the room-level UI (e.g. hiding the challenge affordance)
+ * without duplicating state that already lives in the child. */
 interface ActiveGameOpponent {
   id: string
   name: string
@@ -294,7 +296,6 @@ export class RoomSetup extends LitElement {
                 .verseSource=${this.myTranslationChoice?.verseSource}
                 .initialSession=${this.initialSession}
                 @game-over=${this._onMultiplayerGameOver}
-                @game-ended=${this._onMultiplayerGameEnded}
               ></bg-multiplayer-game>`
             : html`
                 <bg-challenge-settings
@@ -518,6 +519,13 @@ export class RoomSetup extends LitElement {
 
   private _onPlayerSelected(event: CustomEvent<string>) {
     const targetId = event.detail
+    // Defense in depth — chat-panel.ts already never attaches a click
+    // handler to an Offline row, so this normally can't fire for a
+    // disconnected player; this guards the narrow race where a click
+    // lands a frame before a PlayerDisconnected re-render removes the
+    // handler (see docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md).
+    if (this.disconnectedPlayerIds.has(targetId)) return
+
     const { scope, restriction, roundCount, timeLimitSeconds } = this.challengeSettings
     const verseSource = this.myTranslationChoice?.verseSource
     if (!verseSource) return
@@ -561,14 +569,6 @@ export class RoomSetup extends LitElement {
   // activeGameOpponent clears too (see _renderRoom's branching).
   private _onMultiplayerGameOver(event: CustomEvent<MultiplayerGameOverDetail>) {
     this.mpResults = event.detail
-    this.activeGameOpponent = undefined
-    this.initialSession = undefined
-  }
-
-  // The game view tore itself down locally without a results screen — the
-  // opponent left the room entirely (see <bg-multiplayer-game>'s
-  // onPlayerLeft handling). Just return to the normal room view.
-  private _onMultiplayerGameEnded() {
     this.activeGameOpponent = undefined
     this.initialSession = undefined
   }

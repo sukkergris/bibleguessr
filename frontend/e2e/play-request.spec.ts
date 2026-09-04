@@ -63,3 +63,70 @@ test('player can send and withdraw a play request', async ({ browser }) => {
     await ctxB.close()
   }
 })
+
+// See docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md: a pending
+// invitation is cancelled the INSTANT one party disconnects — not left
+// live for the full 2-minute grace period until the removal sweep would
+// otherwise catch it (see backend/Tests/DisconnectCleanupTests.fs's
+// cancelPendingRequestsFor tests for the domain-level coverage of that
+// timing). This only checks the live wiring reaches the UI.
+test('a pending invitation is cancelled immediately if the SENDER disconnects', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = Date.now().toString().slice(-6)
+    const aliceName = `Alice${suffix}`
+    const bobName = `Bob${suffix}`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await expect(bobInRoster).toBeVisible()
+    await bobInRoster.click()
+
+    await expect(pageB.getByText(`${aliceName} wants to play`)).toBeVisible()
+
+    // Alice (the sender) disconnects — Bob's UI should clear the request
+    // live, without withdrawing it explicitly and without waiting out the
+    // grace period.
+    await ctxA.close()
+
+    await expect(pageB.getByText(`${aliceName} wants to play`)).not.toBeVisible()
+  } finally {
+    await ctxB.close()
+  }
+})
+
+test('a pending invitation is cancelled immediately if the TARGET disconnects', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = Date.now().toString().slice(-6)
+    const aliceName = `Alice${suffix}`
+    const bobName = `Bob${suffix}`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await expect(bobInRoster).toBeVisible()
+    await bobInRoster.click()
+
+    await expect(pageA.getByText(`Request sent to ${bobName}`)).toBeVisible()
+
+    // Bob (the target) disconnects — Alice's own outstanding-request UI
+    // should clear live, the same as if Bob had denied it.
+    await ctxB.close()
+
+    await expect(pageA.getByText(`Request sent to ${bobName}`)).not.toBeVisible()
+  } finally {
+    await ctxA.close()
+  }
+})

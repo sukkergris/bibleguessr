@@ -73,9 +73,30 @@ let main args =
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore
 
+    // How long a disconnected player stays in the room, and how often
+    // PlayerCleanupService checks, before being removed — see GameHub.fs's
+    // PresenceSettings/PlayerCleanupService. Configurable (in seconds, not
+    // a TimeSpan string, matching this file's existing Smtp:Port
+    // convention) so a test environment can dial BOTH down from the real
+    // 2-minute grace period / 30-second sweep without touching production
+    // code or its defaults.
+    let presenceSettings: GameHub.PresenceSettings =
+        { DisconnectGracePeriod =
+            builder.Configuration["Presence:DisconnectGracePeriodSeconds"]
+            |> Option.ofObj
+            |> Option.map (int >> float >> TimeSpan.FromSeconds)
+            |> Option.defaultValue Room.disconnectGracePeriod
+          SweepInterval =
+            builder.Configuration["Presence:SweepIntervalSeconds"]
+            |> Option.ofObj
+            |> Option.map (int >> float >> TimeSpan.FromSeconds)
+            |> Option.defaultValue (TimeSpan.FromSeconds 30.0) }
+
+    builder.Services.AddSingleton<GameHub.PresenceSettings>(presenceSettings) |> ignore
+
     // Periodically removes players who've been disconnected for more than
-    // Room.disconnectGracePeriod, so a closed tab/dropped connection
-    // doesn't leave a stale entry in the room forever — see
+    // presenceSettings.DisconnectGracePeriod, so a closed tab/dropped
+    // connection doesn't leave a stale entry in the room forever — see
     // GameHub.fs's PlayerCleanupService.
     builder.Services.AddHostedService<GameHub.PlayerCleanupService>() |> ignore
 

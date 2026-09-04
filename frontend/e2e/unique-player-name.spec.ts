@@ -71,27 +71,49 @@ test('going Home and back into Multiplayer under the same name in the same tab s
   await expect(page.getByText(/already taken/i)).not.toBeVisible()
 })
 
-test('reconnecting under your own name succeeds once your old connection drops', async ({ browser }) => {
+test('reconnecting under your own name succeeds once your old connection drops, and lands back in Online', async ({
+  browser,
+}) => {
   const ctxA1 = await browser.newContext()
+  const ctxB = await browser.newContext()
   const pageA1 = await ctxA1.newPage()
-  const name = `Alice${Date.now().toString().slice(-6)}`
+  const pageB = await ctxB.newPage()
+  const suffix = Date.now().toString().slice(-6)
+  const name = `Alice${suffix}`
+  const bobName = `Bob${suffix}`
 
   await joinWorldChat(pageA1, name)
+  await joinWorldChat(pageB, bobName)
   await expect(pageA1.getByRole('heading', { name: 'World chat' })).toBeVisible()
 
   // Simulate a page refresh / lost connection: close the tab/context so
   // the old SignalR connection actually drops (marking that player
-  // disconnected server-side), then rejoin under the identical name in
-  // a fresh context — this must succeed, not be rejected as a duplicate.
+  // disconnected server-side) — Bob (the bystander who stays connected
+  // throughout) sees Alice move to Offline...
   await ctxA1.close()
+  await expect(pageB.getByText('Offline')).toBeVisible()
 
+  // ...then rejoin under the identical name in a fresh context — this
+  // must succeed, not be rejected as a duplicate (see
+  // docs/SCRUM/Featue.UniquePlayerName.md), and per
+  // docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md's "if a
+  // player reconnects before the timeout, they should remain in the room
+  // and return to the Online section" — satisfied here by the same-name
+  // rejoin, not literal session resume (see that spec's own doc comment
+  // in backend/Domain/Game.fs's Room.prepareJoin for why).
   const ctxA2 = await browser.newContext()
   const pageA2 = await ctxA2.newPage()
   try {
     await joinWorldChat(pageA2, name)
     await expect(pageA2.getByRole('heading', { name: 'World chat' })).toBeVisible()
     await expect(pageA2.getByText(/already taken/i)).not.toBeVisible()
+
+    // Bob sees Alice's re-join land back in Online — no lingering
+    // "Offline" entry for her.
+    const aliceInBobsRoster = pageB.getByRole('listitem').filter({ hasText: name })
+    await expect(aliceInBobsRoster).toHaveClass(/clickable/)
   } finally {
     await ctxA2.close()
+    await ctxB.close()
   }
 })

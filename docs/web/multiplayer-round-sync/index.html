@@ -355,9 +355,9 @@ type RoundState =
         </p>
       </div>
 
-      <h2>Forfeit — two paths, one shape</h2>
+      <h2>Forfeit — three paths, one shape</h2>
       <p>
-        A game can end early two ways, and both funnel through the exact same
+        A game can end early three ways, and all funnel through the exact same
         <code>GameOver(Forfeited remainingPlayer)</code> broadcast shape:
       </p>
       <ul>
@@ -368,12 +368,19 @@ type RoundState =
           opponent as the surviving player.
         </li>
         <li>
+          <strong>Voluntary leave — <code>GameHub.LeaveRoom</code>.</strong> Clicking "← Home" or "Back to chat
+          selection" mid-game (see <a href="../unique-player-names/index.html">Unique player names</a>'
+          <code>Room.leave</code>) also ends any <code>ActiveGame</code> the leaver was in, broadcasting
+          <code>PlayerLeft</code> then <code>GameOver(Forfeited)</code> — no grace period, since this is a
+          deliberate departure, not a dropped connection.
+        </li>
+        <li>
           <strong>Implicit — disconnect past the grace period.</strong> If a participant in an active game
-          disconnects and stays gone longer than <code>Room.disconnectGracePeriod</code> (5 minutes — see
-          <a href="../player-presence/index.html">Player presence</a>), <code>PlayerCleanupService</code>'s periodic
-          sweep removes them and, because <code>Room.removeStaleDisconnections</code> also ends any
-          <code>ActiveGame</code> they were part of, broadcasts <code>GameOver(Forfeited)</code> naming whoever's
-          left.
+          disconnects and stays gone longer than <code>PresenceSettings.DisconnectGracePeriod</code> (2 minutes by
+          default, configurable — see <a href="../player-presence/index.html">Player presence</a>),
+          <code>PlayerCleanupService</code>'s periodic sweep removes them and, because
+          <code>Room.removeStaleDisconnections</code> also ends any <code>ActiveGame</code> they were part of,
+          broadcasts <code>PlayerLeft</code> then <code>GameOver(Forfeited)</code> naming whoever's left.
         </li>
       </ul>
       <p>
@@ -381,6 +388,37 @@ type RoundState =
         <code>Forfeited None</code> — no winner declared. On the frontend,
         <code>&lt;bg-multiplayer-results&gt;</code>'s headline handles this explicitly ("Game ended" rather than
         guessing a winner).
+      </p>
+      <div class="callout">
+        <span class="callout-title">Fixed: the results screen used to get silently swallowed</span>
+        <p>
+          Both the leave-voluntarily and disconnect-sweep paths above broadcast <code>PlayerLeft</code>
+          <strong>before</strong> <code>GameOver</code> — but <code>&lt;bg-multiplayer-game&gt;</code> used to also
+          react to the opponent's <code>PlayerLeft</code>, dispatching a purely-local <code>game-ended</code>
+          teardown (originally meant only for "I clicked leave myself", a case that turned out to have no actual
+          code path dispatching it — see <code>_onForfeit</code>'s own doc comment, which deliberately does NOT
+          fire <code>game-ended</code>, for exactly the reason below). Since <code>PlayerLeft</code> always arrived
+          first, this teardown fired and unmounted the whole game view a moment before <code>GameOver</code>'s
+          results ever reached it — the remaining player was silently bounced back to the normal room view with no
+          summary at all, instead of the results screen they should have seen.
+        </p>
+        <p>
+          Fixed by having <code>&lt;bg-multiplayer-game&gt;</code> stop reacting to the opponent's
+          <code>PlayerLeft</code> entirely — it now fires exactly one event, <code>game-over</code>, sourced solely
+          from <code>onGameOver</code>. This is safe because every path above that removes a player mid-game always
+          pairs <code>PlayerLeft</code> with <code>GameOver(Forfeited)</code>, so <code>GameOver</code> alone is a
+          complete, reliable signal for "this game just ended" — there's no scenario where
+          <code>&lt;bg-multiplayer-game&gt;</code> is mounted, the opponent leaves, and no <code>GameOver</code>
+          follows.
+        </p>
+      </div>
+      <p>
+        Separately, <code>&lt;bg-multiplayer-game&gt;</code>'s "opponent disconnected" indicator — driven by
+        <code>onPlayerDisconnected</code>, which fires the instant the connection drops, well before any grace
+        period elapses — was made into a more prominent bordered banner ("Alice's connection dropped. Waiting to
+        see if they reconnect…") rather than a small colored line, so the remaining player has an immediate,
+        unambiguous signal that something changed, without needing to know or wait out the grace period to find
+        out.
       </p>
 
       <h2>One active game per player</h2>
@@ -492,7 +530,9 @@ type RoundState =
           players guessing auto-advances the round; a full short game reaches
           <code>&lt;bg-multiplayer-results&gt;</code> with matching final scores on both pages; a player whose
           uploaded file spells a book differently than the server still sees real verse text and scores correctly;
-          an opponent's closed tab shows the disconnected indicator; Forfeit prompts a confirm dialog.
+          an opponent's closed tab shows the disconnected indicator; Forfeit prompts a confirm dialog; the
+          remaining player still reaches the results screen when the opponent leaves via "← Home" mid-game
+          (the swallowed-results-screen regression above).
         </li>
         <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
       </ul>

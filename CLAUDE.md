@@ -22,6 +22,8 @@ Keep the `README.md` minimal and intended for developers. Explain how to use `do
 
 Always consider using DDD in some form, but do not follow it blindly or dogmatically.
 Always consider using TDD, but do not follow it dogmatically.
+Prefer explicit state models, such as discriminated unions or state objects, when they make state transitions clearer than conditional logic.
+Prefer configuration values over hardcoded values for system settings.
 
 ## Data security
 

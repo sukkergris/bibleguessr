@@ -1,10 +1,14 @@
 import { test, expect, type Page } from '@playwright/test'
 
-// Exercises the connection-status dot and remembered-name behavior added
-// alongside "Start game from chat". The 5-minute stale-player removal
-// itself isn't driven end-to-end here (that would mean a real 5-minute
-// wait) — it's covered by the backend's DisconnectCleanupTests.fs instead;
-// this only checks that a dropped connection shows up live as a status dot.
+// Exercises the connection-status dot, Online/Offline sectioning, and
+// remembered-name behavior — see
+// docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md. The 2-minute
+// stale-player REMOVAL itself isn't driven end-to-end here (that would
+// mean a real 2-minute wait) — it's covered by the backend's
+// DisconnectCleanupTests.fs instead; this only checks that a dropped
+// connection shows up live under an "Offline" section immediately
+// (PlayerDisconnected fires right away — only the final removal waits out
+// the grace period).
 
 async function joinWorldChat(page: Page, name: string) {
   await page.goto('/')
@@ -20,7 +24,7 @@ async function joinWorldChat(page: Page, name: string) {
   await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
 }
 
-test('a dropped connection shows a disconnected status dot for other players', async ({ browser }) => {
+test('a dropped connection moves the player into the Offline section, not clickable', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const ctxB = await browser.newContext()
   const pageA = await ctxA.newPage()
@@ -34,20 +38,25 @@ test('a dropped connection shows a disconnected status dot for other players', a
     await joinWorldChat(pageA, aliceName)
     await joinWorldChat(pageB, bobName)
 
-    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
-    await expect(bobInRoster).toBeVisible()
+    const bobOnline = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await expect(bobOnline).toBeVisible()
 
-    // Both start out connected.
-    await expect(bobInRoster.locator('.status-dot')).toHaveClass(/connected/)
+    // Both start out connected — no "Offline" section yet.
+    await expect(bobOnline).toHaveClass(/clickable/)
+    await expect(pageA.getByText('Offline')).not.toBeVisible()
 
     // Bob's tab disappears (closing the context drops his SignalR
-    // connection) -> Alice should see his dot flip to disconnected.
+    // connection) -> Alice should see him move into an Offline section
+    // immediately (PlayerDisconnected fires right away).
     await ctxB.close()
 
-    await expect(bobInRoster.locator('.status-dot')).toHaveClass(/disconnected/)
-    // He's still visible in the roster — the disconnect grace period
-    // means he isn't removed outright just because his tab closed.
-    await expect(bobInRoster).toBeVisible()
+    await expect(pageA.getByText('Offline')).toBeVisible()
+    const bobOffline = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await expect(bobOffline).toBeVisible()
+    // He's still visible (the disconnect grace period means he isn't
+    // removed outright just because his tab closed), but no longer
+    // clickable — offline players can't be invited.
+    await expect(bobOffline).not.toHaveClass(/clickable/)
   } finally {
     await ctxA.close()
   }

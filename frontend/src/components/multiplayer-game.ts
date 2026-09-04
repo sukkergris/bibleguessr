@@ -10,7 +10,6 @@ import {
   forfeitGame,
   onGameOver,
   onPlayerDisconnected,
-  onPlayerLeft,
   onRoundScored,
   onRoundStarted,
   submitGuess,
@@ -59,13 +58,22 @@ const COUNTDOWN_TICK_MS = 250
  * docs/SCRUM/Feature.RequestToStartMPGame.md, and deliberately not fixed
  * up), a small fallback message is shown for that round instead of text.
  *
- * Fires two events up to bg-room-setup.ts:
- * - `game-over: CustomEvent<MultiplayerGameOverDetail>` once the server
- *   says the game has ended (completed normally, or either player
- *   forfeited) — carries enough to render <bg-multiplayer-results>.
- * - `game-ended` (no detail) only for the purely-local "I clicked leave
- *   and confirmed" case, before any server round-trip completes — just
- *   tears this view down back to the room, no results screen.
+ * Fires one event up to bg-room-setup.ts: `game-over:
+ * CustomEvent<MultiplayerGameOverDetail>` once the server says the game
+ * has ended (completed normally, or either player forfeited) — carries
+ * enough to render <bg-multiplayer-results>. This is deliberately the
+ * ONLY signal this component acts on to end itself — it does NOT react
+ * to the opponent's PlayerLeft (see onPlayerDisconnected below, not
+ * onPlayerLeft), because every server path that removes a player mid-game
+ * (voluntary leave via GameHub.LeaveRoom, the stale-disconnect sweep,
+ * same-name-rejoin replacement) always pairs PlayerLeft with
+ * GameOver(Forfeited) — so GameOver alone is a complete, reliable signal,
+ * and reacting to PlayerLeft too used to race it: PlayerLeft is
+ * broadcast BEFORE GameOver in every one of those paths, so an earlier
+ * version of this component that also handled PlayerLeft would silently
+ * tear itself down (no results screen) a moment before GameOver arrived,
+ * bouncing the remaining player back to the lobby with no summary at
+ * all instead of the results screen they should have seen.
  */
 @customElement('bg-multiplayer-game')
 export class MultiplayerGame extends LitElement {
@@ -157,7 +165,6 @@ export class MultiplayerGame extends LitElement {
   private _unsubscribeRoundScored?: () => void
   private _unsubscribeGameOver?: () => void
   private _unsubscribePlayerDisconnected?: () => void
-  private _unsubscribePlayerLeft?: () => void
   private _tickHandle?: ReturnType<typeof setInterval>
 
   connectedCallback() {
@@ -198,10 +205,6 @@ export class MultiplayerGame extends LitElement {
     this._unsubscribePlayerDisconnected = onPlayerDisconnected((playerId) => {
       if (playerId === this.opponentId) this.opponentConnectionState = 'disconnected'
     })
-    this._unsubscribePlayerLeft = onPlayerLeft((playerId) => {
-      if (playerId !== this.opponentId) return
-      this.dispatchEvent(new CustomEvent('game-ended', { bubbles: true, composed: true }))
-    })
 
     this._tickHandle = setInterval(() => {
       this._now = Date.now()
@@ -213,7 +216,6 @@ export class MultiplayerGame extends LitElement {
     this._unsubscribeRoundScored?.()
     this._unsubscribeGameOver?.()
     this._unsubscribePlayerDisconnected?.()
-    this._unsubscribePlayerLeft?.()
     if (this._tickHandle !== undefined) clearInterval(this._tickHandle)
     super.disconnectedCallback()
   }
@@ -378,7 +380,12 @@ export class MultiplayerGame extends LitElement {
       </header>
 
       ${this.opponentConnectionState === 'disconnected'
-        ? html`<p class="opponent-status">Waiting for ${this.opponentName} to reconnect…</p>`
+        ? html`
+            <div class="opponent-status" role="status">
+              <strong>${this.opponentName}'s connection dropped.</strong>
+              Waiting to see if they reconnect — the game will end automatically if they don't come back.
+            </div>
+          `
         : null}
       ${this._renderRoundBody()}
 
@@ -528,9 +535,20 @@ export class MultiplayerGame extends LitElement {
     }
 
     .opponent-status {
-      font-size: 0.85rem;
-      color: #d33;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      font-size: 0.9rem;
+      color: #922;
+      background: rgba(221, 51, 51, 0.1);
+      border: 1px solid rgba(221, 51, 51, 0.35);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
       margin: 0 0 0.75rem;
+    }
+
+    .opponent-status strong {
+      font-size: 0.95rem;
     }
 
     .verse-error {

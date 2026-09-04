@@ -12,8 +12,9 @@
       <span class="eyebrow">Feature</span>
       <h1>Player presence</h1>
       <p class="subtitle">
-        A live connection-status dot next to each player, automatic removal after 5 minutes of being disconnected,
-        and remembering your name per browser.
+        A live connection-status dot next to each player, an "Offline" section for disconnected players (unable to
+        be invited), automatic removal after 2 minutes of being disconnected, and remembering your name per browser.
+        See <span class="file-ref">docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md</span>.
       </p>
 
       <p>Builds on <a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a>.</p>
@@ -26,16 +27,25 @@
         roster mid-conversation.
       </p>
 
-      <h2>The two-stage design</h2>
+      <h2>The design</h2>
       <ol class="flow">
         <li>
-          <strong>Immediate:</strong> the instant a connection drops, the player is marked disconnected. They stay
-          fully visible and targetable in the roster — just flagged, via a red status dot instead of green.
+          <strong>Immediate — visible, but not invitable:</strong> the instant a connection drops, the player is
+          marked disconnected. They move into a separate <strong>Offline</strong> section of the roster (still
+          visible — a brief drop shouldn't make someone vanish from the conversation), but any invitation involving
+          them is cancelled right away, and they can no longer be clicked to send a new one — see
+          <a href="../unique-player-names/index.html">Unique player names</a> for the sibling feature this one
+          builds directly on.
         </li>
         <li>
           <strong>After a grace period:</strong> if they haven't reconnected within
-          <code>Room.disconnectGracePeriod = 5 minutes</code>, a periodic sweep removes them for real, and every
+          <code>Room.disconnectGracePeriod = 2 minutes</code>, a periodic sweep removes them for real, and every
           other client's roster updates live.
+        </li>
+        <li>
+          <strong>Reconnect before the timeout:</strong> rejoining under the exact same name moves the player back
+          to Online — see the callout further down for how this is actually implemented (a same-name rejoin, not
+          true session resume).
         </li>
       </ol>
 
@@ -56,14 +66,29 @@
             <td>Records <code>playerId → at</code> in <code>Room.DisconnectedPlayers</code>. Does <strong>not</strong> remove them from <code>Players</code>.</td>
           </tr>
           <tr>
+            <td><code>cancelPendingRequestsFor playerId room</code></td>
+            <td>
+              Drops any pending invitation naming <code>playerId</code> (sent or received) — the instant they
+              disconnect, not waiting for the grace period. Leaves <code>Players</code>, <code>DisconnectedPlayers</code>,
+              and <code>ActiveGame</code> untouched — this is the one thing that DOES change immediately on
+              disconnect, everything else waits. Returns <code>(updatedRoom, cancelledRequests)</code> so the caller
+              knows which withdrawn/denied-equivalent event to broadcast per request.
+            </td>
+          </tr>
+          <tr>
             <td><code>markReconnected playerId room</code></td>
-            <td>Clears a pending disconnection. See the limitation callout below — nothing calls this today.</td>
+            <td>
+              Clears a pending disconnection. Still unused by any hub code path — see the callout below for why
+              (same-name rejoin via <code>prepareJoin</code> is what actually satisfies "reconnect before the
+              timeout," not this function).
+            </td>
           </tr>
           <tr>
             <td><code>removeStaleDisconnections cutoff room</code></td>
             <td>
               Removes every player disconnected before <code>cutoff</code>, along with any play requests they sent
-              or received. Returns <code>(updatedRoom, removedPlayerIds)</code>.
+              or received (already-cancelled ones from <code>cancelPendingRequestsFor</code> included, harmlessly —
+              there's nothing left to drop for them by this point). Returns <code>(updatedRoom, removedPlayerIds)</code>.
             </td>
           </tr>
         </tbody>
@@ -72,17 +97,55 @@
       <h3><code>GameHub.OnDisconnectedAsync</code></h3>
       <p><span class="file-ref">backend/Api/GameHub.fs</span></p>
       <p>
-        On disconnect: drops the connection→player mapping, calls <code>Room.markDisconnected</code> with
-        <code>DateTimeOffset.UtcNow</code>, and broadcasts <code>PlayerDisconnected</code> to the room group.
+        On disconnect: drops the connection→player mapping, then — inside <strong>one</strong> atomic
+        <code>RoomStore.Update</code> call — both <code>Room.markDisconnected</code> (with
+        <code>DateTimeOffset.UtcNow</code>) and <code>Room.cancelPendingRequestsFor</code> run together, not as two
+        separate updates. Broadcasts <code>PlayerDisconnected</code>, then <code>PlayRequestWithdrawn</code> (the
+        disconnecting player was the sender) or <code>PlayRequestDenied</code> (they were the target) for each
+        cancelled request — the exact same events/payload shapes <code>WithdrawPlayRequest</code>/
+        <code>DenyPlayRequest</code> already send for an explicit withdraw/deny, so the frontend needed zero new
+        event handling.
       </p>
+      <div class="callout">
+        <span class="callout-title">Why one atomic update, not two</span>
+        <p>
+          A second, separate <code>rooms.Update</code> call for <code>cancelPendingRequestsFor</code> would reopen a
+          real race window between "marked disconnected" and "requests cancelled" — e.g. <code>AcceptPlayRequest</code>
+          landing in that gap and starting a game against someone who'd already disconnected. Every room-state
+          change in this hub goes through <code>RoomStore.Update</code>'s compare-and-swap retry loop for exactly
+          this reason (see <span class="file-ref">backend/Tests/RoomStoreConcurrencyTests.fs</span> — a real
+          lost-write bug, unrelated to this feature, that this rule was written to prevent from recurring).
+        </p>
+      </div>
 
       <h3><code>PlayerCleanupService</code></h3>
       <p><span class="file-ref">backend/Api/GameHub.fs</span> — registered via <code>AddHostedService</code> in <span class="file-ref">Program.fs</span></p>
       <p>
-        A <code>BackgroundService</code> that sweeps every 30 seconds: for each room, computes
-        <code>cutoff = UtcNow - disconnectGracePeriod</code>, calls <code>Room.removeStaleDisconnections</code>, and
-        broadcasts <code>PlayerLeft</code> for each player actually removed.
+        A <code>BackgroundService</code> that sweeps every <code>PresenceSettings.SweepInterval</code> (30 seconds
+        by default): for each room, computes <code>cutoff = UtcNow - PresenceSettings.DisconnectGracePeriod</code>,
+        calls <code>Room.removeStaleDisconnections</code>, and broadcasts <code>PlayerLeft</code> for each player
+        actually removed.
       </p>
+      <div class="callout">
+        <span class="callout-title">Both values are configurable</span>
+        <p>
+          <code>PresenceSettings</code> (<span class="file-ref">backend/Api/GameHub.fs</span>) is a small record —
+          <code>{ DisconnectGracePeriod: TimeSpan; SweepInterval: TimeSpan }</code> — read from
+          <code>Presence:DisconnectGracePeriodSeconds</code> / <code>Presence:SweepIntervalSeconds</code> in
+          <span class="file-ref">backend/Api/Program.fs</span> (plain seconds, matching this file's existing
+          <code>Smtp:Port</code> convention — not a <code>TimeSpan</code> string), each defaulting to the previous
+          hardcoded value (2 minutes / 30 seconds) when unset. Registered as a DI singleton and injected into
+          <code>PlayerCleanupService</code>'s constructor, same pattern as <code>MailSender.SmtpSettings</code>.
+          The point isn't runtime tuning for a real deployment — it's letting a test dial BOTH values down to a
+          couple of seconds (e.g. via environment variables:
+          <code>Presence__DisconnectGracePeriodSeconds=2 Presence__SweepIntervalSeconds=1</code>), so an actual
+          disconnect→removal round-trip can be driven end-to-end in a few seconds instead of the real 2-minute
+          wait every e2e test in this codebase has so far deliberately avoided (see the "Verify it" section below).
+          <code>Room.disconnectGracePeriod</code> itself is untouched — it's still the domain-level default value
+          <code>PresenceSettings</code> falls back to, and what <code>backend/Tests/DisconnectCleanupTests.fs</code>
+          asserts directly.
+        </p>
+      </div>
 
       <h3>Events</h3>
       <table>
@@ -97,11 +160,19 @@
           <tr>
             <td><code>PlayerDisconnected</code></td>
             <td>immediately, connection drops</td>
-            <td>status dot turns red; player stays in every list</td>
+            <td>player moves from the Online section to Offline; no longer clickable to invite</td>
+          </tr>
+          <tr>
+            <td><code>PlayRequestWithdrawn</code> / <code>PlayRequestDenied</code></td>
+            <td>
+              immediately, if the disconnecting player had a pending invitation (sent or received respectively) —
+              same events an explicit withdraw/deny already send, see <code>OnDisconnectedAsync</code> above
+            </td>
+            <td>the invitation disappears from the other party's UI live, exactly like an explicit withdraw/deny</td>
           </tr>
           <tr>
             <td><code>PlayerLeft</code></td>
-            <td>after the 5-minute sweep removes them</td>
+            <td>after the 2-minute sweep removes them</td>
             <td>player removed from the roster and from any play requests involving them</td>
           </tr>
         </tbody>
@@ -109,11 +180,31 @@
 
       <h2>Frontend</h2>
       <p>
-        <span class="file-ref">frontend/src/components/chat-panel.ts</span> renders a small
-        <code>.status-dot</code> (green = connected, red = connection trouble) next to each player's name, driven by
-        a <code>disconnectedPlayerIds: Set&lt;string&gt;</code> property. <span class="file-ref">bg-room-setup.ts</span>
-        adds to that set on <code>PlayerDisconnected</code> and, on <code>PlayerLeft</code>, removes the player from
-        the roster/play-request lists and clears them from the disconnected set.
+        <span class="file-ref">frontend/src/components/chat-panel.ts</span> partitions <code>players</code> into
+        two sections — <strong>Online</strong> and <strong>Offline</strong> — by whether each id is in
+        <code>disconnectedPlayerIds: Set&lt;string&gt;</code>, an unambiguous per-player server truth distinct from
+        this viewer's own <code>connectionState</code> (which is only about being uncertain about your own
+        connection, and still renders inline in Online). <span class="file-ref">bg-room-setup.ts</span> adds to
+        <code>disconnectedPlayerIds</code> on <code>PlayerDisconnected</code> and, on <code>PlayerLeft</code>,
+        removes the player from the roster/play-request lists and clears them from the disconnected set. The
+        Offline section only renders when non-empty.
+      </p>
+      <p>
+        Within Online, the existing <code>.status-dot</code> (green = connected, grey = this viewer's own
+        connection is uncertain) still applies. Offline rows drop the dot entirely — the section itself already
+        says "offline" — and are rendered greyed out with <strong>no <code>class="clickable"</code> and no
+        <code>@click</code> handler at all</strong>, structurally rather than via a runtime guard: there's simply no
+        click target for an offline player, so nothing can invite them. <span class="file-ref">bg-room-setup.ts</span>'s
+        <code>_onPlayerSelected</code> also checks <code>disconnectedPlayerIds</code> itself as defense in depth, for
+        the narrow race where a click could land a frame before a <code>PlayerDisconnected</code> re-render removes
+        the handler.
+      </p>
+      <p>
+        (A future random-matchmaking feature —
+        <span class="file-ref">docs/SCRUM/Feature.ConnectToRandomNextOpenGame.md</span>, not yet built — must
+        exclude <code>DisconnectedPlayers</code> from its candidate pool the same way invitations are excluded here;
+        noted in <span class="file-ref">backend/Domain/Game.fs</span>'s own doc comment so it isn't forgotten when
+        that feature gets built.)
       </p>
 
       <h3>Remembering your name</h3>
@@ -160,14 +251,21 @@
       <ul>
         <li>
           Backend: <span class="file-ref">backend/Tests/DisconnectCleanupTests.fs</span> — mark/reconnect/sweep
-          semantics, including that a removal also drops that player's play requests.
+          semantics, the 2-minute <code>disconnectGracePeriod</code> value itself, and
+          <code>cancelPendingRequestsFor</code>'s full behavior (drops a request naming the disconnecting player on
+          either side, leaves unrelated requests and the disconnecting player's own <code>Players</code>/
+          <code>ActiveGame</code> untouched, handles multiple requests targeting the same player, no-ops when
+          there's nothing to cancel).
         </li>
         <li>
           End-to-end: <span class="file-ref">frontend/e2e/player-presence.spec.ts</span> — closes one browser
-          context and confirms the other player's dot flips red live while they stay visible (the grace period), and
-          confirms the remembered name survives a page reload. It doesn't drive the real 5-minute removal
-          end-to-end (that would mean an actual 5-minute wait in the test) — that path is covered by the backend
-          unit tests instead.
+          context and confirms the other player moves into an Offline section live (no longer clickable) while
+          still visible (the grace period), and confirms the remembered name survives a page reload.
+          <span class="file-ref">frontend/e2e/play-request.spec.ts</span> — a pending invitation disappears live for
+          the other party the instant either the sender or the target disconnects, without waiting for the grace
+          period. <span class="file-ref">frontend/e2e/unique-player-name.spec.ts</span> — a same-name rejoin lands
+          back in Online for a bystander watching. None of these drive the real 2-minute removal end-to-end (that
+          would mean an actual wait in the test) — that path is covered by the backend unit tests instead.
         </li>
         <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
       </ul>

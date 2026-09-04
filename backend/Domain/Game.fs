@@ -372,11 +372,13 @@ type Room =
 module Room =
     let maxRecentMessages = 20
 
-    /// How long a disconnected player stays in the room (still visible,
-    /// still targetable for a play request) before being swept out —
-    /// generous enough to survive a page refresh or a brief network drop
-    /// without looking like they left.
-    let disconnectGracePeriod = TimeSpan.FromMinutes 5.0
+    /// How long a disconnected player stays in the room (still visible in
+    /// the Offline section — see docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md
+    /// — but no longer targetable for a play request, see
+    /// cancelPendingRequestsFor) before being swept out — generous enough
+    /// to survive a page refresh or a brief network drop without looking
+    /// like they left.
+    let disconnectGracePeriod = TimeSpan.FromMinutes 2.0
 
     let create code =
         { Code = code
@@ -486,9 +488,46 @@ module Room =
         { room with DisconnectedPlayers = room.DisconnectedPlayers |> Map.add playerId at }
 
     /// Un-marks `playerId` as disconnected, if it was — for a player who
-    /// reconnects before the sweep catches up to them.
+    /// reconnects before the sweep catches up to them. Currently unused
+    /// by any hub code path: "reconnect before the timeout" (see
+    /// docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md) is
+    /// satisfied instead by prepareJoin's same-name stale-entry removal
+    /// (a rejoin under the same name silently replaces the old
+    /// disconnected entry with a fresh one), not by resuming the old
+    /// entry via this function. Kept for the future in case true
+    /// same-identity session resume is ever built.
     let markReconnected (playerId: PlayerId) (room: Room) =
         { room with DisconnectedPlayers = room.DisconnectedPlayers |> Map.remove playerId }
+
+    /// Immediately cancels any pending invitation involving `playerId`,
+    /// the moment they disconnect — see
+    /// docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md.
+    /// Distinct from removeStaleDisconnections: at disconnect time the
+    /// player is only MARKED disconnected (see markDisconnected above),
+    /// not removed — they stay fully visible and, if mid-game, still
+    /// playing. Only PendingRequests changes here; Players,
+    /// DisconnectedPlayers, and ActiveGame are all left untouched. (A
+    /// future random-matchmaking feature — see
+    /// docs/SCRUM/Feature.ConnectToRandomNextOpenGame.md, not yet built —
+    /// must exclude DisconnectedPlayers from its candidate pool the same
+    /// way invitations are excluded here.) Returns the updated room and
+    /// the list of requests that were dropped, so the caller can
+    /// broadcast the right withdrawn/denied-equivalent event per request
+    /// — see GameHub.OnDisconnectedAsync. A no-op (empty list) if
+    /// `playerId` had no pending request on either side.
+    let cancelPendingRequestsFor (playerId: PlayerId) (room: Room) : Room * PlayRequest list =
+        let cancelled =
+            room.PendingRequests
+            |> List.filter (fun r -> r.FromPlayerId = playerId || r.ToPlayerId = playerId)
+
+        if cancelled.IsEmpty then
+            room, []
+        else
+            { room with
+                PendingRequests =
+                    room.PendingRequests
+                    |> List.filter (fun r -> r.FromPlayerId <> playerId && r.ToPlayerId <> playerId) },
+            cancelled
 
     /// Removes every player in `idsToRemove` from the room entirely —
     /// dropped from Players/DisconnectedPlayers, along with any play

@@ -142,7 +142,10 @@ let PlayRequestReceivedEvent = "PlayRequestReceived"
 
 /// Sent to the room when a play request is withdrawn — payload is just the
 /// withdrawing sender's PlayerId, enough for clients to filter their local
-/// list by FromPlayerId.
+/// list by FromPlayerId. Also sent from OnDisconnectedAsync (not just the
+/// explicit WithdrawPlayRequest hub method) when a disconnecting player
+/// was the SENDER of a still-pending request — see
+/// Room.cancelPendingRequestsFor.
 [<Literal>]
 let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
 
@@ -157,7 +160,10 @@ let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
 let PlayRequestAcceptedEvent = "PlayRequestAccepted"
 
 /// Sent to the room when the challenged player denies a play request —
-/// same payload shape as PlayRequestAccepted.
+/// same payload shape as PlayRequestAccepted. Also sent from
+/// OnDisconnectedAsync (not just the explicit DenyPlayRequest hub method)
+/// when a disconnecting player was the TARGET of a still-pending
+/// request — see Room.cancelPendingRequestsFor.
 [<Literal>]
 let PlayRequestDeniedEvent = "PlayRequestDenied"
 
@@ -764,7 +770,15 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
     /// refresh or brief network drop shouldn't make someone vanish from
     /// the roster. PlayerCleanupService's periodic sweep is what actually
     /// removes them, once they've been gone longer than
-    /// Room.disconnectGracePeriod.
+    /// Room.disconnectGracePeriod. Also immediately cancels any pending
+    /// invitation involving them — see
+    /// docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md and
+    /// Room.cancelPendingRequestsFor's own doc comment — broadcasting
+    /// PlayRequestWithdrawn (they were the sender) or PlayRequestDenied
+    /// (they were the target) per cancelled request, the exact same
+    /// events/payload shapes WithdrawPlayRequest/DenyPlayRequest already
+    /// send for an explicit withdraw/deny, so the frontend needs no new
+    /// handling at all.
     // Not calling base.OnDisconnectedAsync here — Hub's default
     // implementation is Task.CompletedTask (a no-op), and F# doesn't allow
     // a `base` call inside a computation expression (only directly in a
@@ -776,16 +790,56 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
             | Some(RoomCode roomCode, player) ->
                 rooms.RemoveConnection(this.Context.ConnectionId)
 
-                match rooms.Update(roomCode, Room.markDisconnected player.Id DateTimeOffset.UtcNow) with
+                // markDisconnected AND cancelPendingRequestsFor happen
+                // inside ONE atomic rooms.Update call, not two separate
+                // ones — a second, separate Update would reopen a race
+                // window (e.g. AcceptPlayRequest landing between "marked
+                // disconnected" and "requests cancelled") of exactly the
+                // kind rooms.Update itself exists to close. See
+                // RoomStoreConcurrencyTests.fs.
+                let mutable cancelledRequests: PlayRequest list = []
+
+                match
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            let disconnected = Room.markDisconnected player.Id DateTimeOffset.UtcNow room
+                            let updated, cancelled = Room.cancelPendingRequestsFor player.Id disconnected
+                            cancelledRequests <- cancelled
+                            updated
+                    )
+                with
                 | None -> ()
                 | Some _ ->
                     let (PlayerId playerGuid) = player.Id
                     do! this.Clients.Group(roomCode).SendAsync(PlayerDisconnectedEvent, string playerGuid)
+
+                    for request in cancelledRequests do
+                        let (PlayerId fromGuid) = request.FromPlayerId
+                        let (PlayerId toGuid) = request.ToPlayerId
+
+                        if request.FromPlayerId = player.Id then
+                            do! this.Clients.Group(roomCode).SendAsync(PlayRequestWithdrawnEvent, string fromGuid)
+                        else
+                            do! this.Clients.Group(roomCode).SendAsync(PlayRequestDeniedEvent, string fromGuid, string toGuid)
         }
 
+/// How long a disconnected player stays in the room, and how often
+/// PlayerCleanupService checks, before removing them for good — see that
+/// type's own doc comment. Configurable via
+/// "Presence:DisconnectGracePeriodSeconds"/"Presence:SweepIntervalSeconds"
+/// (see Program.fs), each defaulting to this type's own previous
+/// hardcoded values when unset — primarily so tests (backend integration
+/// tests, or a future e2e test) can dial BOTH down to seconds instead of
+/// waiting out the real 2-minute grace period on a 30-second sweep,
+/// without needing to touch production code or its defaults.
+type PresenceSettings =
+    { DisconnectGracePeriod: TimeSpan
+      SweepInterval: TimeSpan }
+
 /// Periodically sweeps every room for players who disconnected more than
-/// Room.disconnectGracePeriod ago and removes them for good, broadcasting
-/// PlayerLeft (and cleaning up their play requests — see
+/// `settings.DisconnectGracePeriod` ago and removes them for good,
+/// broadcasting PlayerLeft (and cleaning up their play requests — see
 /// Room.removeStaleDisconnections) so every other client's roster drops
 /// them without needing to wait for their own next RoomPlayers snapshot.
 /// If a removed player was mid-game, their ActiveGame is forfeited too
@@ -793,18 +847,13 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
 /// (Forfeited) to notify the surviving opponent, same "auto-forfeit after
 /// the disconnect grace period" behavior as everywhere else disconnection
 /// is handled in this app.
-type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>) =
+type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, settings: PresenceSettings) =
     inherit Microsoft.Extensions.Hosting.BackgroundService()
-
-    /// How often to sweep — frequent enough that a removal shows up
-    /// promptly once the grace period elapses, without being wasteful for
-    /// what's normally a small, in-memory room list.
-    let sweepInterval = TimeSpan.FromSeconds 30.0
 
     override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
         task {
             while not stoppingToken.IsCancellationRequested do
-                let cutoff = DateTimeOffset.UtcNow - Room.disconnectGracePeriod
+                let cutoff = DateTimeOffset.UtcNow - settings.DisconnectGracePeriod
 
                 // rooms.AllRooms() below is only used to enumerate WHICH
                 // room codes to sweep — the actual removal decision for
@@ -842,7 +891,7 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>) =
                         | None -> ()
 
                 try
-                    do! Task.Delay(sweepInterval, stoppingToken)
+                    do! Task.Delay(settings.SweepInterval, stoppingToken)
                 with :? OperationCanceledException ->
                     ()
         }

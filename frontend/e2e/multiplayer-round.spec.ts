@@ -303,13 +303,16 @@ test('opponent tab closing mid-game shows a disconnected indicator', async ({ br
 
     await expect(pageA.getByText('Round 1 /')).toBeVisible()
 
-    // Bob's tab closes — Alice should see a "reconnecting" indicator.
-    // The real 5-minute grace-period forfeit isn't driven here (that would
-    // mean an actual 5-minute wait in CI) — it's covered by the backend's
-    // RoomActiveGameTests.fs instead, same pattern as player-presence.spec.ts.
+    // Bob's tab closes — Alice should see a prominent "connection dropped"
+    // banner immediately (see docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md's
+    // "did they actually leave, or is it just lag?" concern — no wait
+    // needed to know something changed). The real 2-minute grace-period
+    // forfeit isn't driven here (that would mean an actual 2-minute wait
+    // in CI) — it's covered by the backend's RoomActiveGameTests.fs
+    // instead, same pattern as player-presence.spec.ts.
     await ctxB.close()
 
-    await expect(pageA.getByText(`Waiting for ${bobName} to reconnect`)).toBeVisible()
+    await expect(pageA.getByText(`${bobName}'s connection dropped.`)).toBeVisible()
   } finally {
     await ctxA.close()
   }
@@ -347,6 +350,56 @@ test('leaving mid-game via Forfeit prompts a confirm dialog', async ({ browser }
     await expect.poll(() => dialogSeen).toBe(true)
 
     // Once forfeited, the server's GameOver reaches Bob too.
+    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible()
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// Regression test for a real bug: GameHub.LeaveRoom (and the disconnect
+// sweep after the grace period) broadcasts PlayerLeft BEFORE GameOver for
+// the same forfeit. <bg-multiplayer-game> used to react to the opponent's
+// PlayerLeft by firing a purely-local 'game-ended' teardown (meant only
+// for "I clicked leave myself", not "my opponent left") — which won the
+// race against the GameOver that was about to show the results screen,
+// silently bouncing the remaining player back to the lobby with no
+// summary at all. Fixed by having <bg-multiplayer-game> stop reacting to
+// the opponent's PlayerLeft altogether — every path that removes a player
+// mid-game (voluntary leave, stale-disconnect sweep, same-name-rejoin
+// replacement) always pairs PlayerLeft with GameOver(Forfeited), so
+// GameOver alone is a reliable, sole signal for "the game just ended."
+test('the remaining player still reaches the results screen when the opponent leaves via Home mid-game', async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}h`
+    const bobName = `Bob${suffix}h`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
+    await bobInRoster.click()
+
+    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(pageB.getByText('Round 1 /')).toBeVisible()
+
+    // Alice leaves via "← Home" — not Forfeit — which calls the server's
+    // LeaveRoom (broadcasting PlayerLeft then GameOver, in that order) the
+    // instant it's clicked, no grace period involved.
+    await pageA.getByRole('button', { name: '← Home' }).click()
+
+    // Bob must still land on the results screen, not just get bounced back
+    // to the normal room view.
     await expect(pageB.locator('bg-multiplayer-results')).toBeVisible()
   } finally {
     await ctxA.close()

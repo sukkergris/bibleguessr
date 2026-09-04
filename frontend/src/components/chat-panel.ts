@@ -42,53 +42,31 @@ export class ChatPanel extends LitElement {
   private _input = '';
 
   render() {
+    // Partitioned by disconnectedPlayerIds — unambiguous per-player
+    // server truth (see docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md)
+    // — distinct from `connectionState`, which is only about THIS
+    // viewer's own uncertain connection and still renders inline in
+    // Online (see _renderOnlineRow).
+    const onlinePlayers = this.players.filter((p) => !this.disconnectedPlayerIds.has(p.id));
+    const offlinePlayers = this.players.filter((p) => this.disconnectedPlayerIds.has(p.id));
+
     return html`
       <div class="panel">
         <div class="players">
           <h2>Players</h2>
+          <div class="section-label">Online</div>
           <ul>
-            ${this.players.map((player) => {
-              const isMe = player.id === this.myPlayerId;
-              const isDisconnected = this.connectionState === 'disconnected';
-              const statusClass = isDisconnected
-                ? isMe
-                  ? 'disconnected'
-                  : 'unknown'
-                : this.disconnectedPlayerIds.has(player.id)
-                  ? 'disconnected'
-                  : 'connected';
-              const statusLabel =
-                statusClass === 'disconnected'
-                  ? isMe && isDisconnected
-                    ? 'Disconnected'
-                    : 'Connection trouble'
-                  : statusClass === 'unknown'
-                    ? 'Unknown'
-                    : 'Connected';
-              const dot = html`
-                <span
-                  class="status-dot ${statusClass}"
-                  title=${statusLabel}
-                ></span>
-              `;
-
-              return isMe
-                ? html`
-                    <li>
-                      ${dot}${player.name}
-                      <span class="you">(you)</span>
-                    </li>
-                  `
-                : html`
-                    <li
-                      class="clickable"
-                      @click=${() => this._onPlayerSelected(player.id)}
-                    >
-                      ${dot}${player.name}
-                    </li>
-                  `;
-            })}
+            ${onlinePlayers.map((player) => this._renderOnlineRow(player))}
           </ul>
+
+          ${offlinePlayers.length > 0
+            ? html`
+                <div class="section-label">Offline</div>
+                <ul class="offline">
+                  ${offlinePlayers.map((player) => this._renderOfflineRow(player))}
+                </ul>
+              `
+            : null}
         </div>
 
         <div class="chat">
@@ -116,6 +94,47 @@ export class ChatPanel extends LitElement {
           </form>
         </div>
       </div>
+    `;
+  }
+
+  // Renders one row in the Online section — includes the connected/
+  // connection-trouble/unknown status dot, since within Online that's
+  // still genuinely ambiguous info (is THIS viewer's own connection
+  // uncertain right now?). A disconnected player never reaches this
+  // method — see the Offline partition in render().
+  private _renderOnlineRow(player: Player) {
+    const isMe = player.id === this.myPlayerId;
+    const isUncertain = this.connectionState === 'disconnected';
+    const statusClass = isUncertain ? (isMe ? 'disconnected' : 'unknown') : 'connected';
+    const statusLabel =
+      statusClass === 'disconnected' ? 'Disconnected' : statusClass === 'unknown' ? 'Unknown' : 'Connected';
+    const dot = html` <span class="status-dot ${statusClass}" title=${statusLabel}></span> `;
+
+    return isMe
+      ? html`
+          <li>
+            ${dot}${player.name}
+            <span class="you">(you)</span>
+          </li>
+        `
+      : html`
+          <li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>${dot}${player.name}</li>
+        `;
+  }
+
+  // Renders one row in the Offline section — no status dot (the section
+  // itself already says "offline"), and deliberately no `class="clickable"`/
+  // `@click` at all: a disconnected player can't be invited (see
+  // docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md), and
+  // structurally never attaching a click handler is simpler and more
+  // honest than attaching one and guarding inside it.
+  private _renderOfflineRow(player: Player) {
+    const isMe = player.id === this.myPlayerId;
+
+    return html`
+      <li class="offline-row">
+        ${player.name}${isMe ? html`<span class="you">(you)</span>` : null}
+      </li>
     `;
   }
 
@@ -204,6 +223,25 @@ export class ChatPanel extends LitElement {
 
     .players ul li.clickable:hover {
       background: rgba(170, 59, 255, 0.18);
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      opacity: 0.55;
+      margin: 0.6rem 0 0.3rem;
+    }
+
+    .section-label:first-of-type {
+      margin-top: 0;
+    }
+
+    .players ul li.offline-row {
+      background: rgba(0, 0, 0, 0.04);
+      opacity: 0.55;
+      cursor: default;
     }
 
     .you {
