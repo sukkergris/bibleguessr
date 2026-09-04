@@ -4,6 +4,7 @@ import { api } from '../api'
 import {
   joinRoom,
   joinWorldChat,
+  onChatHistory,
   onChatMessage,
   onConnectionStateChange,
   onHubError,
@@ -50,12 +51,14 @@ export class RoomSetup extends LitElement {
 
   private _unsubscribePlayerJoined?: () => void
   private _unsubscribeChatMessage?: () => void
+  private _unsubscribeChatHistory?: () => void
   private _unsubscribeHubError?: () => void
   private _unsubscribeConnectionState?: () => void
 
   disconnectedCallback() {
     this._unsubscribePlayerJoined?.()
     this._unsubscribeChatMessage?.()
+    this._unsubscribeChatHistory?.()
     this._unsubscribeHubError?.()
     this._unsubscribeConnectionState?.()
     super.disconnectedCallback()
@@ -188,6 +191,13 @@ export class RoomSetup extends LitElement {
     this._unsubscribeChatMessage = onChatMessage((message) => {
       this.messages = [...this.messages, message]
     })
+    // Fires once, right after join, with the room's recent history —
+    // prepend it ahead of whatever's arrived since (there shouldn't be
+    // anything yet in practice, but this keeps chronological order either
+    // way rather than assuming history always lands first).
+    this._unsubscribeChatHistory = onChatHistory((history) => {
+      this.messages = [...history, ...this.messages]
+    })
     this._unsubscribeHubError = onHubError((message) => {
       this.error = message
     })
@@ -213,6 +223,7 @@ export class RoomSetup extends LitElement {
   private _onLeaveRoom() {
     this._unsubscribePlayerJoined?.()
     this._unsubscribeChatMessage?.()
+    this._unsubscribeChatHistory?.()
     this._unsubscribeHubError?.()
     this._unsubscribeConnectionState?.()
 

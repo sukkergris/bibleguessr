@@ -8,6 +8,7 @@ export const HubEvents = {
   RoundStarted: 'RoundStarted',
   RoundScored: 'RoundScored',
   ChatMessageReceived: 'ChatMessageReceived',
+  ChatHistory: 'ChatHistory',
   Error: 'Error',
 } as const
 
@@ -127,6 +128,23 @@ export function onChatMessage(handler: (message: ChatMessage) => void): () => vo
   return () => {
     cancelled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.ChatMessageReceived, listener))
+  }
+}
+
+/** Subscribes to the one-time chat history sent right after joining a room
+ * — the room's recent messages (oldest first), so a new joiner sees
+ * context instead of a blank chat. Returns an unsubscribe function. */
+export function onChatHistory(handler: (messages: ChatMessage[]) => void): () => void {
+  let cancelled = false
+  const listener = (messages: ChatMessage[]) => {
+    if (!cancelled) handler(messages)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.ChatHistory, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.ChatHistory, listener))
   }
 }
 

@@ -33,23 +33,14 @@ type RoomStore() =
 
     member _.CreateRoom() =
         let code = Random.Shared.Next(1000, 9999) |> string
-        let room =
-            { Code = RoomCode code
-              Players = []
-              Round = WaitingForPlayers }
+        let room = Room.create (RoomCode code)
         rooms[code] <- room
         room
 
     /// Ensures the World chat room exists, creating it on first use. Safe
     /// to call concurrently — GetOrAdd is atomic per key.
     member _.GetOrCreateWorldRoom() =
-        rooms.GetOrAdd(
-            WorldChatRoomCode,
-            fun code ->
-                { Code = RoomCode code
-                  Players = []
-                  Round = WaitingForPlayers }
-        )
+        rooms.GetOrAdd(WorldChatRoomCode, fun code -> Room.create (RoomCode code))
 
     member _.RegisterConnection(connectionId: string, roomCode: RoomCode, player: Player) =
         connections[connectionId] <- (roomCode, player)
@@ -73,6 +64,13 @@ let RoundScoredEvent = "RoundScored"
 [<Literal>]
 let ChatMessageReceivedEvent = "ChatMessageReceived"
 
+/// Sent only to a newly-joined player, once, right after they join — the
+/// room's last Room.maxRecentMessages messages (oldest first, so the
+/// client can just append them in order), so they land in a chat that
+/// already has context instead of an empty one.
+[<Literal>]
+let ChatHistoryEvent = "ChatHistory"
+
 /// Chat messages are capped to keep a single overlong paste from bloating
 /// every other client's message list; empty/whitespace-only messages are
 /// dropped rather than broadcast.
@@ -82,8 +80,9 @@ type GameHub(rooms: RoomStore) =
     inherit Hub()
 
     /// Adds the caller to `room` as a new player, registers the connection,
-    /// and broadcasts PlayerJoined — shared by JoinRoom and JoinWorldChat,
-    /// which differ only in how they find/create the room to join.
+    /// broadcasts PlayerJoined, and sends the joiner (only) recent chat
+    /// history — shared by JoinRoom and JoinWorldChat, which differ only in
+    /// how they find/create the room to join.
     member private this.JoinExistingRoom(room: Room, playerName: string) : Task =
         task {
             let (RoomCode roomCode) = room.Code
@@ -99,6 +98,11 @@ type GameHub(rooms: RoomStore) =
 
             do! this.Groups.AddToGroupAsync(this.Context.ConnectionId, roomCode)
             do! this.Clients.Group(roomCode).SendAsync(PlayerJoinedEvent, player.Name)
+
+            // RecentMessages is stored newest-first (see Room.addMessage);
+            // reverse so the client receives/renders oldest-first.
+            let history = room.RecentMessages |> List.rev
+            do! this.Clients.Caller.SendAsync(ChatHistoryEvent, history)
         }
 
     member this.JoinRoom(roomCode: string, playerName: string) : Task =
@@ -129,6 +133,12 @@ type GameHub(rooms: RoomStore) =
                           PlayerName = player.Name
                           Text = trimmed
                           SentAt = DateTimeOffset.UtcNow }
+
+                    // Record it into the room's history before broadcasting,
+                    // so it's there for the next player who joins.
+                    match rooms.TryGet(roomCode) with
+                    | Some room -> rooms.Set(roomCode, Room.addMessage message room)
+                    | None -> ()
 
                     do! this.Clients.Group(roomCode).SendAsync(ChatMessageReceivedEvent, message)
         }

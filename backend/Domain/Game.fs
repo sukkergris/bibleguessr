@@ -31,18 +31,37 @@ type RoundState =
     | InProgress of Verse
     | Scored of Verse * GuessResult list
 
-type Room =
-    { Code: RoomCode
-      Players: Player list
-      Round: RoundState }
-
-/// A chat message sent within a room. Not persisted — kept only in the
-/// hub's broadcast, same lifetime as the room itself.
+/// A chat message sent within a room. Not persisted to disk — kept only in
+/// memory as part of the room's RecentMessages, same lifetime as the room
+/// itself (lost on server restart, same as everything else about a Room).
 type ChatMessage =
     { PlayerId: PlayerId
       PlayerName: string
       Text: string
       SentAt: DateTimeOffset }
+
+type Room =
+    { Code: RoomCode
+      Players: Player list
+      Round: RoundState
+      /// The most recent chat messages, newest first, capped at
+      /// Room.maxRecentMessages — sent to a player when they join so they
+      /// have context instead of a blank chat log, without keeping
+      /// unbounded history in memory for a long-lived room.
+      RecentMessages: ChatMessage list }
+
+module Room =
+    let maxRecentMessages = 20
+
+    let create code =
+        { Code = code
+          Players = []
+          Round = WaitingForPlayers
+          RecentMessages = [] }
+
+    /// Prepends a new message and trims back down to maxRecentMessages.
+    let addMessage (message: ChatMessage) (room: Room) =
+        { room with RecentMessages = message :: room.RecentMessages |> List.truncate maxRecentMessages }
 
 module Scoring =
 
