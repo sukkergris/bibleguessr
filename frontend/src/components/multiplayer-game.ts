@@ -91,6 +91,22 @@ export class MultiplayerGame extends LitElement {
   @property({ attribute: false })
   verseSource?: VerseSource
 
+  /** The most recent RoundStarted session bg-room-setup.ts had already
+   * seen for this game by the time this component mounted, if any — see
+   * that component's own doc comment on why it captures RoundStarted
+   * itself rather than leaving it solely to this component's own
+   * subscription below. AcceptPlayRequest's RoundStarted broadcast can
+   * arrive before this element even exists (it's created by the very
+   * re-render that PlayRequestAccepted, sent moments earlier, triggers),
+   * and hub.on has no replay for a listener that subscribes after the
+   * fact — so relying only on onRoundStarted here would occasionally
+   * miss the game's first round entirely, leaving the player stuck on
+   * "Waiting for the first verse…" forever. connectedCallback applies
+   * this the same way a live onRoundStarted event would, before
+   * subscribing to future ones. */
+  @property({ attribute: false })
+  initialSession?: GameSession
+
   @state()
   private session?: GameSession
 
@@ -147,6 +163,17 @@ export class MultiplayerGame extends LitElement {
   connectedCallback() {
     super.connectedCallback()
 
+    // Apply whatever RoundStarted session bg-room-setup.ts had already
+    // captured for this game before this element even mounted — see
+    // initialSession's own doc comment for why this is necessary rather
+    // than just relying on the onRoundStarted subscription below. Must
+    // run BEFORE that subscription starts, using the same
+    // _applyRoundStarted logic a live event would, so this is exactly as
+    // if that first RoundStarted had been received live.
+    if (this.initialSession && this._isMySession(this.initialSession)) {
+      this._applyRoundStarted(this.initialSession)
+    }
+
     // Every game event is broadcast to the WHOLE room, not routed to just
     // the two players involved (see GameHub.fs's targeting doc comment —
     // same tradeoff as PlayRequestReceived) — a room can have more than
@@ -156,13 +183,7 @@ export class MultiplayerGame extends LitElement {
     // PlayRequestReceived/Accepted by player id.
     this._unsubscribeRoundStarted = onRoundStarted((session) => {
       if (!this._isMySession(session)) return
-      const isFirstRound = !this.session
-      this.session = session
-      this.myGuess = undefined
-      this._resolveCurrentVerse()
-      // gameType is fixed for the whole game (see types.ts's GameSession),
-      // so this only needs resolving once, on the first round.
-      if (isFirstRound) this._resolveGuessFormRestriction(session.gameType)
+      this._applyRoundStarted(session)
     })
     this._unsubscribeRoundScored = onRoundScored((session) => {
       if (!this._isMySession(session)) return
@@ -195,6 +216,20 @@ export class MultiplayerGame extends LitElement {
     this._unsubscribePlayerLeft?.()
     if (this._tickHandle !== undefined) clearInterval(this._tickHandle)
     super.disconnectedCallback()
+  }
+
+  // Applies a RoundStarted session — shared by connectedCallback's
+  // initialSession catch-up and the live onRoundStarted subscription, so
+  // both go through identical logic (see initialSession's doc comment).
+  // Caller is responsible for the _isMySession filter check.
+  private _applyRoundStarted(session: GameSession) {
+    const isFirstRound = !this.session
+    this.session = session
+    this.myGuess = undefined
+    this._resolveCurrentVerse()
+    // gameType is fixed for the whole game (see types.ts's GameSession),
+    // so this only needs resolving once, on the first round.
+    if (isFirstRound) this._resolveGuessFormRestriction(session.gameType)
   }
 
   // Whether `session`/`(playerA, playerB)` belongs to MY game with

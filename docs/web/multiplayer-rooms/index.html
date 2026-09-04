@@ -20,8 +20,10 @@
       <p>
         A player either creates a room (gets a random 4-digit code to share) or joins <strong>World chat</strong> — an
         always-open room anyone can join with just a name, no code. Once in, everyone sees a live players list and a
-        real-time text chat. There's no round/scoring sync yet (see the callout below) — this is the room and chat
-        foundation other features are built on.
+        real-time text chat. Round/scoring sync is now fully built on top of this foundation — see
+        <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the synced-gameplay layer
+        (verse picking, guessing, scoring, timers, forfeit, results) — this page just covers the room and chat
+        foundation it's built on.
       </p>
 
       <h2>Backend</h2>
@@ -34,12 +36,14 @@
       Round: RoundState
       RecentMessages: ChatMessage list
       PendingRequests: PlayRequest list
-      DisconnectedPlayers: Map&lt;PlayerId, DateTimeOffset&gt; }</code></pre>
+      DisconnectedPlayers: Map&lt;PlayerId, DateTimeOffset&gt;
+      ActiveGame: GameSession option }</code></pre>
       <p>
         <code>RecentMessages</code> is capped at <code>Room.maxRecentMessages = 20</code>, newest first, trimmed on
         every <code>Room.addMessage</code> call — enough for a new joiner to land in a chat with context, without
-        keeping unbounded history for a long-lived room. <code>PendingRequests</code> and
-        <code>DisconnectedPlayers</code> belong to the play-request and presence features respectively — see their
+        keeping unbounded history for a long-lived room. <code>PendingRequests</code>,
+        <code>DisconnectedPlayers</code>, and <code>ActiveGame</code> belong to the play-request, presence, and
+        round-sync features respectively — see their
         own pages.
       </p>
 
@@ -158,7 +162,10 @@
       </table>
       <p>
         <code>RoundStarted</code> and <code>RoundScored</code> are also declared (and mirrored in the frontend's
-        <code>HubEvents</code>) but nothing sends or subscribes to them yet — see the callout below.
+        <code>HubEvents</code>) and are now fully wired — sent from <code>AcceptPlayRequest</code>,
+        <code>SubmitGuess</code>, and the round-timeout sweep, and consumed by
+        <code>&lt;bg-multiplayer-game&gt;</code>. See <a href="../multiplayer-round-sync/index.html">Multiplayer
+        round sync</a> for the full protocol and how a round actually resolves.
       </p>
 
       <h2>Frontend</h2>
@@ -188,17 +195,24 @@
         </p>
       </div>
 
-      <h2>Not built yet</h2>
-      <div class="callout limitation">
-        <span class="callout-title">Round sync</span>
+      <h2>Round sync</h2>
+      <div class="callout">
+        <span class="callout-title">Now built</span>
         <p>
-          <code>RoundState</code> (<code>WaitingForPlayers | InProgress of Verse | Scored of ...</code>) exists on
-          <code>Room</code>, but no hub method reads or transitions it. <code>Scoring.pointsForGuess</code> — a
-          time-decaying scorer, separate from the book/chapter/verse tiers actually used by singleplayer — is
-          likewise unused. This is the acknowledged next layer to build on top of the room/chat foundation
-          documented here.
+          A synced, server-authoritative multiplayer round loop — verse picking, guessing, scoring, round
+          advancement, a timer with a background timeout sweep, forfeit, and a final results screen — is fully
+          built on top of the room/chat foundation documented on this page. It lives on <code>GameSession</code>,
+          nested inside <code>Room.ActiveGame</code> (see below), not on the legacy <code>Room.Round</code> field.
+          See <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the full write-up.
         </p>
       </div>
+      <p>
+        Note: <code>Room.Round: RoundState</code> is still present on the <code>Room</code> type shown above, but it
+        is superseded — never read or transitioned by any hub code path. The real round state for an active game is
+        <code>GameSession.Round</code>, reached via <code>Room.ActiveGame: GameSession option</code>. It was kept
+        rather than removed purely so existing code/tests that reference it don't need churn for zero functional
+        gain (per its doc comment in <span class="file-ref">backend/Domain/Game.fs</span>).
+      </p>
 
       <h2>Verify it</h2>
       <ul>

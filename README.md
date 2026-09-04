@@ -8,7 +8,7 @@ number right.
 
 ## Project structure
 
-```
+```sh
 backend/       F# / ASP.NET Core minimal API
   Domain/      Verse, scoring, and game types
   Api/         HTTP endpoints, SignalR hub, and the translation loaders
@@ -32,7 +32,7 @@ privately rather than serve to other players from a shared backend.
 
 Requires [Task](https://taskfile.dev), the .NET SDK, and Node.
 
-```
+```sh
 task dotnet:dev     # backend API, http://localhost:5162
 task frontend:dev   # frontend dev server, http://localhost:5173
 ```
@@ -40,7 +40,7 @@ task frontend:dev   # frontend dev server, http://localhost:5173
 Other useful tasks — run `task --list-all` for the full list:
 
 | Task | What it does |
-|---|---|
+| --- | --- |
 | `task dev` | Alias for `task frontend:dev` |
 | `task dotnet:build` | Build the backend |
 | `task dotnet:test` | Run backend tests |
@@ -57,7 +57,7 @@ Other useful tasks — run `task --list-all` for the full list:
 
 ## Running tests
 
-```
+```sh
 task dotnet:test        # backend unit tests (xUnit)
 task frontend:test      # frontend unit tests (Vitest)
 task frontend:test-e2e  # end-to-end tests (Playwright)

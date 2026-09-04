@@ -28,13 +28,14 @@
         <li>The receiver can <strong>accept</strong> or <strong>deny</strong> a request.</li>
         <li>A sender can only ever have <strong>one</strong> outstanding request at a time, and can withdraw it.</li>
       </ul>
-      <div class="callout limitation">
-        <span class="callout-title">Accept doesn't start a game — yet</span>
+      <div class="callout">
+        <span class="callout-title">What happens after accept</span>
         <p>
-          Accepting only <em>resolves</em> the request (removes it, tells both clients). Actually starting a synced
-          game — picking a shared verse, syncing rounds between the two players — depends on round sync, which
-          isn't built yet (see <a href="../multiplayer-rooms/index.html">Multiplayer rooms</a>). Wiring that up is
-          future work; this feature stops at "both players know the challenge was accepted."
+          Accepting doesn't just resolve the request — it starts the synced <code>GameSession</code> the request
+          described: the server picks a shared first verse and broadcasts <code>RoundStarted</code> to the room
+          immediately after <code>PlayRequestAccepted</code>. See
+          <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for everything that happens
+          from there — guessing, scoring, round advancement, timers, forfeit, and the final results screen.
         </p>
       </div>
 
@@ -50,20 +51,31 @@
       <p><span class="file-ref">backend/Domain/Game.fs</span></p>
       <pre><code>type GameType =
     | AllVerses
-    | Books of string list
-    | Chapters of Map&lt;string, int list&gt;
+    | Books of int list
+    | Chapters of Map&lt;int, int list&gt;
 
 type PlayRequest =
     { FromPlayerId: PlayerId
       FromPlayerName: string
       ToPlayerId: PlayerId
       GameType: GameType
+      RoundCount: int
+      RoundTimeLimit: TimeLimit
       SentAt: DateTimeOffset }</code></pre>
       <p>
         <code>GameType</code> mirrors the shape of the existing <code>/api/verses/random</code> restriction query
         params (<code>book</code>/<code>bookChapter</code>, see <span class="file-ref">backend/Api/Program.fs</span>
         and <code>Verse.matchesRestriction</code>) rather than inventing new vocabulary — it's the same
-        all/books/chapters split as singleplayer's <code>SetupScope</code>.
+        all/books/chapters split as singleplayer's <code>SetupScope</code>. <code>Books</code>/<code>Chapters</code>
+        are keyed by book <strong>number</strong>, not name — the challenger picks books from their own
+        translation/file, and a number survives being matched against a different player's/the server's own
+        differently-spelled pool where a name wouldn't. See
+        <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the full rationale.
+      </p>
+      <p>
+        <code>RoundCount</code> and <code>RoundTimeLimit</code> are chosen alongside the game type, via
+        <code>&lt;bg-challenge-settings&gt;</code>'s round-count (3–10) and time-limit (0–60s, 0 = unlimited)
+        sliders, and carry straight through into the <code>GameSession</code> started on accept.
       </p>
       <p>
         Stored per-room on <code>Room.PendingRequests</code> — there's no cross-room player identity anywhere in
@@ -113,9 +125,13 @@ type PlayRequest =
         </thead>
         <tbody>
           <tr>
-            <td><code>SendPlayRequest(toPlayerId, gameType)</code></td>
+            <td><code>SendPlayRequest(toPlayerId, gameType, roundCount, timeLimitSeconds)</code></td>
             <td>client → server</td>
-            <td>target's <code>PlayerId</code> string + the chosen <code>GameType</code></td>
+            <td>
+              target's <code>PlayerId</code> string, the chosen <code>GameType</code>, the round count, and an
+              optional time limit in seconds (undefined/0 means unlimited — translated server-side into
+              <code>TimeLimit</code>)
+            </td>
           </tr>
           <tr>
             <td><code>WithdrawPlayRequest()</code></td>
@@ -125,7 +141,11 @@ type PlayRequest =
           <tr>
             <td><code>AcceptPlayRequest(fromPlayerId)</code></td>
             <td>client → server</td>
-            <td>the challenger's <code>PlayerId</code> string</td>
+            <td>
+              the challenger's <code>PlayerId</code> string. Also picks the first verse and starts the
+              <code>GameSession</code> — see <a href="../multiplayer-round-sync/index.html">Multiplayer round
+              sync</a>.
+            </td>
           </tr>
           <tr>
             <td><code>DenyPlayRequest(fromPlayerId)</code></td>
@@ -174,11 +194,15 @@ type PlayRequest =
       <h2>Frontend</h2>
       <p>
         <span class="file-ref">frontend/src/components/game-type-select.ts</span>
-        (<code>&lt;bg-game-type-select&gt;</code>) sits above the players list in the room screen and lets the
-        challenger pick All/Books/Chapters, reusing the same <code>&lt;bg-book-selector&gt;</code>/
-        <code>&lt;bg-chapter-selector&gt;</code> components singleplayer setup uses. It fires
-        <code>game-type-changed</code>; <span class="file-ref">bg-room-setup.ts</span> keeps the current selection
-        and turns it into a <code>GameType</code> (via <span class="file-ref">frontend/src/game-type.ts</span>'s
+        (<code>&lt;bg-game-type-select&gt;</code>) lets the challenger pick All/Books/Chapters, reusing the same
+        <code>&lt;bg-book-selector&gt;</code>/<code>&lt;bg-chapter-selector&gt;</code> components singleplayer setup
+        uses. It's now wrapped by <span class="file-ref">frontend/src/components/challenge-settings.ts</span>'s
+        <code>&lt;bg-challenge-settings&gt;</code>, which sits above the players list in the room screen and adds
+        the round-count/time-limit sliders alongside it (see
+        <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a>). <code>&lt;bg-game-type-select&gt;</code>
+        still fires its own <code>game-type-changed</code>, bubbled up as part of <code>&lt;bg-challenge-settings&gt;</code>'s
+        <code>challenge-settings-changed</code>; <span class="file-ref">bg-room-setup.ts</span> keeps the current
+        selection and turns it into a <code>GameType</code> (via <span class="file-ref">frontend/src/game-type.ts</span>'s
         <code>gameTypeFromRestriction</code>) each time a player is challenged.
       </p>
       <p>

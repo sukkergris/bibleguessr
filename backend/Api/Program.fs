@@ -60,7 +60,15 @@ let main args =
     |> ignore
 
     builder.Services
-        .AddSignalR()
+        .AddSignalR(fun options ->
+            // Without this, a hub method that fails via `failwith "..."`
+            // (e.g. "Room not found", "That name is already taken...")
+            // only reaches the client as a generic "An unexpected error
+            // occurred invoking '...' on the server." — the actual message
+            // is swallowed. These are deliberate, user-facing validation
+            // messages (never raw exception/stack-trace detail), so it's
+            // safe and necessary to let them through.
+            options.EnableDetailedErrors <- true)
         .AddJsonProtocol(fun options -> options.PayloadSerializerOptions.Converters.Add(JsonFSharpConverter(jsonOptions)))
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore

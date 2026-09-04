@@ -490,18 +490,49 @@ module Room =
     let markReconnected (playerId: PlayerId) (room: Room) =
         { room with DisconnectedPlayers = room.DisconnectedPlayers |> Map.remove playerId }
 
-    /// Removes every player who's been disconnected since before `cutoff`
-    /// (i.e. DisconnectedAt < cutoff — call with `DateTimeOffset.UtcNow -
-    /// disconnectGracePeriod`), along with any play requests they sent or
-    /// received (a request naming a since-removed player is meaningless to
-    /// keep around). If either removed player was in the room's
+    /// Removes every player in `idsToRemove` from the room entirely —
+    /// dropped from Players/DisconnectedPlayers, along with any play
+    /// requests they sent or received (a request naming a removed player
+    /// is meaningless to keep around). If any of them was in the room's
     /// ActiveGame, that game is also ended (forfeited) — the opponent, if
     /// any, is freed up to send/accept new requests immediately rather
     /// than being stuck "in a game" against someone who no longer exists.
-    /// Returns the updated room, the ids removed (for the caller to
-    /// broadcast PlayerLeft for each), and the surviving opponent's
-    /// PlayerId if a game was forfeited this way (None if no game was
-    /// affected, or if both players in it went stale at once).
+    /// Returns the updated room and the surviving opponent's PlayerId if
+    /// a game was forfeited this way (None if no game was affected, or if
+    /// both players in it were removed at once). Shared by
+    /// removeStaleDisconnections (the periodic sweep) and prepareJoin
+    /// (freeing up a disconnected player's name for their own reconnect).
+    let private removePlayers (idsToRemove: Set<PlayerId>) (room: Room) : Room * PlayerId option =
+        if idsToRemove.IsEmpty then
+            room, None
+        else
+            let affectedGame =
+                room.ActiveGame
+                |> Option.filter (fun s -> idsToRemove.Contains s.PlayerA || idsToRemove.Contains s.PlayerB)
+
+            let forfeitedOpponent =
+                affectedGame
+                |> Option.bind (fun s ->
+                    let opponent = if idsToRemove.Contains s.PlayerA then s.PlayerB else s.PlayerA
+                    if idsToRemove.Contains opponent then None else Some opponent)
+
+            let updated =
+                { room with
+                    Players = room.Players |> List.filter (fun p -> not (idsToRemove.Contains p.Id))
+                    DisconnectedPlayers = room.DisconnectedPlayers |> Map.filter (fun id _ -> not (idsToRemove.Contains id))
+                    PendingRequests =
+                        room.PendingRequests
+                        |> List.filter (fun r -> not (idsToRemove.Contains r.FromPlayerId) && not (idsToRemove.Contains r.ToPlayerId))
+                    ActiveGame = if affectedGame.IsSome then None else room.ActiveGame }
+
+            updated, forfeitedOpponent
+
+    /// Removes every player who's been disconnected since before `cutoff`
+    /// (i.e. DisconnectedAt < cutoff — call with `DateTimeOffset.UtcNow -
+    /// disconnectGracePeriod`). Returns the updated room, the ids removed
+    /// (for the caller to broadcast PlayerLeft for each), and the
+    /// surviving opponent's PlayerId if a game was forfeited this way —
+    /// see removePlayers.
     let removeStaleDisconnections (cutoff: DateTimeOffset) (room: Room) : Room * PlayerId list * PlayerId option =
         let staleIds =
             room.DisconnectedPlayers
@@ -510,26 +541,22 @@ module Room =
             |> List.map fst
             |> Set.ofList
 
-        if staleIds.IsEmpty then
-            room, [], None
-        else
-            let affectedGame =
-                room.ActiveGame
-                |> Option.filter (fun s -> staleIds.Contains s.PlayerA || staleIds.Contains s.PlayerB)
+        let updated, forfeitedOpponent = removePlayers staleIds room
+        updated, staleIds |> Set.toList, forfeitedOpponent
 
-            let forfeitedOpponent =
-                affectedGame
-                |> Option.bind (fun s ->
-                    let opponent = if staleIds.Contains s.PlayerA then s.PlayerB else s.PlayerA
-                    if staleIds.Contains opponent then None else Some opponent)
-
-            let updated =
-                { room with
-                    Players = room.Players |> List.filter (fun p -> not (staleIds.Contains p.Id))
-                    DisconnectedPlayers = room.DisconnectedPlayers |> Map.filter (fun id _ -> not (staleIds.Contains id))
-                    PendingRequests =
-                        room.PendingRequests
-                        |> List.filter (fun r -> not (staleIds.Contains r.FromPlayerId) && not (staleIds.Contains r.ToPlayerId))
-                    ActiveGame = if affectedGame.IsSome then None else room.ActiveGame }
-
-            updated, staleIds |> Set.toList, forfeitedOpponent
+    /// Checked before letting a new player join under `name` — see
+    /// docs/SCRUM/Featue.UniquePlayerName.md. Rejects (Error) if `name`
+    /// (case-sensitive) is already held by a player who's currently
+    /// CONNECTED. If it's held by a DISCONNECTED player instead — their
+    /// own dropped connection reconnecting under the same name, most
+    /// likely — that stale entry (and its pending requests/active game,
+    /// same as removeStaleDisconnections) is removed first so the
+    /// rejoin succeeds cleanly instead of either being rejected as a
+    /// duplicate or leaving a ghost entry behind.
+    let prepareJoin (name: string) (room: Room) : Result<Room, unit> =
+        match room.Players |> List.tryFind (fun p -> p.Name = name) with
+        | None -> Ok room
+        | Some existing when room.DisconnectedPlayers.ContainsKey existing.Id ->
+            let updated, _ = removePlayers (Set.singleton existing.Id) room
+            Ok updated
+        | Some _ -> Error ()

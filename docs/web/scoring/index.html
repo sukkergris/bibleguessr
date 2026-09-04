@@ -88,15 +88,17 @@
         so it can sit as a standalone sibling next to the backend's version for easy side-by-side comparison.
       </p>
 
-      <div class="callout limitation">
-        <span class="callout-title">A second, unused scorer</span>
+      <div class="callout">
+        <span class="callout-title">A second scorer, for multiplayer specifically</span>
         <p>
           <code>Scoring.pointsForGuess</code> (time-decaying: full points minus a penalty proportional to how much
-          of the round's time elapsed) and <code>Scoring.isCorrectGuess</code> also exist in
-          <span class="file-ref">Game.fs</span>, but nothing calls either of them today. They're reserved for a
-          future multiplayer round-timer feature — see <a href="../multiplayer-rooms/index.html">Multiplayer
-          rooms</a>'s "not built yet" section. Don't confuse them with <code>pointsForVerseGuess</code>, which is the
-          one actually in use.
+          of the round's time elapsed) and <code>Scoring.isCorrectGuess</code> (book-<strong>number</strong>-aware,
+          not name-based — see below) also exist in <span class="file-ref">Game.fs</span> — these are what
+          multiplayer rounds actually use for scoring, via <code>GameSession.scoreRound</code>. See
+          <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the full multiplayer
+          scoring/timer picture. This page's <code>pointsForVerseGuess</code>/<code>scoreGuess</code> pair is the
+          singleplayer scorer — the two are deliberately separate (multiplayer never recomputes points locally, and
+          singleplayer has no timer to decay against), don't confuse one for the other.
         </p>
       </div>
 

@@ -19,12 +19,13 @@ import {
   onPlayRequestReceived,
   onPlayRequestWithdrawn,
   onRoomPlayers,
+  onRoundStarted,
   sendChatMessage,
   sendPlayRequest,
   withdrawPlayRequest,
   type ConnectionState,
 } from '../signalr-client'
-import type { ChatMessage, PlayRequest, Player } from '../types'
+import type { ChatMessage, GameSession, PlayRequest, Player } from '../types'
 import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-name-storage'
 import './chat-panel'
 import './play-requests'
@@ -122,6 +123,22 @@ export class RoomSetup extends LitElement {
   @state()
   private activeGameOpponent?: ActiveGameOpponent
 
+  /** The first RoundStarted session for the CURRENT game, captured here —
+   * not just left to <bg-multiplayer-game>'s own onRoundStarted
+   * subscription — because AcceptPlayRequest's RoundStarted broadcast can
+   * arrive before that child component has even mounted (it's created by
+   * the very re-render that PlayRequestAccepted, sent moments earlier,
+   * triggers) and SignalR's hub.on has no replay/buffering for a listener
+   * that subscribes late. This component is already listening for
+   * RoundStarted continuously — see the subscription in _enterRoom — so
+   * it never misses the message, and hands whatever it most recently saw
+   * to <bg-multiplayer-game> as an initial value via its `initialSession`
+   * property (see the render below), closing the race structurally
+   * instead of relying on subscribe-before-broadcast timing luck.
+   * Cleared alongside activeGameOpponent once a game ends. */
+  @state()
+  private initialSession?: GameSession
+
   /** Set once <bg-multiplayer-game> reports the game ended normally
    * (game-over) — shows <bg-multiplayer-results> in place of the game
    * screen until the player dismisses it. */
@@ -146,6 +163,7 @@ export class RoomSetup extends LitElement {
   private _unsubscribePlayRequestDenied?: () => void
   private _unsubscribePlayerDisconnected?: () => void
   private _unsubscribePlayerLeft?: () => void
+  private _unsubscribeRoundStarted?: () => void
 
   disconnectedCallback() {
     this._unsubscribePlayerJoined?.()
@@ -160,6 +178,7 @@ export class RoomSetup extends LitElement {
     this._unsubscribePlayRequestDenied?.()
     this._unsubscribePlayerDisconnected?.()
     this._unsubscribePlayerLeft?.()
+    this._unsubscribeRoundStarted?.()
     super.disconnectedCallback()
   }
 
@@ -259,6 +278,7 @@ export class RoomSetup extends LitElement {
                 .opponentName=${this.activeGameOpponent.name}
                 .translation=${this.myTranslationChoice?.translation}
                 .verseSource=${this.myTranslationChoice?.verseSource}
+                .initialSession=${this.initialSession}
                 @game-over=${this._onMultiplayerGameOver}
                 @game-ended=${this._onMultiplayerGameEnded}
               ></bg-multiplayer-game>`
@@ -305,7 +325,14 @@ export class RoomSetup extends LitElement {
       const room = await api.createRoom()
       await this._enterRoom(room.code, playerName, () => joinRoom(room.code, playerName))
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to create a room.'
+      // A rejected hub invoke is a generic "An unexpected error occurred
+      // invoking '...' on the server." (SignalR hides the real failwith
+      // message by design) — the ACTUAL reason arrives just beforehand as
+      // a server-pushed "Error" event (see onHubError, subscribed inside
+      // _enterRoom before the invoke resolves/rejects), which already
+      // landed in this.error. Prefer that over the generic message rather
+      // than clobbering it.
+      this.error ?? (this.error = err instanceof Error ? err.message : 'Failed to create a room.')
       this.screen = { step: 'choose' }
     }
   }
@@ -318,7 +345,10 @@ export class RoomSetup extends LitElement {
     try {
       await this._enterRoom(roomCode, playerName, () => joinRoom(roomCode, playerName))
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to join the room.'
+      // See _onCreateRoom's comment — prefer the server-pushed Error
+      // message (already in this.error via onHubError) over SignalR's
+      // generic invoke-rejection message.
+      this.error ?? (this.error = err instanceof Error ? err.message : 'Failed to join the room.')
       this.screen = { step: 'choose' }
     }
   }
@@ -330,7 +360,10 @@ export class RoomSetup extends LitElement {
     try {
       await this._enterRoom(undefined, playerName, () => joinWorldChat(playerName))
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to join World chat.'
+      // See _onCreateRoom's comment — prefer the server-pushed Error
+      // message (already in this.error via onHubError) over SignalR's
+      // generic invoke-rejection message.
+      this.error ?? (this.error = err instanceof Error ? err.message : 'Failed to join World chat.')
       this.screen = { step: 'choose' }
     }
   }
@@ -382,13 +415,48 @@ export class RoomSetup extends LitElement {
       // A game only starts for the two players actually involved — every
       // other client in the room also sees this broadcast (see
       // GameHub.fs's targeting doc comment) but has no stake in it.
+      // initialSession is reset here (not just left over from a previous
+      // game) so a stale earlier session can never leak into this new
+      // one — see onRoundStarted below for why it's captured here at
+      // all.
       if (fromPlayerId === this.myPlayerId) {
         const opponent = this.players.find((p) => p.id === toPlayerId)
-        if (opponent) this.activeGameOpponent = { id: opponent.id, name: opponent.name }
+        if (opponent) {
+          this.activeGameOpponent = { id: opponent.id, name: opponent.name }
+          this.initialSession = undefined
+        }
       } else if (toPlayerId === this.myPlayerId) {
         const opponent = this.players.find((p) => p.id === fromPlayerId)
-        if (opponent) this.activeGameOpponent = { id: opponent.id, name: opponent.name }
+        if (opponent) {
+          this.activeGameOpponent = { id: opponent.id, name: opponent.name }
+          this.initialSession = undefined
+        }
       }
+    })
+    // Captured here — not left solely to <bg-multiplayer-game>'s own
+    // onRoundStarted subscription — because AcceptPlayRequest's
+    // RoundStarted broadcast (sent moments after PlayRequestAccepted,
+    // just above) can arrive before that child component even exists:
+    // it's created by the very re-render PlayRequestAccepted just
+    // triggered (see _renderRoom's activeGameOpponent branch), and
+    // SignalR's hub.on has no replay for a listener that subscribes
+    // late. This component has been listening continuously since before
+    // any of this happened, so it can't miss the message — whatever it
+    // last saw for MY current game is handed to <bg-multiplayer-game> as
+    // its `initialSession` property (see the render below), which reads
+    // it once on mount rather than waiting on its own subscription to
+    // win a timing race. Every event this component doesn't own the
+    // player-filtering logic for (is this session actually MY game?) is
+    // filtered the same way <bg-multiplayer-game> filters its own
+    // RoundStarted/RoundScored/GameOver — by checking both playerA/
+    // playerB against myPlayerId + the just-set opponent id — since this
+    // room can have other concurrent games (e.g. World chat) broadcasting
+    // the same event.
+    this._unsubscribeRoundStarted = onRoundStarted((session) => {
+      const opponentId = this.activeGameOpponent?.id
+      if (!opponentId) return
+      const pair = new Set([session.playerA, session.playerB])
+      if (pair.has(this.myPlayerId) && pair.has(opponentId)) this.initialSession = session
     })
     this._unsubscribePlayRequestDenied = onPlayRequestDenied((fromPlayerId, toPlayerId) => {
       this._resolvePlayRequest(fromPlayerId, toPlayerId)
@@ -480,6 +548,7 @@ export class RoomSetup extends LitElement {
   private _onMultiplayerGameOver(event: CustomEvent<MultiplayerGameOverDetail>) {
     this.mpResults = event.detail
     this.activeGameOpponent = undefined
+    this.initialSession = undefined
   }
 
   // The game view tore itself down locally without a results screen — the
@@ -487,6 +556,7 @@ export class RoomSetup extends LitElement {
   // onPlayerLeft handling). Just return to the normal room view.
   private _onMultiplayerGameEnded() {
     this.activeGameOpponent = undefined
+    this.initialSession = undefined
   }
 
   private _onBackToRoomFromResults() {
@@ -516,6 +586,7 @@ export class RoomSetup extends LitElement {
     this._unsubscribePlayRequestDenied?.()
     this._unsubscribePlayerDisconnected?.()
     this._unsubscribePlayerLeft?.()
+    this._unsubscribeRoundStarted?.()
 
     this.players = []
     this.messages = []
@@ -524,6 +595,7 @@ export class RoomSetup extends LitElement {
     this.sentRequestToId = undefined
     this.challengeSettings = { scope: 'all', roundCount: 5 }
     this.activeGameOpponent = undefined
+    this.initialSession = undefined
     this.mpResults = undefined
     this.disconnectedPlayerIds = new Set()
     this.error = undefined

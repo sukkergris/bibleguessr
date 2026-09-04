@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multiplayer Round Sync — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Multiplayer round sync</h1>
+      <p class="subtitle">
+        What happens after a play request is accepted: a server-authoritative <code>GameSession</code> that picks
+        each round's verse, times it, scores both players' guesses, advances or ends the game, and hands both
+        players a final scoreboard — while verse <em>text</em> never once crosses the wire.
+      </p>
+
+      <p>
+        Builds on <a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a> (the hub/room
+        foundation) and <a href="../play-requests/index.html">Start a game from chat</a> (how a game gets proposed
+        and accepted in the first place — this page picks up exactly where accepting leaves off).
+      </p>
+
+      <h2>What it does, end to end</h2>
+      <ol class="flow">
+        <li>
+          A challenger picks a game type, round count, and time limit (<code>&lt;bg-challenge-settings&gt;</code>)
+          and sends a play request — see <a href="../play-requests/index.html">Start a game from chat</a>.
+        </li>
+        <li>
+          The challenged player accepts. The server picks a first verse <em>reference</em> (never its text),
+          starts a <code>GameSession</code>, and broadcasts <code>RoundStarted</code> to the room — both players
+          land on the same round, at the same moment, seeing the same reference.
+        </li>
+        <li>
+          Each client independently resolves that reference into displayable text from its <strong>own</strong>
+          chosen translation/file, then shows <code>&lt;bg-verse-card&gt;</code> + <code>&lt;bg-guess-form&gt;</code>
+          (reused verbatim from singleplayer).
+        </li>
+        <li>
+          Each player submits a guess. Once <strong>both</strong> have guessed — or the round's time limit elapses,
+          whichever comes first — the server scores the round, broadcasts <code>RoundScored</code>, and either
+          starts the next round (<code>RoundStarted</code> again) or ends the game (<code>GameOver</code>).
+        </li>
+        <li>
+          On <code>GameOver</code>, both clients tear down the round view and show
+          <code>&lt;bg-multiplayer-results&gt;</code> — a final scoreboard with a per-round breakdown assembled
+          entirely client-side.
+        </li>
+      </ol>
+
+      <h2>Domain model</h2>
+      <p><span class="file-ref">backend/Domain/Game.fs</span></p>
+      <pre><code>type TimeLimit =
+    | Unlimited
+    | LimitedTo of TimeSpan
+
+type GameSession =
+    { PlayerA: PlayerId
+      PlayerB: PlayerId
+      GameType: GameType
+      RoundCount: int
+      RoundTimeLimit: TimeLimit
+      RoundIndex: int
+      Round: RoundState
+      RoundStartedAt: DateTimeOffset option
+      GuessesThisRound: Map&lt;PlayerId, Guess&gt;
+      Scores: Map&lt;PlayerId, int&gt; }
+
+type GameOverReason =
+    | Completed
+    | Forfeited of remainingPlayer: PlayerId option</code></pre>
+      <p>
+        <code>TimeLimit</code> is a named DU rather than a bare <code>TimeSpan option</code> so "no limit" is a case
+        every consumer (scoring, the timeout sweep) has to handle explicitly, instead of an ambiguous
+        <code>None</code> that could be misread as "not set yet." The time-per-verse slider in
+        <code>&lt;bg-challenge-settings&gt;</code> runs 0–60 seconds, where 0 means <code>Unlimited</code>.
+      </p>
+      <p>
+        A <code>GameSession</code> lives at <code>Room.ActiveGame: GameSession option</code> — at most one per room
+        at a time, and each player may be in at most one active game across the whole app (enforced at
+        <code>SendPlayRequest</code>/<code>AcceptPlayRequest</code>, not in the domain itself — see the concurrency
+        section below). <code>RoundIndex</code> is 0-based; <code>GuessesThisRound</code> is cleared on every
+        <code>advanceRound</code>; <code>Scores</code> is a running total across the whole game, seeded to 0 for
+        both players at <code>start</code> — deliberately not <code>Player.Score</code>, which stays unused, since a
+        game's score belongs to the game, not a player record that outlives many games in the same room.
+      </p>
+      <p>
+        <code>GameOverReason</code> distinguishes a normally-completed game from a forfeited one.
+        <code>Forfeited</code> carries the surviving player, if there is one — both players can be gone at once (a
+        simultaneous disconnect sweep), in which case it's <code>None</code> and neither side is declared a winner.
+      </p>
+      <p>
+        The <code>GameSession</code> module (<code>start</code>, <code>submitGuess</code>, <code>bothGuessed</code>,
+        <code>scoreRound</code>, <code>advanceRound</code>, <code>isOver</code>, <code>isRoundExpired</code>) is
+        pure — every timestamp it needs (<code>startedAt</code>, <code>scoredAt</code>, <code>now</code>) is passed
+        in rather than read from <code>DateTimeOffset.UtcNow</code> internally, which is what makes all of it
+        unit-testable without any SignalR or background-service plumbing (see
+        <span class="file-ref">backend/Tests/GameSessionTests.fs</span>).
+      </p>
+
+      <h2>Verse text never crosses the wire</h2>
+      <p>
+        Per <span class="file-ref">CLAUDE.md</span>'s data-security rule, uploaded verse text must never be sent to
+        the server or to other players — only book/chapter/verse numbers may be transmitted. A multiplayer round's
+        server-side state reflects this directly:
+      </p>
+      <pre><code>type VerseReference =
+    { Book: string
+      BookNumber: int
+      Chapter: int
+      VerseNumber: int }
+
+type RoundState =
+    | WaitingForPlayers
+    | InProgress of VerseReference
+    | Scored of VerseReference * GuessResult list</code></pre>
+      <p>
+        <code>RoundState</code> only ever carries a <code>VerseReference</code>, never a full <code>Verse</code> —
+        there is no field anywhere in a <code>GameSession</code> that could hold verse text. The server picks which
+        verse a round is about and scores guesses against it purely from these fields. Each client independently
+        resolves the reference to displayable text from its <strong>own</strong> locally-chosen
+        <code>VerseSource</code> — the server never renders or forwards anyone's text, and two players in the same
+        game may legitimately be reading two different translations or uploaded files for the very same round.
+      </p>
+      <p>
+        <code>Book</code> is kept on <code>VerseReference</code> purely for display (it's whichever pool's spelling
+        picked the round's verse, typically the server's own) — matching/scoring always goes through
+        <code>BookNumber</code>, never <code>Book</code>.
+      </p>
+
+      <h3>Frontend resolution — <span class="file-ref">frontend/src/local-verses.ts</span> / <span class="file-ref">frontend/src/api.ts</span></h3>
+      <p>
+        <code>VerseSource.lookupVerse(reference, translation)</code> is the one call every client makes to turn a
+        bare reference into something displayable, always against the viewer's <strong>own</strong> chosen
+        translation/file — never the opponent's, never anything the server pushes. For the server-backed source
+        (<span class="file-ref">frontend/src/api.ts</span>), this hits <code>GET /api/verses/lookup</code>, which
+        prefers <code>bookNumber</code> over the reference's <code>book</code> name for exactly the reason above —
+        matching by name would reintroduce the cross-translation spelling mismatch <code>bookNumber</code> exists to
+        fix. For an uploaded file (<span class="file-ref">frontend/src/local-verses.ts</span>'s
+        <code>createLocalVerseSource</code>), the same resolution happens entirely client-side against the parsed
+        <code>Verse[]</code> in memory — no network call at all, so an uploaded file's text never leaves the
+        browser it was parsed in.
+      </p>
+      <p>
+        If a player's own source can't find the referenced verse at all (a real translation/file mismatch — see the
+        book-number section below for why this is rare but possible), <code>&lt;bg-multiplayer-game&gt;</code> shows
+        a small error in place of the verse card for that round rather than a broken guess form — the round still
+        resolves normally via the opponent's guess or the timer even for the player who can't see it.
+      </p>
+
+      <h2>The book-number matching system</h2>
+      <p><span class="file-ref">backend/Domain/Verses.fs</span> (<code>Verse.bookNumbers</code>, <code>bookNumberOf</code>, <code>bookAtNumber</code>, <code>matchesRestrictionByNumber</code>)</p>
+      <p>
+        Since verse text can never cross the wire, and two players may have entirely different Bible
+        files/translations, something else has to let them agree on "which book" a guess or restriction refers to.
+        Book <em>names</em> can't be trusted for this — not just across translations/languages (a challenger's
+        Danish file might call a book "1.Mosebog" while the server's own pool calls it "Genesis"), but even
+        <em>within</em> the very same translation: a real production bug in the bibelen-dk loader produced both
+        <code>"Jeremias"</code> and <code>"Jeremias."</code> (trailing period) for what is really one book, a
+        parsing artifact that shifted every later book's number by one and once caused a round to reference an
+        impossible verse ("Markus 25:38" — the real Markus/Mark has only 16 chapters). See
+        <span class="file-ref">backend/Tests/BibelenDkLoaderTests.fs</span> for the fix
+        (<code>normalizeBookNames</code>) and <span class="file-ref">backend/Tests/BookNumberTests.fs</span> for the
+        matching fix itself.
+      </p>
+      <p>
+        The fix: every book gets a stable <strong>number</strong> instead of being identified by name — its 1-based
+        position in the order it's first encountered in a verse list. This is exactly the "Bible order"
+        (Genesis..Revelation) every loader already produces by construction, just finally captured as a number.
+        Two different sources that agree on every earlier book's presence/order will assign the very same book the
+        very same number, regardless of how each one spells it — "Dommer" in one file and "Dommerne" in another
+        both land on book 7 if both files agree on the six books before it.
+      </p>
+      <p>
+        This number is what actually crosses the client/server boundary, in three places:
+      </p>
+      <ul>
+        <li>
+          <strong><code>GameType.Books</code>/<code>Chapters</code></strong> — a challenger restricts a game to
+          books/chapters picked from <em>their own</em> source, so what's sent is the book numbers <em>their own</em>
+          source assigned, not names.
+        </li>
+        <li>
+          <strong><code>VerseReference.BookNumber</code></strong> — the round's verse, numbered against the
+          <em>server's own</em> pool (the reference edition everything is ultimately matched against).
+        </li>
+        <li>
+          <strong><code>Guess.BookNumber</code></strong> — a submitted guess, numbered against the
+          <em>guessing player's own</em> source (see <span class="file-ref">frontend/src/game-type.ts</span>'s
+          <code>bookNumberOfGuess</code> and <span class="file-ref">frontend/src/book-numbers.ts</span>).
+        </li>
+      </ul>
+      <p>
+        <code>Scoring.isCorrectGuess</code> (backend) matches a guess to the round's verse by
+        <code>BookNumber</code> whenever the guess has one, falling back to name matching only if the guessing
+        player's own source couldn't resolve a number for what they typed at all (e.g. free-text entry the source
+        doesn't recognize). See <span class="file-ref">backend/Tests/MultiplayerScoringByNumberTests.fs</span> and
+        <span class="file-ref">backend/Tests/GameTypeNumberTests.fs</span> for the full matrix.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Known limit</span>
+        <p>
+          Two sources only agree on a book's number as long as they agree on every <em>earlier</em> book's
+          presence/order too — a file missing a book, or covering a different canon, disagrees with another from
+          that point on. Accepted the same way this codebase already accepts that per-player translation/file
+          mismatches are rare, rather than solved outright.
+        </p>
+      </div>
+
+      <h2>Hub protocol</h2>
+      <p><span class="file-ref">backend/Api/GameHub.fs</span></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Method / Event</th>
+            <th>Direction</th>
+            <th>Payload</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>AcceptPlayRequest(fromPlayerId)</code></td>
+            <td>client → server</td>
+            <td>
+              the challenger's <code>PlayerId</code> string. On success, picks the first verse and starts the
+              <code>GameSession</code> — see below.
+            </td>
+          </tr>
+          <tr>
+            <td><code>SubmitGuess(book, bookNumber, chapter, verseNumber)</code></td>
+            <td>client → server</td>
+            <td>
+              the caller's guess for the current round of their active game. <code>bookNumber</code> is optional
+              (<code>None</code> if the caller's own source couldn't resolve one). No broadcast on an individual
+              submission — the round only announces itself once resolved.
+            </td>
+          </tr>
+          <tr>
+            <td><code>ForfeitGame()</code></td>
+            <td>client → server</td>
+            <td>— (no-op if the caller has no active game)</td>
+          </tr>
+          <tr>
+            <td><code>RoundStarted</code></td>
+            <td>server → room group</td>
+            <td>
+              the full <code>GameSession</code> — sent right after <code>AcceptPlayRequest</code> succeeds (round 0)
+              and again every time a round advances. A full snapshot, not a delta, so a client that remounts
+              mid-game always has authoritative state.
+            </td>
+          </tr>
+          <tr>
+            <td><code>RoundScored</code></td>
+            <td>server → room group</td>
+            <td>the full <code>GameSession</code>, with <code>Round</code> now the <code>Scored</code> case</td>
+          </tr>
+          <tr>
+            <td><code>GameOver</code></td>
+            <td>server → room group</td>
+            <td>
+              <code>(Scores, PlayerA, PlayerB, Reason)</code> — <code>Scores</code> is the full final running total
+              per player id, <code>Reason</code> is a <code>GameOverReason</code>
+            </td>
+          </tr>
+          <tr>
+            <td><code>Error</code></td>
+            <td>server → caller only</td>
+            <td>a plain error message string (e.g. "You don't have an active game", "This round is no longer accepting guesses")</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Every game event is broadcast to the <em>whole</em> room group, not routed to just the two players involved
+        — the same tradeoff <a href="../play-requests/index.html">play requests</a> already make, since
+        <code>RoomStore</code> has no <code>PlayerId → connectionId</code> reverse index. A room can have more than
+        one game running concurrently (e.g. two unrelated pairs in World chat), so
+        <code>&lt;bg-multiplayer-game&gt;</code> filters every event to sessions/scores that actually name its own
+        two players before acting on them.
+      </p>
+
+      <h2>How a round resolves — <code>resolveRound</code></h2>
+      <p>
+        Scoring a round, broadcasting the result, and deciding whether to advance or end the game is shared logic —
+        <code>GameHub.fs</code>'s private <code>resolveRound</code> function — called from two different places
+        that both need to do exactly the same thing:
+      </p>
+      <ul>
+        <li><code>SubmitGuess</code>, the instant both players have a guess recorded for the current round.</li>
+        <li><code>RoundTimeoutService</code>'s sweep, the instant a round's time limit elapses (see below).</li>
+      </ul>
+      <p>
+        <code>resolveRound</code> scores the round (<code>GameSession.scoreRound</code>) and decides whether to end
+        the game or advance to a freshly-picked verse entirely <strong>inside one <code>RoomStore.Update</code>
+        call</strong> (see the concurrency callout below) — not against a session snapshot the caller already had
+        lying around — then broadcasts <code>RoundScored</code> and either <code>GameOver(Completed)</code> (last
+        round) or <code>RoundStarted</code> again. A player who never guessed the round gets no
+        <code>GuessResult</code> entry at all — an implicit 0, distinguishable from "guessed wrong."
+      </p>
+      <div class="callout">
+        <span class="callout-title">Fixed during this feature: a real lost-write race in <code>RoomStore</code></span>
+        <p>
+          Every hub method that touches a room — <code>SubmitGuess</code> included — used to do a plain
+          <code>TryGet room -&gt; compute newRoom -&gt; Set(code, newRoom)</code> sequence. Each step is atomic on
+          its own (<code>ConcurrentDictionary</code>), but the sequence as a whole isn't: two players submitting a
+          guess for the same round at nearly the same instant could each <code>TryGet</code> the same starting
+          snapshot, compute two different updates from it, and then <code>Set</code> one after the other — the
+          second <code>Set</code> silently discarding the first caller's entire change. This could lose a guess
+          outright (the round never resolves, since <code>bothGuessed</code> never becomes true for either caller)
+          or resurrect an already-ended <code>ActiveGame</code>, permanently stuck-blocking that room's players
+          ("You can't send a play request while a game is in progress" with no game visibly running, even after a
+          real game had already finished).
+        </p>
+        <p>
+          The fix: <code>RoomStore.Update(code, f: Room -&gt; Room)</code> — a real optimistic
+          compare-and-swap retry loop (<code>TryGetValue</code> + <code>TryUpdate</code>, retried on contention) —
+          replaces every <code>TryGet</code>+<code>Set</code> pair across the whole hub, not just in
+          <code>resolveRound</code>/<code>SubmitGuess</code>. <code>RoomStore.Set</code> itself was removed once
+          nothing called it anymore, so the footgun can't be reached by a future call site. See
+          <span class="file-ref">backend/Tests/RoomStoreConcurrencyTests.fs</span> — including a test that
+          reintroduces the old pattern and confirms it fails these tests reliably.
+        </p>
+      </div>
+
+      <h2>Timer &amp; timeout sweep</h2>
+      <p>
+        A round's countdown is computed entirely client-side, from <code>RoundStartedAt</code> +
+        <code>RoundTimeLimit</code> (see <span class="file-ref">frontend/src/timer.ts</span>'s
+        <code>deadlineOf</code>/<code>computeRemainingSeconds</code>) — no server round-trip needed just to tick a
+        clock down. But something server-side still has to actually <em>enforce</em> the deadline once it passes,
+        even if a player never submits anything.
+      </p>
+      <p>
+        <span class="file-ref">backend/Api/GameHub.fs</span>'s <code>RoundTimeoutService</code> is a
+        <code>BackgroundService</code> that sweeps every room's <code>ActiveGame</code> once a second, looking for a
+        round whose <code>GameSession.isRoundExpired</code> is true, and calling the exact same
+        <code>resolveRound</code> function <code>SubmitGuess</code> uses.
+      </p>
+      <div class="callout">
+        <span class="callout-title">Why a sweep instead of a scheduled per-round callback</span>
+        <p>
+          A per-round <code>Task.Delay</code>/timer callback would need to be cancelled the instant
+          <code>SubmitGuess</code> resolves the same round early (both players guessed before time ran out) — that's
+          real cancellation-token plumbing threaded through every round-advance path, and a real race if the
+          callback fires at the same moment a guess lands. A periodic sweep sidesteps all of it:
+          <code>GameSession.isRoundExpired</code> only ever matches a round that's <em>still</em>
+          <code>InProgress</code>, so a round <code>SubmitGuess</code> already advanced or scored a moment earlier
+          is simply skipped on the sweep's next tick. Self-healing against races, no cancellation or locking needed
+          — consistent with <code>RoomStore.Update</code>'s own atomic read-modify-write (see the callout above).
+          The 1-second interval (vs. <code>PlayerCleanupService</code>'s 30s — see
+          <a href="../player-presence/index.html">Player presence</a>) keeps a short round timer feeling responsive,
+          while still being trivially cheap for what's normally a handful of in-memory rooms.
+        </p>
+      </div>
+
+      <h2>Forfeit — two paths, one shape</h2>
+      <p>
+        A game can end early two ways, and both funnel through the exact same
+        <code>GameOver(Forfeited remainingPlayer)</code> broadcast shape:
+      </p>
+      <ul>
+        <li>
+          <strong>Explicit — <code>ForfeitGame()</code>.</strong> The caller clicks Forfeit in
+          <code>&lt;bg-multiplayer-game&gt;</code>, confirms a browser <code>confirm()</code> dialog, and the hub
+          method ends the game (<code>Room.forfeitGame</code>) and broadcasts <code>GameOver</code> naming the
+          opponent as the surviving player.
+        </li>
+        <li>
+          <strong>Implicit — disconnect past the grace period.</strong> If a participant in an active game
+          disconnects and stays gone longer than <code>Room.disconnectGracePeriod</code> (5 minutes — see
+          <a href="../player-presence/index.html">Player presence</a>), <code>PlayerCleanupService</code>'s periodic
+          sweep removes them and, because <code>Room.removeStaleDisconnections</code> also ends any
+          <code>ActiveGame</code> they were part of, broadcasts <code>GameOver(Forfeited)</code> naming whoever's
+          left.
+        </li>
+      </ul>
+      <p>
+        Both players being gone at once (a simultaneous disconnect sweep, or a room-cleanup edge case) yields
+        <code>Forfeited None</code> — no winner declared. On the frontend,
+        <code>&lt;bg-multiplayer-results&gt;</code>'s headline handles this explicitly ("Game ended" rather than
+        guessing a winner).
+      </p>
+
+      <h2>One active game per player</h2>
+      <p>
+        A <code>GameSession</code> lives on <code>Room</code>, but the domain layer itself doesn't stop the same
+        player from somehow ending up in two sessions across two different rooms — that guard is enforced at the
+        hub layer, in <span class="file-ref">backend/Api/GameHub.fs</span>:
+      </p>
+      <ul>
+        <li>
+          <code>SendPlayRequest</code> refuses (<code>Error</code>, no request created) if either the sender or the
+          target is already in an active game (<code>Room.isInActiveGame</code>).
+        </li>
+        <li>
+          <code>AcceptPlayRequest</code> refuses the same way, as a last-moment re-check — closing the (small) race
+          where either player joined a different game between sending/receiving the request and accepting it.
+        </li>
+      </ul>
+      <p>
+        See <span class="file-ref">backend/Tests/RoomActiveGameTests.fs</span> for the pure-domain side of this
+        (<code>Room.isInActiveGame</code>, <code>startGame</code>, <code>updateGame</code>, <code>endGame</code>,
+        <code>forfeitGame</code>).
+      </p>
+
+      <h2>Frontend component tree</h2>
+      <p>
+        <code>&lt;bg-challenge-settings&gt;</code> (<span class="file-ref">frontend/src/components/challenge-settings.ts</span>)
+        wraps the existing <code>&lt;bg-game-type-select&gt;</code> and adds two sliders — round count (3–10) and
+        time limit (0–60s, 0 meaning unlimited) — firing <code>challenge-settings-changed</code>. It sits above the
+        players list exactly where the game-type selector used to sit on its own.
+      </p>
+      <p>
+        Once a game is active, <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> swaps the
+        whole game-type-select/chat/play-requests block out for
+        <code>&lt;bg-multiplayer-game&gt;</code> (<span class="file-ref">frontend/src/components/multiplayer-game.ts</span>)
+        — the stateful orchestrator for everything moment-to-moment: the current round's resolved verse, my own
+        "guess locked in" state, the client-side countdown, the opponent's live connection status, and the running
+        scoreboard. It reuses <code>&lt;bg-verse-card&gt;</code>/<code>&lt;bg-guess-form&gt;</code> verbatim from
+        singleplayer — no multiplayer-specific fork of either — and fires <code>game-over</code> (server said the
+        game ended) or <code>game-ended</code> (a purely local teardown, e.g. the opponent left the room entirely)
+        back up to <code>bg-room-setup.ts</code>.
+      </p>
+      <div class="callout">
+        <span class="callout-title">Fixed: the game's first round could be silently lost on mount</span>
+        <p>
+          <code>AcceptPlayRequest</code> broadcasts <code>PlayRequestAccepted</code> then <code>RoundStarted</code>
+          in quick succession. <code>PlayRequestAccepted</code>'s handler in <code>bg-room-setup.ts</code> is what
+          mounts <code>&lt;bg-multiplayer-game&gt;</code> for the very first time — and that component's own
+          <code>onRoundStarted</code> subscription only started in its <code>connectedCallback</code>, which by
+          definition runs strictly <em>after</em> that mount. SignalR's <code>hub.on</code> has no
+          replay/buffering for a listener that subscribes late, so if <code>RoundStarted</code> happened to land in
+          the gap between the two broadcasts and the new component's <code>connectedCallback</code> actually
+          running, the game's very first round was lost outright — the player got stuck on "Waiting for the first
+          verse…" forever (an <code>Unlimited</code>-time-limit game never recovered at all; a timed one eventually
+          self-healed once <code>RoundTimeoutService</code>'s sweep caught the "expired" round and re-sent a fresh
+          <code>RoundStarted</code>).
+        </p>
+        <p>
+          Fixed by moving the catch: <code>bg-room-setup.ts</code> (already mounted for the whole room's lifetime,
+          well before any of this happens) now also subscribes to <code>onRoundStarted</code> directly, alongside
+          its other long-lived subscriptions, capturing whatever session it last saw into an
+          <code>initialSession</code> field. That's passed to <code>&lt;bg-multiplayer-game&gt;</code> as an
+          <code>initialSession</code> property, applied in <code>connectedCallback</code> (via a shared
+          <code>_applyRoundStarted</code> helper) <em>before</em> the child's own subscription starts — closing the
+          race structurally instead of depending on subscribe-before-broadcast timing luck. Verified via
+          <code>multiplayer-round.spec.ts --repeat-each=6</code>: 42/42 passed with zero flakes, versus a
+          previously-reproducible ~30-50% failure rate under the same conditions.
+        </p>
+      </div>
+      <p>
+        On <code>game-over</code>, <code>bg-room-setup.ts</code> shows
+        <code>&lt;bg-multiplayer-results&gt;</code> (<span class="file-ref">frontend/src/components/multiplayer-results.ts</span>)
+        — the final scoreboard plus a per-round breakdown. That breakdown is accumulated entirely client-side, one
+        entry per <code>RoundScored</code> event <code>&lt;bg-multiplayer-game&gt;</code> receives — the server
+        itself keeps no round history beyond the current round's <code>GuessesThisRound</code>. A "Back to room"
+        button clears both <code>mpResults</code> and <code>activeGameOpponent</code> in
+        <code>bg-room-setup.ts</code>, returning to the normal room view.
+      </p>
+      <p>
+        Because <code>GameType</code>/<code>Guess</code> carry book <em>numbers</em>, not names, several pieces of
+        UI have to resolve a number back to <em>this viewer's own</em> spelling before displaying or restricting
+        anything — see <span class="file-ref">frontend/src/game-type.ts</span>'s
+        <code>allowedBooksForGuessForm</code>, <code>lockedBookForGuessForm</code>,
+        <code>allowedChaptersForGuessForm</code>, and <code>bookNumberOfGuess</code> (used when submitting a guess),
+        all of which are async since resolving a number needs an awaited
+        <code>getBooksInBibleOrder()</code> call against the viewer's own <code>VerseSource</code>.
+      </p>
+
+      <h2>Verify it</h2>
+      <ul>
+        <li>
+          Backend unit: <span class="file-ref">backend/Tests/GameSessionTests.fs</span> (start/submitGuess/
+          bothGuessed/scoreRound/advanceRound/isOver/isRoundExpired mechanics),
+          <span class="file-ref">backend/Tests/RoomActiveGameTests.fs</span> (accept starts a game, forfeit/endGame,
+          stale-disconnect auto-forfeit and its surviving-opponent bookkeeping),
+          <span class="file-ref">backend/Tests/BookNumberTests.fs</span> and
+          <span class="file-ref">backend/Tests/GameTypeNumberTests.fs</span> (book-number derivation and
+          restriction matching), <span class="file-ref">backend/Tests/MultiplayerScoringByNumberTests.fs</span>
+          (guess scoring by number vs. the name-matching fallback), and
+          <span class="file-ref">backend/Tests/BibelenDkLoaderTests.fs</span> (the real-world "Jeremias." data bug
+          that motivated number-based matching in the first place), and
+          <span class="file-ref">backend/Tests/RoomStoreConcurrencyTests.fs</span> (the <code>RoomStore.Update</code>
+          lost-write fix above — including a concurrent-guess reproduction of the exact reported bug).
+        </li>
+        <li>
+          End-to-end: <span class="file-ref">frontend/e2e/multiplayer-round.spec.ts</span> — accepting starts a
+          synced round with the same verse both sides see; each player resolves that verse from their own
+          translation (proven via captured <code>/api/verses/lookup</code> requests, not just rendered text); both
+          players guessing auto-advances the round; a full short game reaches
+          <code>&lt;bg-multiplayer-results&gt;</code> with matching final scores on both pages; a player whose
+          uploaded file spells a book differently than the server still sees real verse text and scores correctly;
+          an opponent's closed tab shows the disconnected indicator; Forfeit prompts a confirm dialog.
+        </li>
+        <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
+        <span class="file-ref">backend/Domain/Verses.fs</span> ·
+        <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">backend/Api/Program.fs</span> ·
+        <span class="file-ref">frontend/src/types.ts</span> ·
+        <span class="file-ref">frontend/src/signalr-client.ts</span> ·
+        <span class="file-ref">frontend/src/game-type.ts</span> ·
+        <span class="file-ref">frontend/src/book-numbers.ts</span> ·
+        <span class="file-ref">frontend/src/local-verses.ts</span> ·
+        <span class="file-ref">frontend/src/api.ts</span> ·
+        <span class="file-ref">frontend/src/timer.ts</span> ·
+        <span class="file-ref">frontend/src/components/challenge-settings.ts</span> ·
+        <span class="file-ref">frontend/src/components/multiplayer-game.ts</span> ·
+        <span class="file-ref">frontend/src/components/multiplayer-results.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

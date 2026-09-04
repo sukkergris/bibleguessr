@@ -128,14 +128,22 @@
       </p>
 
       <div class="callout limitation">
-        <span class="callout-title">No reconnect-to-same-identity</span>
+        <span class="callout-title">No PlayerId session resume — but same-name reconnect is handled</span>
         <p>
           A player who reconnects (refreshes, or their connection recovers) always gets a brand-new
-          <code>Player</code>/<code>PlayerId</code> — there's no session-resume mechanism. There's deliberately no
-          "PlayerReconnected" event: the old, now-orphaned entry either gets swept out via <code>PlayerLeft</code>
-          once the grace period elapses, or the room simply ends up with a second, freshly-connected entry for the
-          same person under a new id. <code>Room.markReconnected</code> exists in the domain for a future version of
-          this, but nothing calls it yet.
+          <code>Player</code>/<code>PlayerId</code> — there's still no session-resume mechanism, and there's still
+          deliberately no "PlayerReconnected" event. <code>Room.markReconnected</code> remains unused by any hub
+          code path today.
+        </p>
+        <p>
+          That said, reconnecting under your <em>own name</em> is no longer a dead end the way it once was.
+          <a href="../unique-player-names/index.html">Unique player names</a>' <code>Room.prepareJoin</code> gives it
+          real, useful handling at the roster level: if your old connection is still sitting in
+          <code>DisconnectedPlayers</code> when you rejoin under the same name, that stale entry (and its pending
+          play requests/active game) is silently removed first, so the rejoin succeeds cleanly under a fresh id
+          instead of either being rejected as a duplicate name or leaving a second, ghost entry behind. What's still
+          missing is resuming the <em>old</em> <code>PlayerId</code> itself — score, in-progress game state, and
+          anything else keyed by the old id don't carry over to the new one.
         </p>
       </div>
 

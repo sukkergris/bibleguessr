@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Unique Player Names — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Unique player names</h1>
+      <p class="subtitle">
+        Two players in the same room can't have the same name. Joining under a name that's already in use is
+        rejected with a clear message — unless the name belongs to a disconnected player, in which case it's freed
+        up so a reconnecting player isn't locked out of their own name. Spec:
+        <span class="file-ref">docs/SCRUM/Featue.UniquePlayerName.md</span> (filename typo preserved as it exists on
+        disk).
+      </p>
+
+      <p>
+        Builds on <a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a> and
+        <a href="../player-presence/index.html">Player presence</a> — this feature's whole "disconnected vs.
+        connected" distinction is presence's <code>DisconnectedPlayers</code> bookkeeping, and its stale-removal path
+        reuses the same removal machinery presence's cleanup sweep uses.
+      </p>
+
+      <h2>What it does</h2>
+      <ul>
+        <li>Each player must have a unique name within a room (case-sensitive — see below).</li>
+        <li>Trying to join with a name already in use is rejected outright, with a clear on-screen message asking for another name.</li>
+        <li>Reconnecting under your own name (refresh, brief network drop) isn't treated as a duplicate — it silently frees up the old, now-disconnected entry so the rejoin succeeds.</li>
+        <li>Each player only ever has one name in the chat — there's exactly one <code>Player</code> record per join, and the roster/chat both render <code>Player.Name</code> directly, so there's no separate "display name" to drift out of sync.</li>
+      </ul>
+
+      <h2>The problem this solves</h2>
+      <p>
+        Without this, two players could both be "Alice" in the same room — the roster and chat log would have no way
+        to tell them apart, and clicking one to send a play request would be ambiguous about which "Alice" you meant.
+        The fix has two halves that have to work together: reject a genuine collision, but never punish someone for
+        simply losing and re-establishing their own connection (which <a href="../player-presence/index.html">player
+        presence</a> already treats as a graceful, expected event, not a departure).
+      </p>
+
+      <div class="callout">
+        <span class="callout-title">Case-sensitive by deliberate choice</span>
+        <p>
+          Name matching here is case-<strong>sensitive</strong> — "Alice" and "alice" are different names and can
+          coexist in the same room. That's a deliberate product decision for this feature specifically, not an
+          oversight: it goes against this codebase's usual <code>OrdinalIgnoreCase</code> convention for name-ish
+          matching (book names, for instance — see <code>Verse.matchesRestrictionByNumber</code>), and against a
+          case-insensitive match being the safer, more usual default for this kind of check. It was chosen anyway
+          for this feature and is pinned down by a dedicated test (see
+          <span class="file-ref">backend/Tests/UniquePlayerNameTests.fs</span>) so a future refactor doesn't
+          "helpfully" fix it into case-insensitivity by accident.
+        </p>
+      </div>
+
+      <h2>Domain model</h2>
+      <p><span class="file-ref">backend/Domain/Game.fs</span></p>
+      <pre><code>/// Checked before letting a new player join under `name` — see
+/// docs/SCRUM/Featue.UniquePlayerName.md. Rejects (Error) if `name`
+/// (case-sensitive) is already held by a player who's currently
+/// CONNECTED. If it's held by a DISCONNECTED player instead — their
+/// own dropped connection reconnecting under the same name, most
+/// likely — that stale entry (and its pending requests/active game,
+/// same as removeStaleDisconnections) is removed first so the
+/// rejoin succeeds cleanly instead of either being rejected as a
+/// duplicate or leaving a ghost entry behind.
+let prepareJoin (name: string) (room: Room) : Result&lt;Room, unit&gt; =
+    match room.Players |&gt; List.tryFind (fun p -&gt; p.Name = name) with
+    | None -&gt; Ok room
+    | Some existing when room.DisconnectedPlayers.ContainsKey existing.Id -&gt;
+        let updated, _ = removePlayers (Set.singleton existing.Id) room
+        Ok updated
+    | Some _ -&gt; Error ()</code></pre>
+      <p>
+        <code>prepareJoin</code> is built directly on top of a small refactor to the presence-cleanup code: the old,
+        single-purpose <code>removeStaleDisconnections</code> (the periodic sweep's entire job — remove everyone
+        disconnected before a cutoff) had its actual player-and-related-state removal logic pulled out into a
+        private <code>removePlayers (idsToRemove: Set&lt;PlayerId&gt;) (room: Room) : Room * PlayerId option</code>
+        helper. <code>removeStaleDisconnections</code> now just computes the stale id set and delegates;
+        <code>prepareJoin</code> calls the same helper with a one-element set (the single stale player whose name
+        collided). Both call sites get identical guarantees for free: the removed player is dropped from
+        <code>Players</code> and <code>DisconnectedPlayers</code>, any play request naming them (sent or received)
+        is dropped from <code>PendingRequests</code>, and if they were part of the room's <code>ActiveGame</code>
+        that game ends too — with the surviving opponent's id returned so the caller can broadcast
+        <code>GameOver(Forfeited)</code> for them, exactly as if the grace-period sweep had caught them.
+      </p>
+
+      <h3>What happens on join</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Situation</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Name isn't held by anyone in the room</td>
+            <td>Immediate join — <code>Ok room</code>, unchanged.</td>
+          </tr>
+          <tr>
+            <td>Name is held by a currently <strong>connected</strong> player</td>
+            <td>Rejected — <code>Error ()</code>. No player is added; the caller alone is told why.</td>
+          </tr>
+          <tr>
+            <td>Name is held by a currently <strong>disconnected</strong> player</td>
+            <td>
+              The stale entry is silently removed first (dropped from the roster, its pending play requests, and its
+              active game if any — with <code>PlayerLeft</code>/<code>GameOver(Forfeited)</code> broadcast to
+              everyone else exactly like the periodic sweep would), then the join proceeds normally under a
+              brand-new <code>PlayerId</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Hub wiring</h2>
+      <p><span class="file-ref">backend/Api/GameHub.fs</span></p>
+      <p>
+        <code>GameHub.JoinExistingRoom(room, playerName)</code> is the shared join path both
+        <code>JoinRoom</code> (room code) and <code>JoinWorldChat</code> (the always-open World chat room) delegate
+        to — they differ only in how they find/create the room. It calls <code>Room.prepareJoin</code> first, before
+        doing anything else:
+      </p>
+      <ul>
+        <li>
+          On <code>Error ()</code>: sends the caller (only) an <code>"Error"</code> event with the message
+          <code>"That name is already taken in this room. Please choose another."</code>, then
+          <code>failwith "Name already taken"</code> — no <code>PlayerJoined</code> is broadcast, and no player is
+          added.
+        </li>
+        <li>
+          On <code>Ok preparedRoom</code>: if a stale player was actually removed (detected by comparing
+          <code>preparedRoom.Players.Length</code> against the original room's), the hub broadcasts
+          <code>PlayerLeftEvent</code> for that player to the whole room group — and, if they were part of an
+          <code>ActiveGame</code>, also broadcasts <code>GameOverEvent</code> naming the surviving opponent with
+          reason <code>Forfeited</code> — the same two broadcasts <code>PlayerCleanupService</code>'s periodic sweep
+          sends for exactly this situation. Only then does the new <code>Player</code> get created, added, and the
+          usual <code>PlayerJoined</code>/<code>ChatHistory</code>/<code>RoomPlayers</code> sequence proceed.
+        </li>
+      </ul>
+
+      <div class="callout">
+        <span class="callout-title">A bug found and fixed while building this feature: EnableDetailedErrors</span>
+        <p>
+          Rejecting a hub call with <code>failwith "..."</code> alone isn't enough for the client to ever see the
+          message. By default, ASP.NET Core SignalR treats a hub method's thrown exception as a server-internal
+          detail and hides it — the client's rejected invoke only ever sees a generic
+          <em>"An unexpected error occurred invoking '...' on the server."</em>, with the real reason swallowed.
+          Building this feature surfaced that gap, since "That name is already taken..." is exactly the kind of
+          message a player actually needs to see. The fix, in <span class="file-ref">backend/Api/Program.fs</span>,
+          is <code>AddSignalR(fun options -&gt; options.EnableDetailedErrors &lt;- true)</code> — deliberately safe
+          here because every message thrown this way (across this whole hub, not just this feature) is a
+          hand-written, user-facing validation message, never raw exception/stack-trace detail.
+        </p>
+        <p>
+          That alone wasn't the whole fix. The frontend's join handlers (<span class="file-ref">frontend/src/components/bg-room-setup.ts</span>,
+          <code>_onCreateRoom</code>/<code>_onJoinRoom</code>/<code>_onJoinWorldChat</code>) each subscribe to a
+          server-pushed <code>onHubError</code> event <em>inside</em> <code>_enterRoom</code>, before awaiting the
+          join invoke — so the real "Error" message (now reaching the client thanks to
+          <code>EnableDetailedErrors</code>) typically lands in <code>this.error</code> slightly
+          <em>before</em> the invoke's promise itself rejects. Each catch block used to unconditionally overwrite
+          <code>this.error</code> with a generic fallback ("Failed to join the room.", etc.) once the invoke
+          rejected — clobbering the correct, specific message that had just arrived. The fix was changing that
+          overwrite to <code>this.error ?? (this.error = err instanceof Error ? err.message : 'Failed to join…')</code>:
+          only fall back to the generic message if nothing more specific got there first. This is a real,
+          non-obvious ordering bug (message arrives, then gets stomped moments later) rather than a feature detail —
+          worth knowing about since the same pattern (server-pushed error race-arriving just ahead of the invoke
+          rejection) will bite any future hub call that reports errors this way.
+        </p>
+      </div>
+
+      <h2>Frontend</h2>
+      <p>
+        No new frontend component was needed for this feature. The existing name input on the multiplayer
+        "choose" screen, and the existing join flow in <span class="file-ref">frontend/src/components/bg-room-setup.ts</span>,
+        already had everything required once the two backend-side fixes above were in place: the hub now actually
+        rejects a colliding name with a real message, that message now reaches the client
+        (<code>EnableDetailedErrors</code>), and the catch block now preserves it instead of overwriting it with a
+        generic fallback (the precedence fix). The rejected join simply surfaces as
+        <code>this.error</code>, rendered the same way any other join failure already was.
+      </p>
+
+      <h2>Verify it</h2>
+      <ul>
+        <li>
+          Backend: <span class="file-ref">backend/Tests/UniquePlayerNameTests.fs</span> — 9 scenarios covering
+          <code>Room.prepareJoin</code>: succeeds when the name is free; rejects a name held by a connected player;
+          is case-sensitive ("Alice" vs. "alice" can coexist); allows an unrelated new name alongside an existing
+          player; succeeds and removes a disconnected player of the same name; also drops that stale player's
+          disconnection bookkeeping; also drops their pending play requests; leaves other connected players and
+          their own requests untouched when only replacing a stale one; and ends the stale player's active game,
+          freeing their opponent.
+        </li>
+        <li>
+          End-to-end: <span class="file-ref">frontend/e2e/unique-player-name.spec.ts</span> — two scenarios against
+          live dev servers: joining World chat with a name already in use by a connected player is rejected with a
+          visible "already taken" message (and the rejected player never actually enters the room, while the
+          original player is unaffected); and reconnecting under your own name (closing the old browser context so
+          the connection actually drops, then rejoining under the identical name in a fresh context) succeeds,
+          with no "already taken" message shown.
+        </li>
+        <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
+        <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">backend/Api/Program.fs</span> ·
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> ·
+        <span class="file-ref">backend/Tests/UniquePlayerNameTests.fs</span> ·
+        <span class="file-ref">frontend/e2e/unique-player-name.spec.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>
