@@ -155,11 +155,26 @@ export class BgApp extends LitElement {
     this.rounds = []
   }
 
+  // Bails out to the home (mode-select) screen from anywhere — resets the
+  // same in-progress-game state _onPlayAgain does, so leaving mid-game
+  // doesn't leave stale rounds/verse/feedback lying around for next time.
+  private _onGoHome = () => {
+    this.phase = 'mode-select'
+    this.rounds = []
+    this.roundIndex = 0
+    this.verse = undefined
+    this.feedback = undefined
+    this.error = undefined
+  }
+
   render() {
     return html`
       <bg-connection-status .trackSignalR=${this.phase === 'room-setup'}></bg-connection-status>
       <div class="layout">
         <main>
+          ${this.phase !== 'mode-select'
+            ? html`<button type="button" class="home" @click=${this._onGoHome}>← Home</button>`
+            : null}
           ${this.phase === 'mode-select'
             ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
             : this.phase === 'setup'
@@ -226,6 +241,24 @@ export class BgApp extends LitElement {
       max-width: 640px;
       margin: 0 auto;
       padding: 2rem 1rem;
+    }
+
+    .home {
+      display: block;
+      margin: 0 0 1rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: transparent;
+      color: #6b6375;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .home {
+        color: #9ca3af;
+      }
     }
 
     header {

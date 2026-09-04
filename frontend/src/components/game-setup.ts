@@ -329,12 +329,24 @@ export class GameSetup extends LitElement {
     }
 
     .mode-switch button {
-      padding: 0.5rem 1rem;
+      flex: 1;
+      min-width: 0;
+      padding: 0.5rem 0.75rem;
       border-radius: 999px;
       border: 1px solid #ccc;
       background: transparent;
-      font-size: 0.9rem;
+      color: #2b2630;
+      font-size: 0.85rem;
+      line-height: 1.3;
+      text-align: center;
+      white-space: normal;
       cursor: pointer;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .mode-switch button {
+        color: #e5e1ea;
+      }
     }
 
     .mode-switch button.active {
