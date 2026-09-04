@@ -1,0 +1,312 @@
+/* Shared visual style for BibleGuessr's docs/web feature documentation.
+   Plain CSS only (no build step) — these pages are viewed via a VS Code
+   extension per CLAUDE.md's "Documentation" convention. */
+
+:root {
+  --bg: #faf9fc;
+  --surface: #ffffff;
+  --border: #e4dff0;
+  --text: #2b2630;
+  --text-muted: #6b6375;
+  --accent: #aa3bff;
+  --accent-soft: rgba(170, 59, 255, 0.08);
+  --accent-soft-strong: rgba(170, 59, 255, 0.16);
+  --code-bg: #f1eef7;
+  --ok: #16a34a;
+  --warn: #b45309;
+  --warn-bg: #fef3e2;
+  --danger: #dc2626;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17141c;
+    --surface: #1f1b26;
+    --border: #322c3d;
+    --text: #e5e1ea;
+    --text-muted: #9ca3af;
+    --accent: #c586ff;
+    --accent-soft: rgba(197, 134, 255, 0.12);
+    --accent-soft-strong: rgba(197, 134, 255, 0.22);
+    --code-bg: #262130;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --warn-bg: #3a2e12;
+    --danger: #f87171;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+}
+
+.page {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 5rem;
+}
+
+.breadcrumb {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.breadcrumb a {
+  color: var(--text-muted);
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+
+h1 {
+  font-size: 2rem;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.35rem;
+  margin: 2.5rem 0 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+h2:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  margin: 0 0 2rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 0.1em 0.4em;
+  border-radius: 5px;
+}
+
+pre {
+  background: var(--code-bg);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  margin: 0 0 1.25rem;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+ul,
+ol {
+  padding-left: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+li {
+  margin-bottom: 0.35rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+  margin: 0 0 1.25rem;
+}
+
+.card h3 {
+  margin-top: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.file-ref {
+  display: inline-block;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.callout {
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  margin: 0 0 1.25rem;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+}
+
+.callout.limitation {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+}
+
+.callout p:last-child {
+  margin-bottom: 0;
+}
+
+.callout-title {
+  display: block;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+
+.callout.limitation .callout-title {
+  color: var(--warn);
+}
+
+.flow {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+  counter-reset: flow;
+}
+
+.flow li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 1rem 2.4rem;
+  border-left: 2px solid var(--border);
+  margin-left: 0.9rem;
+}
+
+.flow li:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+
+.flow li::before {
+  content: counter(flow);
+  position: absolute;
+  left: -0.95rem;
+  top: -0.1rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pill {
+  display: inline-block;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  background: var(--code-bg);
+  padding: 0.15em 0.55em;
+  border-radius: 6px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.feature-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  color: var(--text);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.feature-card:hover {
+  border-color: var(--accent);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.feature-card h3 {
+  margin: 0 0 0.35rem;
+  color: var(--accent);
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+footer.page-footer {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}

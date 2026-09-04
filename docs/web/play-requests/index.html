@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Start a Game from Chat — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Start a game from chat</h1>
+      <p class="subtitle">
+        Click another online player's name to invite them — they see it in a list below the chat window, and you can
+        withdraw it any time. Spec: <span class="file-ref">docs/SCRUM/Feature.StartMPGame.md</span>.
+      </p>
+
+      <p>Builds on <a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a> — read that first if the hub/room basics aren't familiar yet.</p>
+
+      <h2>What it does</h2>
+      <ul>
+        <li>Click another player's name in the roster → sends them a play request.</li>
+        <li>The receiver sees every request addressed to them in a list below the chat window.</li>
+        <li>A sender can only ever have <strong>one</strong> outstanding request at a time.</li>
+        <li>The sender can withdraw their pending request.</li>
+      </ul>
+      <div class="callout limitation">
+        <span class="callout-title">Deliberately out of scope</span>
+        <p>
+          There's no accept/decline. The spec only asks for send/see/withdraw, and actually <em>accepting</em> a
+          request would mean starting a synced game — which depends on round sync, which isn't built yet (see
+          <a href="../multiplayer-rooms/index.html">Multiplayer rooms</a>). Building a fake accept button now would
+          just need reworking later, so a request simply sits visible until it's withdrawn or superseded.
+        </p>
+      </div>
+
+      <h2>REPLACE semantics</h2>
+      <p>
+        Sending a new request while one is already pending doesn't error — it silently retargets. Clicking a
+        different player just supersedes your old outstanding request with a new one, no explicit withdraw-first
+        step required. This mirrors Discord/Steam-style single-target invites, and avoids an extra
+        error-and-recovery UI path for what's usually just a misclick or a change of mind.
+      </p>
+
+      <h2>Domain model</h2>
+      <p><span class="file-ref">backend/Domain/Game.fs</span></p>
+      <pre><code>type PlayRequest =
+    { FromPlayerId: PlayerId
+      FromPlayerName: string
+      ToPlayerId: PlayerId
+      SentAt: DateTimeOffset }</code></pre>
+      <p>
+        Stored per-room on <code>Room.PendingRequests</code> — there's no cross-room player identity anywhere in
+        this codebase (a <code>PlayerId</code> only ever means something within the room that minted it), so a
+        global request store would invent structure nothing else needs.
+      </p>
+      <p>Pure functions on the <code>Room</code> module — the same "pure domain function, thin hub wrapper" pattern the <code>Scoring</code> module already used, which is what makes all of this unit-testable without any SignalR mocking:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Function</th>
+            <th>Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sendPlayRequest request room</code></td>
+            <td>Drops any existing request from the same sender, then adds the new one. This <em>is</em> the REPLACE semantics.</td>
+          </tr>
+          <tr>
+            <td><code>withdrawPlayRequest fromPlayerId room</code></td>
+            <td>Removes that sender's pending request, if any. No-op otherwise.</td>
+          </tr>
+          <tr>
+            <td><code>pendingRequestsFor toPlayerId room</code></td>
+            <td>Filters requests addressed to one player.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Hub protocol</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Method / Event</th>
+            <th>Direction</th>
+            <th>Payload</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>SendPlayRequest(toPlayerId)</code></td>
+            <td>client → server</td>
+            <td>target's <code>PlayerId</code> as a string</td>
+          </tr>
+          <tr>
+            <td><code>WithdrawPlayRequest()</code></td>
+            <td>client → server</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><code>PlayRequestReceived</code></td>
+            <td>server → room group</td>
+            <td>the full <code>PlayRequest</code> record</td>
+          </tr>
+          <tr>
+            <td><code>PlayRequestWithdrawn</code></td>
+            <td>server → room group</td>
+            <td>the withdrawing sender's <code>PlayerId</code> string</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>SendPlayRequest</code> validates the target is still in <code>room.Players</code> before creating the
+        request (<code>"Error"</code>, "That player is no longer in the room" otherwise).
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Broadcast, not routed</span>
+        <p>
+          <code>PlayRequestReceived</code> goes to the <em>whole</em> room group, not just the target — every
+          client just ignores requests not addressed to them (see the frontend section below). This is because
+          <code>RoomStore</code> has no <code>PlayerId → connectionId</code> reverse index today, and building one
+          just for this felt like more than the change needed. It's explicitly <strong>not</strong> a privacy
+          guarantee — a determined client could see it via devtools regardless — just a pragmatic simplification
+          for a hobby project's trust model.
+        </p>
+      </div>
+
+      <h2>Frontend</h2>
+      <p>
+        <span class="file-ref">frontend/src/components/play-requests.ts</span> (<code>&lt;bg-play-requests&gt;</code>) is a
+        new, separate "dumb" view component — kept apart from <code>chat-panel.ts</code> since it's a distinct
+        concern with its own event surface, matching the spec's "a list below the chat window." It shows incoming
+        requests ("X wants to play") and, if the viewer has one outstanding, "Request sent to Y" with a Withdraw
+        button, firing a <code>withdraw-play-request</code> event.
+      </p>
+      <p>
+        The click target is the <strong>players list only</strong>, not inline chat message sender names — a
+        stable, deliberate click target, versus making every scrolling chat message clickable and risking accidental
+        invites. <span class="file-ref">chat-panel.ts</span> fires <code>player-selected</code> (detail = clicked
+        player's id) when you click someone else's name; your own name renders without the click affordance.
+      </p>
+      <p>
+        <span class="file-ref">bg-room-setup.ts</span> owns <code>playRequests: PlayRequest[]</code> (addressed to
+        me) and <code>sentRequestToId?: string</code> (my own outstanding request). On
+        <code>PlayRequestReceived</code>: if the sender is <em>me</em>, it's an echo of my own send/retarget, so it
+        updates <code>sentRequestToId</code> instead of appending to the list; otherwise, if it's addressed to me,
+        it replaces any existing entry from that sender (mirroring REPLACE) and appends.
+      </p>
+
+      <h2>Verify it</h2>
+      <ul>
+        <li>
+          Backend: <span class="file-ref">backend/Tests/RoomTests.fs</span> and
+          <span class="file-ref">backend/Tests/PlayRequestTests.fs</span> — REPLACE semantics, independent senders
+          to the same target, isolated withdrawal.
+        </li>
+        <li>
+          End-to-end: <span class="file-ref">frontend/e2e/play-request.spec.ts</span> — two browser contexts, full
+          send → receive → withdraw round trip against live dev servers.
+        </li>
+        <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
+        <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">frontend/src/components/play-requests.ts</span> ·
+        <span class="file-ref">frontend/src/components/chat-panel.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> ·
+        <span class="file-ref">frontend/src/signalr-client.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Testing — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Reference</span>
+      <h1>Testing</h1>
+      <p class="subtitle">What's covered, what isn't, and exactly how to run all three layers.</p>
+
+      <h2>Run everything</h2>
+      <pre><code>task dotnet:test        # backend unit tests (xUnit)
+task frontend:test      # frontend unit tests (Vitest)
+task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
+      <p>
+        End-to-end tests need both dev servers already running in separate terminals
+        (<code>task dotnet:dev</code> and <code>task frontend:dev</code>) — Playwright doesn't spawn either one
+        itself, matching the repo's existing convention of running backend and frontend as two separate long-lived
+        processes. Once per machine, install Playwright's browser binaries:
+        <code>cd frontend &amp;&amp; npx playwright install</code>.
+      </p>
+
+      <h2>Backend — xUnit</h2>
+      <p><span class="file-ref">backend/Tests/BibleGuessr.Tests.fsproj</span></p>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Covers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>ScoringTests.fs</code></td>
+            <td><code>Scoring.pointsForVerseGuess</code> — every gated tier, case-insensitivity.</td>
+          </tr>
+          <tr>
+            <td><code>RoomTests.fs</code></td>
+            <td><code>addMessage</code> truncation/ordering, play-request send/withdraw/filter functions.</td>
+          </tr>
+          <tr>
+            <td><code>PlayRequestTests.fs</code></td>
+            <td>Retargeting (REPLACE), independent senders to the same target, isolated withdrawal.</td>
+          </tr>
+          <tr>
+            <td><code>DisconnectCleanupTests.fs</code></td>
+            <td>Mark/reconnect/sweep semantics, and that a removal cleans up that player's play requests too.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>All of these test pure functions in <span class="file-ref">Game.fs</span> directly — no SignalR mocking anywhere, by design (see the "pure domain function, thin hub wrapper" pattern mentioned on the <a href="../play-requests/index.html">play requests</a> and <a href="../player-presence/index.html">player presence</a> pages).</p>
+
+      <h2>Frontend unit — Vitest</h2>
+      <p><span class="file-ref">frontend/vitest.config.ts</span> — <code>node</code> environment, since current targets are plain functions with no DOM dependency.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Covers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>local-verses.test.ts</code></td>
+            <td><code>createLocalVerseSource</code>'s filtering, sorting, and dedup.</td>
+          </tr>
+          <tr>
+            <td><code>scoring.test.ts</code></td>
+            <td>Same scenarios as the backend's <code>ScoringTests.fs</code>, for side-by-side comparison.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout limitation">
+        <span class="callout-title">Coverage gap</span>
+        <p>
+          <span class="file-ref">epub-parser.ts</span>, <span class="file-ref">rtf-parser.ts</span>, and
+          <span class="file-ref">verse-cache.ts</span> have no dedicated unit tests despite non-trivial parsing
+          logic — see <a href="../local-bible-files/index.html">Bring your own Bible file</a>.
+        </p>
+      </div>
+
+      <h2>End-to-end — Playwright</h2>
+      <p><span class="file-ref">frontend/playwright.config.ts</span> — both specs use two independent browser contexts to simulate two separate players against the same live server.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Covers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>play-request.spec.ts</code></td>
+            <td>Full send → receive → withdraw round trip.</td>
+          </tr>
+          <tr>
+            <td><code>player-presence.spec.ts</code></td>
+            <td>
+              Closing one context flips the other player's status dot live; a name survives a page reload. Does
+              <strong>not</strong> drive the real 5-minute stale-removal sweep end-to-end — that would mean an
+              actual 5-minute wait in CI — that path is covered by the backend unit tests instead.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Related pages</h2>
+      <ul>
+        <li><a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a></li>
+        <li><a href="../play-requests/index.html">Start a game from chat</a></li>
+        <li><a href="../player-presence/index.html">Player presence</a></li>
+        <li><a href="../scoring/index.html">Scoring</a></li>
+        <li><a href="../local-bible-files/index.html">Bring your own Bible file</a></li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Tests/</span> ·
+        <span class="file-ref">frontend/src/*.test.ts</span> ·
+        <span class="file-ref">frontend/e2e/*.spec.ts</span> ·
+        <span class="file-ref">Taskfile.Dotnet.yml</span> ·
+        <span class="file-ref">Taskfile.Frontend.yml</span>
+      </footer>
+    </main>
+  </body>
+</html>

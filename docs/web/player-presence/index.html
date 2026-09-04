@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Player Presence — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Player presence</h1>
+      <p class="subtitle">
+        A live connection-status dot next to each player, automatic removal after 5 minutes of being disconnected,
+        and remembering your name per browser.
+      </p>
+
+      <p>Builds on <a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a>.</p>
+
+      <h2>The problem this solves</h2>
+      <p>
+        Originally, nothing in the hub ever removed a player from a room — closing a tab or losing the connection
+        left a stale entry sitting in the roster forever, unclickable-but-visible junk. This feature fixes that
+        without being harsh about it: a brief network drop or a page refresh shouldn't make someone vanish from the
+        roster mid-conversation.
+      </p>
+
+      <h2>The two-stage design</h2>
+      <ol class="flow">
+        <li>
+          <strong>Immediate:</strong> the instant a connection drops, the player is marked disconnected. They stay
+          fully visible and targetable in the roster — just flagged, via a red status dot instead of green.
+        </li>
+        <li>
+          <strong>After a grace period:</strong> if they haven't reconnected within
+          <code>Room.disconnectGracePeriod = 5 minutes</code>, a periodic sweep removes them for real, and every
+          other client's roster updates live.
+        </li>
+      </ol>
+
+      <h2>Backend</h2>
+
+      <h3>Domain functions</h3>
+      <p><span class="file-ref">backend/Domain/Game.fs</span></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Function</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>markDisconnected playerId at room</code></td>
+            <td>Records <code>playerId → at</code> in <code>Room.DisconnectedPlayers</code>. Does <strong>not</strong> remove them from <code>Players</code>.</td>
+          </tr>
+          <tr>
+            <td><code>markReconnected playerId room</code></td>
+            <td>Clears a pending disconnection. See the limitation callout below — nothing calls this today.</td>
+          </tr>
+          <tr>
+            <td><code>removeStaleDisconnections cutoff room</code></td>
+            <td>
+              Removes every player disconnected before <code>cutoff</code>, along with any play requests they sent
+              or received. Returns <code>(updatedRoom, removedPlayerIds)</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3><code>GameHub.OnDisconnectedAsync</code></h3>
+      <p><span class="file-ref">backend/Api/GameHub.fs</span></p>
+      <p>
+        On disconnect: drops the connection→player mapping, calls <code>Room.markDisconnected</code> with
+        <code>DateTimeOffset.UtcNow</code>, and broadcasts <code>PlayerDisconnected</code> to the room group.
+      </p>
+
+      <h3><code>PlayerCleanupService</code></h3>
+      <p><span class="file-ref">backend/Api/GameHub.fs</span> — registered via <code>AddHostedService</code> in <span class="file-ref">Program.fs</span></p>
+      <p>
+        A <code>BackgroundService</code> that sweeps every 30 seconds: for each room, computes
+        <code>cutoff = UtcNow - disconnectGracePeriod</code>, calls <code>Room.removeStaleDisconnections</code>, and
+        broadcasts <code>PlayerLeft</code> for each player actually removed.
+      </p>
+
+      <h3>Events</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Fires when</th>
+            <th>Frontend effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>PlayerDisconnected</code></td>
+            <td>immediately, connection drops</td>
+            <td>status dot turns red; player stays in every list</td>
+          </tr>
+          <tr>
+            <td><code>PlayerLeft</code></td>
+            <td>after the 5-minute sweep removes them</td>
+            <td>player removed from the roster and from any play requests involving them</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Frontend</h2>
+      <p>
+        <span class="file-ref">frontend/src/components/chat-panel.ts</span> renders a small
+        <code>.status-dot</code> (green = connected, red = connection trouble) next to each player's name, driven by
+        a <code>disconnectedPlayerIds: Set&lt;string&gt;</code> property. <span class="file-ref">bg-room-setup.ts</span>
+        adds to that set on <code>PlayerDisconnected</code> and, on <code>PlayerLeft</code>, removes the player from
+        the roster/play-request lists and clears them from the disconnected set.
+      </p>
+
+      <h3>Remembering your name</h3>
+      <p><span class="file-ref">frontend/src/player-name-storage.ts</span></p>
+      <p>
+        <code>loadRememberedPlayerName()</code> / <code>saveRememberedPlayerName(name)</code>, backed by
+        <code>localStorage</code> (key <code>bibleguessr:playerName</code>). Pre-fills the name input on the
+        multiplayer screen and saves on a successful join. This is a per-browser convenience only, not an identity —
+        the server still mints a fresh <code>PlayerId</code> on every join regardless. Both functions swallow
+        <code>localStorage</code> errors (private browsing, storage disabled) and just degrade to "nothing
+        remembered" rather than breaking the join flow.
+      </p>
+
+      <div class="callout limitation">
+        <span class="callout-title">No reconnect-to-same-identity</span>
+        <p>
+          A player who reconnects (refreshes, or their connection recovers) always gets a brand-new
+          <code>Player</code>/<code>PlayerId</code> — there's no session-resume mechanism. There's deliberately no
+          "PlayerReconnected" event: the old, now-orphaned entry either gets swept out via <code>PlayerLeft</code>
+          once the grace period elapses, or the room simply ends up with a second, freshly-connected entry for the
+          same person under a new id. <code>Room.markReconnected</code> exists in the domain for a future version of
+          this, but nothing calls it yet.
+        </p>
+      </div>
+
+      <h2>Verify it</h2>
+      <ul>
+        <li>
+          Backend: <span class="file-ref">backend/Tests/DisconnectCleanupTests.fs</span> — mark/reconnect/sweep
+          semantics, including that a removal also drops that player's play requests.
+        </li>
+        <li>
+          End-to-end: <span class="file-ref">frontend/e2e/player-presence.spec.ts</span> — closes one browser
+          context and confirms the other player's dot flips red live while they stay visible (the grace period), and
+          confirms the remembered name survives a page reload. It doesn't drive the real 5-minute removal
+          end-to-end (that would mean an actual 5-minute wait in the test) — that path is covered by the backend
+          unit tests instead.
+        </li>
+        <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
+        <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">backend/Api/Program.fs</span> ·
+        <span class="file-ref">frontend/src/components/chat-panel.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> ·
+        <span class="file-ref">frontend/src/player-name-storage.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

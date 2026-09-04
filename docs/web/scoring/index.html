@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scoring — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Scoring</h1>
+      <p class="subtitle">
+        How many points a guess earns — book, chapter, and verse number each gated on the level before it also being
+        correct.
+      </p>
+
+      <h2>The tiers</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Guessed correctly</th>
+            <th>Points</th>
+            <th>Requires</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Book</td>
+            <td>10</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>+ Chapter</td>
+            <td>+100</td>
+            <td>book also correct</td>
+          </tr>
+          <tr>
+            <td>+ Verse number</td>
+            <td>+1000</td>
+            <td>book <em>and</em> chapter also correct</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>All three correct: <strong>1110</strong> total. Book matching is case-insensitive throughout.</p>
+
+      <h2>Mirrored by hand, backend and frontend</h2>
+      <p>
+        This exact tiered logic is implemented twice — once in F#, once in TypeScript — and deliberately kept in
+        sync by hand rather than shared via codegen, matching this project's existing convention for small,
+        rarely-changing shapes (see <span class="file-ref">frontend/src/types.ts</span>'s header comment).
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Backend</th>
+            <th>Frontend</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Function</td>
+            <td><code>Scoring.pointsForVerseGuess</code></td>
+            <td><code>scoreGuess</code></td>
+          </tr>
+          <tr>
+            <td>File</td>
+            <td><span class="file-ref">backend/Domain/Game.fs</span></td>
+            <td><span class="file-ref">frontend/src/scoring.ts</span></td>
+          </tr>
+          <tr>
+            <td>Book comparison</td>
+            <td><code>String.Equals(..., StringComparison.OrdinalIgnoreCase)</code></td>
+            <td><code>.trim().toLowerCase()</code> equality</td>
+          </tr>
+          <tr>
+            <td>Used by</td>
+            <td>domain logic, tested directly</td>
+            <td><code>bg-app.ts</code>'s <code>_onGuessSubmitted</code> — this is what actually drives singleplayer scoring</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>scoreGuess</code> was extracted out of <span class="file-ref">bg-app.ts</span> (it used to be a
+        private method there) specifically so it's directly unit-testable without instantiating the Lit element, and
+        so it can sit as a standalone sibling next to the backend's version for easy side-by-side comparison.
+      </p>
+
+      <div class="callout limitation">
+        <span class="callout-title">A second, unused scorer</span>
+        <p>
+          <code>Scoring.pointsForGuess</code> (time-decaying: full points minus a penalty proportional to how much
+          of the round's time elapsed) and <code>Scoring.isCorrectGuess</code> also exist in
+          <span class="file-ref">Game.fs</span>, but nothing calls either of them today. They're reserved for a
+          future multiplayer round-timer feature — see <a href="../multiplayer-rooms/index.html">Multiplayer
+          rooms</a>'s "not built yet" section. Don't confuse them with <code>pointsForVerseGuess</code>, which is the
+          one actually in use.
+        </p>
+      </div>
+
+      <h2>Verify it</h2>
+      <p>
+        Both sides assert the identical scenarios (wrong book → 0; right book, wrong or missing chapter → 10; right
+        book+chapter, wrong or missing verse → 110; all three correct → 1110; case-insensitivity) so a change to one
+        side that isn't mirrored on the other should show up as an obvious asymmetry between the two test files.
+      </p>
+      <ul>
+        <li><span class="file-ref">backend/Tests/ScoringTests.fs</span> — run via <code>task dotnet:test</code>.</li>
+        <li><span class="file-ref">frontend/src/scoring.test.ts</span> — run via <code>task frontend:test</code>.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
+        <span class="file-ref">frontend/src/scoring.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-app.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

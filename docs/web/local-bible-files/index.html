@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bring Your Own Bible File — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Bring your own Bible file</h1>
+      <p class="subtitle">
+        Client-side parsing of EPUB/RTF Bible exports, entirely in the browser — for translations the backend can't
+        legally redistribute.
+      </p>
+
+      <h2>Why this exists</h2>
+      <p>
+        Some translations (e.g. Jehovah's Witnesses' <em>Ny Verden-Oversættelsen</em>/NWT) can't be legally served
+        from a shared backend. Instead, the player supplies their own exported file; it's parsed and used entirely
+        in their own browser and never uploaded anywhere. This is why the backend only ever ships one public-domain
+        translation (<span class="file-ref">bibles/bibelen-dk</span>) — anything else has to come through this path.
+      </p>
+
+      <h2>Two supported export formats</h2>
+
+      <div class="card">
+        <h3>EPUB — <span class="file-ref">frontend/src/epub-parser.ts</span></h3>
+        <p>Targets "JW Library" family EPUB exports (a zip archive; <code>fflate</code>'s <code>unzip</code> pulls out the <code>.xhtml</code> chapter entries, skipping images).</p>
+        <ul>
+          <li>A chapter page is recognized by a nav header regex matching book name and (optional) chapter number.</li>
+          <li>
+            Verse boundaries come from <code>&lt;span id="chapter{N}_verse{M}"&gt;&lt;/span&gt;</code> markers —
+            <strong>not</strong> the rendered verse-number label, because verse 1 of a chapter renders the
+            <em>chapter</em> number as a drop cap, not "1". The marker id is the only reliable source.
+          </li>
+          <li>Strips the rendered number label and inline footnote markers, decodes HTML entities, collapses whitespace.</li>
+          <li>
+            Processes chapter files in batches of 50, yielding to the main thread between batches
+            (<code>requestIdleCallback</code>, falling back to <code>setTimeout</code>) so a multi-MB file doesn't
+            freeze the page.
+          </li>
+        </ul>
+        <p>
+          <code>detectEpubTranslationName(file)</code> reads <code>content.opf</code>'s <code>&lt;dc:title&gt;</code>/<code>&lt;dc:language&gt;</code>
+          metadata for a real display name (e.g. <em>"Ny Verden-Oversættelsen (nwt-D) (da)"</em>) rather than the
+          filename — JW Library exports are often all named identically regardless of language, so the filename
+          alone can't tell two cached translations apart.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>RTF — <span class="file-ref">frontend/src/rtf-parser.ts</span></h3>
+        <p>Targets "Bible Online Download" RTF exports: a zip with one <code>.rtf</code> file per book.</p>
+        <ul>
+          <li>Book name and chapter headings extracted via regex on specific RTF font/style groups.</li>
+          <li>
+            Verse markers recognized by a distinct RTF font selector (body text uses a different one) — the same
+            "the verse number is styled differently from the text" idea as the EPUB parser's drop-cap detection,
+            just expressed through RTF fonts instead of HTML.
+          </li>
+          <li>Single-chapter books (Obadiah, Philemon) have no chapter heading; all their verses default to chapter 1.</li>
+          <li>Handles <code>\uNNNN?</code> Unicode escapes and strips RTF control words.</li>
+          <li>Processes in batches of 5 books (smaller than EPUB's 50 — each RTF book file is much larger than one EPUB chapter fragment).</li>
+        </ul>
+        <div class="callout limitation">
+          <span class="callout-title">Known data-quality issue, left as-is</span>
+          <p>
+            About 5 of ~1,180 chapters have a mis-exported verse-number marker in the source data itself (e.g.
+            Judges 17:2), causing that verse's text to bleed into the previous one. This isn't a parser bug — it's
+            inherited from the export — and is documented in the file rather than worked around.
+          </p>
+        </div>
+      </div>
+
+      <p>Both parsers share a comment convention: bump <code>PARSER_VERSION</code> in <span class="file-ref">verse-cache.ts</span> if their regexes ever change, so stale cached parses get invalidated automatically.</p>
+
+      <h2>Caching — <span class="file-ref">frontend/src/verse-cache.ts</span></h2>
+      <p>
+        Caches the <em>parsed</em> <code>Verse[]</code> result in IndexedDB (database <code>bibleguessr</code>,
+        store <code>local-bible-cache</code>) — not the raw file. Browsers don't allow silently re-reading a
+        <code>File</code> across sessions without a new user gesture, so a returning visit can skip re-parsing, but
+        never skips the file picker itself.
+      </p>
+      <ul>
+        <li>
+          <code>fingerprintFile(file)</code> — key format <code>name:size:lastModified</code>, cheap to compute
+          without hashing the whole file, and doubles as the storage key so re-uploading the same file overwrites
+          rather than duplicates.
+        </li>
+        <li>
+          Multi-entry by design: <code>listCache()</code> returns every cached translation, newest first — a player
+          can have several cached files (different languages, EPUB and RTF both) and pick between them, rather than
+          only ever having the most recent upload available.
+        </li>
+        <li><code>writeCache(fingerprint, translation, verses)</code>, <code>deleteCacheEntry(fingerprint)</code>.</li>
+        <li>Entries from a stale <code>PARSER_VERSION</code> are filtered out as if absent, never silently served.</li>
+      </ul>
+
+      <h2>Wiring — <span class="file-ref">frontend/src/components/game-setup.ts</span></h2>
+      <ol class="flow">
+        <li>Toggle between <code>Mode = 'server' | 'file'</code>. On mount, <code>listCache()</code> populates a list of previously-cached files, shown instead of a raw dropzone if any exist.</li>
+        <li>File picker accepts <code>.epub,.zip</code> via a hidden input or drag-and-drop.</li>
+        <li>On a new file: validates the extension, lazily <code>import()</code>s the matching parser module.</li>
+        <li>Derives a translation name (EPUB metadata, or filename minus extension as fallback), parses with progress callbacks, writes the result to the cache.</li>
+        <li>
+          Wraps the parsed verses via <code>createLocalVerseSource(verses)</code>
+          (<span class="file-ref">local-verses.ts</span>) into a <code>VerseSource</code> — the same interface the
+          backend-backed <code>api</code> object implements, so <span class="file-ref">bg-app.ts</span> treats either
+          source identically regardless of where the verses came from.
+        </li>
+      </ol>
+
+      <h2>Verify it</h2>
+      <ul>
+        <li>
+          <span class="file-ref">frontend/src/local-verses.test.ts</span> covers
+          <code>createLocalVerseSource</code>'s filtering/sorting/dedup behavior.
+        </li>
+        <li>
+          <strong>Coverage gap:</strong> there are no dedicated unit tests for
+          <span class="file-ref">epub-parser.ts</span>, <span class="file-ref">rtf-parser.ts</span>, or
+          <span class="file-ref">verse-cache.ts</span> despite their parsing complexity — worth adding if you're
+          touching those files.
+        </li>
+        <li>Manual: upload a real EPUB/RTF export, confirm the parsed book/chapter/verse counts look right and the translation name displays sensibly, then reload the page and confirm it appears in the cached-file list without re-parsing.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">frontend/src/epub-parser.ts</span> ·
+        <span class="file-ref">frontend/src/rtf-parser.ts</span> ·
+        <span class="file-ref">frontend/src/verse-cache.ts</span> ·
+        <span class="file-ref">frontend/src/local-verses.ts</span> ·
+        <span class="file-ref">frontend/src/components/game-setup.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

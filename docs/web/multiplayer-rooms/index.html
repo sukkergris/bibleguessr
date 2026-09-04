@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multiplayer Rooms &amp; Chat — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Multiplayer rooms &amp; chat</h1>
+      <p class="subtitle">
+        Room codes, the always-open World chat, and the SignalR hub protocol that the play-request and presence
+        features both build on top of.
+      </p>
+
+      <h2>What it does</h2>
+      <p>
+        A player either creates a room (gets a random 4-digit code to share) or joins <strong>World chat</strong> — an
+        always-open room anyone can join with just a name, no code. Once in, everyone sees a live players list and a
+        real-time text chat. There's no round/scoring sync yet (see the callout below) — this is the room and chat
+        foundation other features are built on.
+      </p>
+
+      <h2>Backend</h2>
+
+      <h3>The <code>Room</code> type</h3>
+      <p><span class="file-ref">backend/Domain/Game.fs</span></p>
+      <pre><code>type Room =
+    { Code: RoomCode
+      Players: Player list
+      Round: RoundState
+      RecentMessages: ChatMessage list
+      PendingRequests: PlayRequest list
+      DisconnectedPlayers: Map&lt;PlayerId, DateTimeOffset&gt; }</code></pre>
+      <p>
+        <code>RecentMessages</code> is capped at <code>Room.maxRecentMessages = 20</code>, newest first, trimmed on
+        every <code>Room.addMessage</code> call — enough for a new joiner to land in a chat with context, without
+        keeping unbounded history for a long-lived room. <code>PendingRequests</code> and
+        <code>DisconnectedPlayers</code> belong to the play-request and presence features respectively — see their
+        own pages.
+      </p>
+
+      <h3><code>RoomStore</code></h3>
+      <p><span class="file-ref">backend/Api/GameHub.fs</span> — registered as a singleton in <span class="file-ref">Program.fs</span></p>
+      <p>
+        Two <code>ConcurrentDictionary</code>s: <code>rooms</code> (room code → <code>Room</code>) and
+        <code>connections</code> (SignalR connection id → <code>RoomCode * Player</code>). The second one exists so a
+        later hub call on the same connection (e.g. sending a chat message) can identify its sender from the
+        connection itself, rather than trusting whatever identity the client claims in the call's arguments.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Known limitation</span>
+        <p>
+          Everything is in-memory, single-instance. Fine for a hobby deployment; scaling out to multiple server
+          instances would need a distributed store (e.g. a Redis backplane) behind the same interface.
+        </p>
+      </div>
+
+      <h3>Creating vs. joining</h3>
+      <p>
+        Room <em>creation</em> is a plain REST endpoint, not a hub method — <code>POST /api/rooms</code> calls
+        <code>rooms.CreateRoom()</code> (random 4-digit code) and returns the <code>Room</code>. Everything else —
+        joining, chatting, play requests, presence — goes through the SignalR hub at <code>/hubs/game</code>.
+      </p>
+      <p>
+        World chat reuses the exact same join path with a reserved, non-numeric room code
+        (<code>WorldChatRoomCode = "WORLD"</code>, so it can never collide with a generated 4-digit code), created
+        lazily on first use via <code>RoomStore.GetOrCreateWorldRoom()</code>.
+      </p>
+
+      <h3>Hub methods</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>JoinRoom(roomCode, playerName)</code></td>
+            <td>Joins an existing room by code. Sends <code>"Error"</code> and throws if the code doesn't exist.</td>
+          </tr>
+          <tr>
+            <td><code>JoinWorldChat(playerName)</code></td>
+            <td>Joins (creating if needed) the World chat room.</td>
+          </tr>
+          <tr>
+            <td><code>SendChatMessage(text)</code></td>
+            <td>
+              Trims the text; rejects empty or over <code>maxChatMessageLength = 500</code> chars via
+              <code>"Error"</code>; otherwise records it into <code>RecentMessages</code> and broadcasts it.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Both join methods return <code>Task&lt;Player&gt;</code> — the caller's newly-minted <code>Player</code>
+        (fresh <code>PlayerId</code> every time). The frontend needs this to know which entry in its own players
+        list is "me".
+      </p>
+
+      <h3>What joining actually does</h3>
+      <p>Both join methods delegate to a shared private <code>JoinExistingRoom(room, playerName)</code>:</p>
+      <ol class="flow">
+        <li>Mints a new <code>Player { Id = Guid.NewGuid(); Name; Score = 0 }</code> and prepends it to the room.</li>
+        <li>Registers the connection → (room, player) mapping in <code>RoomStore</code>.</li>
+        <li>Adds the SignalR connection to a Group named by the room code.</li>
+        <li>Broadcasts <code>PlayerJoined</code> to the group (payload: the new <code>Player</code>).</li>
+        <li>Sends the caller (only) <code>ChatHistory</code> — recent messages, oldest first.</li>
+        <li>Sends the caller (only) <code>RoomPlayers</code> — the full roster, including themself.</li>
+      </ol>
+      <p>
+        The <code>RoomPlayers</code> snapshot exists specifically so a joiner sees everyone who was already there —
+        without it, they'd only ever learn about players who join <em>after</em> them via future
+        <code>PlayerJoined</code> broadcasts.
+      </p>
+
+      <h3>Events</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Sent to</th>
+            <th>Payload</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>PlayerJoined</code></td>
+            <td>room group</td>
+            <td>the new <code>Player</code></td>
+          </tr>
+          <tr>
+            <td><code>ChatMessageReceived</code></td>
+            <td>room group</td>
+            <td><code>ChatMessage</code></td>
+          </tr>
+          <tr>
+            <td><code>ChatHistory</code></td>
+            <td>caller only, once on join</td>
+            <td><code>ChatMessage[]</code>, oldest first</td>
+          </tr>
+          <tr>
+            <td><code>RoomPlayers</code></td>
+            <td>caller only, once on join</td>
+            <td><code>Player[]</code>, full snapshot incl. self</td>
+          </tr>
+          <tr>
+            <td><code>Error</code></td>
+            <td>caller only</td>
+            <td>a plain error message string</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>RoundStarted</code> and <code>RoundScored</code> are also declared (and mirrored in the frontend's
+        <code>HubEvents</code>) but nothing sends or subscribes to them yet — see the callout below.
+      </p>
+
+      <h2>Frontend</h2>
+      <p>
+        <span class="file-ref">frontend/src/signalr-client.ts</span> wraps the raw SignalR connection: one
+        <code>export async function verbNoun(...)</code> per hub method (e.g. <code>joinRoom</code>,
+        <code>sendChatMessage</code>) and one <code>export function onXyz(handler): () =&gt; void</code> per event,
+        each returning an unsubscribe function. A <code>HubEvents</code> constant mirrors the backend's event
+        literal strings by hand, with a comment flagging that they must be kept in sync.
+      </p>
+      <p>
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> is the "smart" component that owns
+        all of this state — the create/join/World-chat screen, the joined players list, chat messages, and (once
+        those features exist) play requests and presence. It renders
+        <span class="file-ref">frontend/src/components/chat-panel.ts</span>, a "dumb" reusable view that just takes
+        <code>players</code>/<code>messages</code> in as properties and fires plain <code>CustomEvent</code>s out
+        (<code>chat-submit</code>, <code>player-selected</code>).
+      </p>
+      <div class="callout">
+        <span class="callout-title">Connection race, already handled</span>
+        <p>
+          <code>getGameHubConnection()</code> caches the <em>in-flight start promise</em>, not just the connection
+          object — the object is truthy the instant <code>HubConnectionBuilder().build()</code> returns, well before
+          <code>.start()</code> resolves. Several call sites invoke it back-to-back on the same tick, so caching only
+          the object let an early caller invoke on a connection that wasn't Connected yet. Caching the promise means
+          every caller awaits the same in-flight start.
+        </p>
+      </div>
+
+      <h2>Not built yet</h2>
+      <div class="callout limitation">
+        <span class="callout-title">Round sync</span>
+        <p>
+          <code>RoundState</code> (<code>WaitingForPlayers | InProgress of Verse | Scored of ...</code>) exists on
+          <code>Room</code>, but no hub method reads or transitions it. <code>Scoring.pointsForGuess</code> — a
+          time-decaying scorer, separate from the book/chapter/verse tiers actually used by singleplayer — is
+          likewise unused. This is the acknowledged next layer to build on top of the room/chat foundation
+          documented here.
+        </p>
+      </div>
+
+      <h2>Verify it</h2>
+      <ul>
+        <li><code>task dotnet:build</code> / <code>task frontend:build</code> — both must build clean.</li>
+        <li>
+          Open two browser tabs, join World chat with different names in each — confirm both see each other in the
+          roster (including whichever one joined <em>first</em> — that's the <code>RoomPlayers</code> snapshot doing
+          its job) and that chat messages appear in both.
+        </li>
+        <li>See <a href="../testing/index.html">Testing</a> for the automated coverage.</li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
+        <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">backend/Api/Program.fs</span> ·
+        <span class="file-ref">frontend/src/signalr-client.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> ·
+        <span class="file-ref">frontend/src/components/chat-panel.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>
