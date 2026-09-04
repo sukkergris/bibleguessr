@@ -334,8 +334,12 @@ type RoundState =
       </p>
       <p>
         <span class="file-ref">backend/Api/GameHub.fs</span>'s <code>RoundTimeoutService</code> is a
-        <code>BackgroundService</code> that sweeps every room's <code>ActiveGame</code> once a second, looking for a
-        round whose <code>GameSession.isRoundExpired</code> is true, and calling the exact same
+        <code>BackgroundService</code> that sweeps every room's <code>ActiveGame</code> — every
+        <code>RoundTimeoutSettings.SweepInterval</code> (1 second by default, configurable via
+        <code>RoundTimeout:SweepIntervalSeconds</code> in <span class="file-ref">backend/Api/Program.fs</span>,
+        same seconds-not-<code>TimeSpan</code>-string/DI-singleton pattern as
+        <a href="../player-presence/index.html">Player presence</a>'s <code>PresenceSettings</code>) — looking for
+        a round whose <code>GameSession.isRoundExpired</code> is true, and calling the exact same
         <code>resolveRound</code> function <code>SubmitGuess</code> uses.
       </p>
       <div class="callout">
@@ -349,7 +353,7 @@ type RoundState =
           <code>InProgress</code>, so a round <code>SubmitGuess</code> already advanced or scored a moment earlier
           is simply skipped on the sweep's next tick. Self-healing against races, no cancellation or locking needed
           — consistent with <code>RoomStore.Update</code>'s own atomic read-modify-write (see the callout above).
-          The 1-second interval (vs. <code>PlayerCleanupService</code>'s 30s — see
+          The 1-second default interval (vs. <code>PlayerCleanupService</code>'s 30s — see
           <a href="../player-presence/index.html">Player presence</a>) keeps a short round timer feeling responsive,
           while still being trivially cheap for what's normally a handful of in-memory rooms.
         </p>

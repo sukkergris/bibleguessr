@@ -136,14 +136,26 @@
           <code>Smtp:Port</code> convention — not a <code>TimeSpan</code> string), each defaulting to the previous
           hardcoded value (2 minutes / 30 seconds) when unset. Registered as a DI singleton and injected into
           <code>PlayerCleanupService</code>'s constructor, same pattern as <code>MailSender.SmtpSettings</code>.
-          The point isn't runtime tuning for a real deployment — it's letting a test dial BOTH values down to a
-          couple of seconds (e.g. via environment variables:
-          <code>Presence__DisconnectGracePeriodSeconds=2 Presence__SweepIntervalSeconds=1</code>), so an actual
-          disconnect→removal round-trip can be driven end-to-end in a few seconds instead of the real 2-minute
-          wait every e2e test in this codebase has so far deliberately avoided (see the "Verify it" section below).
+          The point isn't runtime tuning for a real deployment — it's letting a developer dial BOTH values down to
+          a couple of seconds for manual verification (e.g. via environment variables:
+          <code>Presence__DisconnectGracePeriodSeconds=2 Presence__SweepIntervalSeconds=1</code>, then start
+          <code>task dotnet:dev</code>), so an actual disconnect→removal round-trip can be watched end-to-end in a
+          few seconds instead of the real 2-minute wait, without touching production code or its defaults.
           <code>Room.disconnectGracePeriod</code> itself is untouched — it's still the domain-level default value
           <code>PresenceSettings</code> falls back to, and what <code>backend/Tests/DisconnectCleanupTests.fs</code>
           asserts directly.
+        </p>
+        <p>
+          This is deliberately <strong>not</strong> wired into an automated e2e test: Playwright never starts or
+          configures the backend in this codebase (see
+          <span class="file-ref">frontend/playwright.config.ts</span>'s own doc comment — it's always an
+          already-running <code>task dotnet:dev</code> process, whatever config that happens to have), so a suite
+          test built around this override would only pass when a developer happened to have started the backend
+          with it set — either silently skipped or, worse, hanging for a real 2 minutes against a normally-started
+          one. The actual removal LOGIC already has full, always-run coverage via
+          <code>backend/Tests/DisconnectCleanupTests.fs</code>'s injected <code>cutoff</code> parameter (which
+          doesn't go through this config path at all); this override's job is manual/exploratory verification of
+          the live wiring, not automated regression coverage.
         </p>
       </div>
 

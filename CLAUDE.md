@@ -24,6 +24,7 @@ Always consider using DDD in some form, but do not follow it blindly or dogmatic
 Always consider using TDD, but do not follow it dogmatically.
 Prefer explicit state models, such as discriminated unions or state objects, when they make state transitions clearer than conditional logic.
 Prefer configuration values over hardcoded values for system settings.
+Avoid inline magic numbers/strings even for internal-only values that don't warrant full configuration — give them a named binding (a `let` constant, a static field) instead.
 
 ## Data security
 

@@ -112,6 +112,18 @@ let main args =
 
     builder.Services.AddSingleton<Verse list>(verses) |> ignore
 
+    // How often RoundTimeoutService checks for an expired round — see
+    // GameHub.fs's RoundTimeoutSettings/RoundTimeoutService. Same
+    // seconds-not-TimeSpan-string convention as PresenceSettings above.
+    let roundTimeoutSettings: GameHub.RoundTimeoutSettings =
+        { SweepInterval =
+            builder.Configuration["RoundTimeout:SweepIntervalSeconds"]
+            |> Option.ofObj
+            |> Option.map (int >> float >> TimeSpan.FromSeconds)
+            |> Option.defaultValue (TimeSpan.FromSeconds 1.0) }
+
+    builder.Services.AddSingleton<GameHub.RoundTimeoutSettings>(roundTimeoutSettings) |> ignore
+
     // Periodically resolves any multiplayer round whose time limit has
     // elapsed, even if a player never guessed — see GameHub.fs's
     // RoundTimeoutService.

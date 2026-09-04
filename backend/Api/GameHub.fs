@@ -896,23 +896,31 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, se
                     ()
         }
 
+/// How often RoundTimeoutService checks for an expired round — see that
+/// type's own doc comment. Configurable via
+/// "RoundTimeout:SweepIntervalSeconds" (see Program.fs), defaulting to
+/// 1 second when unset — same "let a test dial this down" motivation as
+/// PresenceSettings, kept as its own separate settings type rather than
+/// folded into PresenceSettings since it's a genuinely different concern
+/// (round timing, not player presence) with its own default.
+type RoundTimeoutSettings = { SweepInterval: TimeSpan }
+
 /// Periodically sweeps every room's ActiveGame for a round whose time
 /// limit has elapsed and auto-resolves it (scores whoever guessed,
 /// implicit 0 for whoever didn't, then advances/ends the game) — mirrors
 /// PlayerCleanupService's sweep-and-broadcast-via-IHubContext pattern
 /// exactly, since this is the same shape of problem: something server-
-/// initiated that isn't triggered by any client call. A 1-second interval
-/// (vs. PlayerCleanupService's 30s) so a short round timer still feels
-/// responsive — still trivially cheap for what's normally a handful of
-/// in-memory rooms. Self-healing against races with SubmitGuess resolving
-/// the same round moments earlier: GameSession.isRoundExpired only matches
-/// a round that's still InProgress, so a round SubmitGuess already
-/// advanced/scored is simply skipped on the next tick — no cancellation
-/// or locking needed, consistent with RoomStore's atomic ConcurrentDictionary.Set.
-type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubContext<GameHub>) =
+/// initiated that isn't triggered by any client call. A 1-second default
+/// interval (vs. PlayerCleanupService's 30s) so a short round timer still
+/// feels responsive — still trivially cheap for what's normally a
+/// handful of in-memory rooms. Self-healing against races with
+/// SubmitGuess resolving the same round moments earlier:
+/// GameSession.isRoundExpired only matches a round that's still
+/// InProgress, so a round SubmitGuess already advanced/scored is simply
+/// skipped on the next tick — no cancellation or locking needed,
+/// consistent with RoomStore's atomic ConcurrentDictionary.Set.
+type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubContext<GameHub>, settings: RoundTimeoutSettings) =
     inherit Microsoft.Extensions.Hosting.BackgroundService()
-
-    let sweepInterval = TimeSpan.FromSeconds 1.0
 
     override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
         task {
@@ -928,7 +936,7 @@ type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubC
                     | _ -> ()
 
                 try
-                    do! Task.Delay(sweepInterval, stoppingToken)
+                    do! Task.Delay(settings.SweepInterval, stoppingToken)
                 with :? OperationCanceledException ->
                     ()
         }
