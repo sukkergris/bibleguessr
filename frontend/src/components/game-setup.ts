@@ -99,19 +99,30 @@ export class GameSetup extends LitElement {
 
   connectedCallback() {
     super.connectedCallback()
-    api
-      .getTranslations()
-      .then((translations) => {
-        this.translations = translations
-        if (translations.length > 0) {
-          this.selectedTranslation = translations[0]
-        }
-      })
-      .catch((err) => {
-        this.error = err instanceof Error ? err.message : 'Failed to load translations.'
-      })
-
+    void this._loadTranslations()
     this._refreshCache()
+  }
+
+  // Loads the server's translation list — not gated on `mode`, since it's
+  // fetched eagerly on mount so it's ready the instant a player switches
+  // into "Server translation" mode. See docs/SCRUM/Feature.OflineContentGaminig.md:
+  // a player who only ever wants "My own Bible file" must be able to
+  // upload/parse/cache/start a game with the backend fully unreachable —
+  // this fetch failing must never block or visibly break that path (see
+  // render()'s error banner, which is scoped to mode === 'server' for
+  // exactly this reason). Retried on-demand (see the mode-switch handler
+  // below) if it failed and the player later switches to server mode
+  // anyway, in case the backend's back up by then.
+  private async _loadTranslations() {
+    try {
+      this.translations = await api.getTranslations()
+      this.error = undefined
+      if (this.translations.length > 0) {
+        this.selectedTranslation = this.translations[0]
+      }
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : 'Failed to load translations.'
+    }
   }
 
   private _refreshCache() {
@@ -120,13 +131,25 @@ export class GameSetup extends LitElement {
       .catch((err) => console.error('[game-setup] failed to read verse cache', err))
   }
 
+  // Switches to "Server translation" mode, and retries loading the
+  // translation list if the initial fetch on mount failed — a player who
+  // started in file mode while the backend was down, then decides to
+  // switch to server mode later, shouldn't be stuck with a stale failure
+  // from before if the backend's reachable by now.
+  private _onSelectServerMode = () => {
+    this.mode = 'server'
+    if (this.translations.length === 0) {
+      void this._loadTranslations()
+    }
+  }
+
   render() {
     return html`
       <div class="setup">
         <h1>bibleguessr</h1>
         <p class="tagline">Guess the book, chapter, and verse.</p>
 
-        ${this.error ? html`<p class="error">${this.error}</p>` : null}
+        ${this.mode === 'server' && this.error ? html`<p class="error">${this.error}</p>` : null}
 
         <div class="mode-switch" role="tablist">
           <button
@@ -134,7 +157,7 @@ export class GameSetup extends LitElement {
             role="tab"
             aria-selected=${this.mode === 'server'}
             class=${this.mode === 'server' ? 'active' : ''}
-            @click=${() => (this.mode = 'server')}
+            @click=${this._onSelectServerMode}
           >
             Server translation
           </button>
