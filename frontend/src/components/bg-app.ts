@@ -11,6 +11,7 @@ import './mode-select'
 import type { GameMode } from './mode-select'
 import './bg-room-setup'
 import './connection-status'
+import './nerd-panel'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
@@ -157,6 +158,7 @@ export class BgApp extends LitElement {
   render() {
     return html`
       <bg-connection-status .trackSignalR=${this.phase === 'room-setup'}></bg-connection-status>
+      <bg-nerd-panel></bg-nerd-panel>
       <main>
         ${this.phase === 'mode-select'
           ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
