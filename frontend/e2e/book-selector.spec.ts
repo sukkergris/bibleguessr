@@ -86,11 +86,34 @@ test('"Chapters" restricts to a single book\'s checked chapters', async ({ page 
   await expect(page.locator('.round')).toContainText('Verse 1')
 
   for (let round = 1; round <= 3; round++) {
-    await page.locator('bg-guess-form input').first().fill('Genesis')
-    await page.keyboard.press('Enter')
+    // Chapter/verse are still guessable — only the Book field is locked
+    // (see the dedicated test below).
+    await page.getByRole('button', { name: 'Guess' }).click()
     await expect(page.locator('.feedback')).toContainText('Daniel 1:')
     await page.getByRole('button', { name: /Next verse|See results/ }).click()
   }
+})
+
+test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text', async ({ page }) => {
+  await openMode(page, 'Chapters')
+
+  await page.getByLabel('Book').selectOption('Daniel')
+  await page.locator('.chapter', { hasText: '1' }).first().locator('input[type="checkbox"]').check()
+  await expect(page.getByText('1 chapter of Daniel selected.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Start game' }).click()
+  await expect(page.locator('.round')).toContainText('Verse 1')
+
+  // The Book field shows the book, but isn't an <input> or <select> at
+  // all — there's nothing to click into or type over.
+  const guessForm = page.locator('bg-guess-form')
+  await expect(guessForm.getByText('Daniel', { exact: true })).toBeVisible()
+  await expect(guessForm.locator('input[type="text"], select')).toHaveCount(0)
+
+  // A guess still submits successfully with the locked book, scored
+  // correctly, without the player ever choosing a book themselves.
+  await page.getByRole('button', { name: 'Guess' }).click()
+  await expect(page.locator('.feedback')).toContainText('Daniel')
 })
 
 test('"Books" selection persists after backing out to Home and returning', async ({ page }) => {

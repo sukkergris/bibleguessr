@@ -9,7 +9,9 @@ the home screen (alongside Multiplayer):
    form's Book field becomes a closed dropdown listing only the selected
    books — no free typing, and no guessing a book outside the selection.
 3. **Chapters** — the user picks a single book, then which of its chapters
-   to quiz on, via a grid of checkboxes.
+   to quiz on, via a grid of checkboxes. In-game, the guess form's Book
+   field shows that book as fixed, read-only text — since the player
+   already chose it at setup, it can't be changed or typed over.
 
 Each of the three game types is its own entry point with its own setup
 screen — not a single shared screen with a dropdown/switch inside it. Each

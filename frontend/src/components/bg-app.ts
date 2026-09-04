@@ -149,11 +149,17 @@ export class BgApp extends LitElement {
   // suggesting books outside the selection (today's guess-form otherwise
   // autocompletes from every book in the translation, which would let a
   // Books-mode player type/guess a book they explicitly excluded).
-  // "Chapters" mode also restricts to one book, but via a different UI (a
-  // fixed book with just its chapters narrowed) — this only applies to
-  // "Books" mode's multi-book selection.
+  // "Chapters" mode also restricts to one book, but via _lockedBookForGuessForm
+  // instead — this only applies to "Books" mode's multi-book selection.
   private get _allowedBooksForGuessForm(): string[] | undefined {
     return this.setupScope === 'books' ? this.restriction?.books : undefined
+  }
+
+  // In "Chapters" mode, the player already committed to one book at setup
+  // — there's nothing left to choose, so the guess form shows it as fixed,
+  // read-only text instead of any kind of editable field.
+  private get _lockedBookForGuessForm(): string | undefined {
+    return this.setupScope === 'chapters' ? this.restriction?.books[0] : undefined
   }
 
   private async _loadNextVerse() {
@@ -267,6 +273,7 @@ export class BgApp extends LitElement {
             .translation=${this.verse?.translation}
             .verseSource=${this.verseSource}
             .allowedBooks=${this._allowedBooksForGuessForm}
+            .lockedBook=${this._lockedBookForGuessForm}
             @guess-submitted=${this._onGuessSubmitted}
           ></bg-guess-form>`}
     `

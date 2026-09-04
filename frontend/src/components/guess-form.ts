@@ -41,6 +41,14 @@ export class GuessForm extends LitElement {
   @property({ attribute: false })
   allowedBooks?: string[]
 
+  // When set (Chapters-mode games — see bg-app.ts's _lockedBookForGuessForm),
+  // the player already committed to this one book at setup, so the Book
+  // field is shown as fixed, read-only text instead of any kind of input —
+  // there's nothing to choose, since a Chapters-mode game only ever draws
+  // verses from this single book.
+  @property({ type: String })
+  lockedBook?: string
+
   @state()
   private book = ''
 
@@ -66,26 +74,54 @@ export class GuessForm extends LitElement {
   private activeSuggestion = -1
 
   // Matches whichever Book field is actually rendered — the free-text
-  // combobox input, or (Books-mode games) the <select> dropdown.
+  // combobox input, or (Books-mode games) the <select> dropdown. Not
+  // present at all in Chapters-mode games (lockedBook set) — see
+  // updated()'s focus logic, which falls back to chapterField then.
   @query('input[name="bg-book-guess-no-autofill"], .combo-field select')
   private bookField?: HTMLInputElement | HTMLSelectElement
 
+  @query('input[name="bg-chapter-guess"]')
+  private chapterField?: HTMLInputElement
+
   connectedCallback() {
     super.connectedCallback()
-    this._loadBooks()
+    if (this.lockedBook) {
+      this._lockToBook(this.lockedBook)
+    } else {
+      this._loadBooks()
+    }
   }
 
   updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
+    if (changedProperties.has('lockedBook') && this.lockedBook) {
+      this._lockToBook(this.lockedBook)
+    } else if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
       this._loadBooks()
     }
 
     // A new question is ready as soon as the form goes from disabled (still
-    // loading the verse) to enabled — put focus straight on Book so the
-    // player can start typing immediately, no click needed.
+    // loading the verse) to enabled — put focus on whichever field is
+    // actually interactive first: Chapter when the book is locked (nothing
+    // to do on the read-only Book field), Book otherwise.
     if (changedProperties.has('disabled') && changedProperties.get('disabled') === true && !this.disabled) {
-      this.bookField?.focus()
+      if (this.lockedBook) {
+        this.chapterField?.focus()
+      } else {
+        this.bookField?.focus()
+      }
     }
+  }
+
+  // Fixes `this.book` to the one book a Chapters-mode game committed to at
+  // setup, and loads its chapters immediately — there's no user
+  // interaction to trigger that load the way picking a book normally does.
+  private _lockToBook(book: string) {
+    if (this.book === book) return
+    this.book = book
+    this.chapter = ''
+    this.verseNumber = ''
+    this.verseNumbers = []
+    this._loadChapters(book)
   }
 
   private _loadBooks() {
@@ -156,12 +192,17 @@ export class GuessForm extends LitElement {
 
     return html`
       <form @submit=${this._onSubmit}>
-        ${this.allowedBooks ? this._renderBookDropdown(this.allowedBooks) : this._renderBookCombobox(showBookSuggestions)}
+        ${this.lockedBook
+          ? this._renderLockedBook(this.lockedBook)
+          : this.allowedBooks
+            ? this._renderBookDropdown(this.allowedBooks)
+            : this._renderBookCombobox(showBookSuggestions)}
         <label class="combo-field">
           Chapter (optional)
           <div class="combobox">
             <input
               type="number"
+              name="bg-chapter-guess"
               min="1"
               role="combobox"
               aria-expanded=${showChapterSuggestions}
@@ -205,6 +246,21 @@ export class GuessForm extends LitElement {
         </label>
         <button type="submit" ?disabled=${this.disabled}>Guess</button>
       </form>
+    `
+  }
+
+  // Chapters-mode games only — the book was already chosen at setup (the
+  // whole point of that game type), so it's shown as fixed, read-only
+  // text rather than any kind of editable field: nothing to pick, nothing
+  // to type over. A hidden input still carries the value into the form
+  // submission the same way the other Book fields do.
+  private _renderLockedBook(lockedBook: string) {
+    return html`
+      <label class="combo-field">
+        Book
+        <div class="locked-book" title="Already chosen for this game — see the setup screen">${lockedBook}</div>
+        <input type="hidden" .value=${lockedBook} />
+      </label>
     `
   }
 
@@ -454,6 +510,15 @@ export class GuessForm extends LitElement {
       border-radius: 8px;
       border: 1px solid #ccc;
       font-size: 1rem;
+    }
+
+    .locked-book {
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: rgba(170, 59, 255, 0.08);
+      font-size: 1rem;
+      color: inherit;
     }
 
     .suggestions {
