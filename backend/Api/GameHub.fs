@@ -861,34 +861,43 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, se
                 // room mutated by a live hub call between this snapshot
                 // and the sweep reaching it is still handled correctly
                 // (see RoomStoreConcurrencyTests.fs).
+                // Each room swept inside its own try/with — see the same
+                // guard in RoundTimeoutService below for the full rationale.
+                // It matters at least as much here: these broadcasts go out
+                // right after players dropped, so a throwing SendAsync is
+                // squarely in the expected path, and unguarded it would
+                // silently kill presence sweeping process-wide.
                 for room in rooms.AllRooms() do
                     let (RoomCode roomCode) = room.Code
                     let mutable removedIds: PlayerId list = []
                     let mutable forfeitedGame: GameSession option = None
                     let mutable forfeitedOpponent: PlayerId option = None
 
-                    rooms.Update(
-                        roomCode,
-                        fun current ->
-                            forfeitedGame <- current.ActiveGame
-                            let updated, removed, opponent = Room.removeStaleDisconnections cutoff current
-                            removedIds <- removed
-                            forfeitedOpponent <- opponent
-                            updated
-                    )
-                    |> ignore
+                    try
+                        rooms.Update(
+                            roomCode,
+                            fun current ->
+                                forfeitedGame <- current.ActiveGame
+                                let updated, removed, opponent = Room.removeStaleDisconnections cutoff current
+                                removedIds <- removed
+                                forfeitedOpponent <- opponent
+                                updated
+                        )
+                        |> ignore
 
-                    if not removedIds.IsEmpty then
-                        for PlayerId removedGuid in removedIds do
-                            do! hubContext.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string removedGuid)
+                        if not removedIds.IsEmpty then
+                            for PlayerId removedGuid in removedIds do
+                                do! hubContext.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string removedGuid)
 
-                        match forfeitedGame with
-                        | Some session ->
-                            do!
-                                hubContext.Clients
-                                    .Group(roomCode)
-                                    .SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
-                        | None -> ()
+                            match forfeitedGame with
+                            | Some session ->
+                                do!
+                                    hubContext.Clients
+                                        .Group(roomCode)
+                                        .SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
+                            | None -> ()
+                    with ex ->
+                        eprintfn "[PlayerCleanupService] failed to sweep room %s: %O" roomCode ex
 
                 try
                     do! Task.Delay(settings.SweepInterval, stoppingToken)
@@ -927,13 +936,26 @@ type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubC
             while not stoppingToken.IsCancellationRequested do
                 let now = DateTimeOffset.UtcNow
 
+                // Each room is swept inside its own try/with: resolveRound
+                // ends in group.SendAsync, which can genuinely throw (a
+                // client disconnecting mid-broadcast, a transport fault).
+                // Unguarded, one such throw escapes ExecuteAsync, ends the
+                // while loop and silently kills this BackgroundService for
+                // the lifetime of the process — after which NO room's round
+                // ever times out again, so every game everywhere sticks at
+                // 0s until the server restarts. A single failing room must
+                // only cost that room this tick; it'll be retried on the
+                // next one.
                 for room in rooms.AllRooms() do
                     let (RoomCode roomCode) = room.Code
 
-                    match room.ActiveGame with
-                    | Some session when GameSession.isRoundExpired now session ->
-                        do! resolveRound (hubContext.Clients.Group(roomCode)) verses rooms roomCode
-                    | _ -> ()
+                    try
+                        match room.ActiveGame with
+                        | Some session when GameSession.isRoundExpired now session ->
+                            do! resolveRound (hubContext.Clients.Group(roomCode)) verses rooms roomCode
+                        | _ -> ()
+                    with ex ->
+                        eprintfn "[RoundTimeoutService] failed to resolve round for room %s: %O" roomCode ex
 
                 try
                     do! Task.Delay(settings.SweepInterval, stoppingToken)
