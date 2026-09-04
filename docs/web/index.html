@@ -33,7 +33,10 @@
         </a>
         <a class="feature-card" href="play-requests/index.html">
           <h3>Start a game from chat</h3>
-          <p>Clicking a player's name to send a play request — send, see, withdraw, REPLACE semantics.</p>
+          <p>
+            Choosing a game type and clicking a player's name to challenge them — send, see, accept, deny, withdraw,
+            REPLACE semantics.
+          </p>
         </a>
         <a class="feature-card" href="player-presence/index.html">
           <h3>Player presence</h3>
@@ -67,8 +70,9 @@
           <span class="pill">Room.Round</span> yet. See <a href="multiplayer-rooms/index.html">Multiplayer rooms</a>.
         </li>
         <li>
-          <strong>Accepting a play request.</strong> Send/see/withdraw are implemented; accept (which would start
-          the synced game) is deliberately deferred until round sync exists. See
+          <strong>Actually starting a game from an accepted challenge.</strong> Send/see/accept/deny/withdraw are all
+          implemented, and a request now carries the challenger's chosen game type — but accepting only resolves the
+          request; it doesn't start a synced round, since that depends on round sync, which doesn't exist yet. See
           <a href="play-requests/index.html">Start a game from chat</a>.
         </li>
         <li>

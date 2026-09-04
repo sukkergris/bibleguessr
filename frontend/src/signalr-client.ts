@@ -1,6 +1,6 @@
 import * as signalR from '@microsoft/signalr'
 import { api } from './api'
-import type { ChatMessage, PlayRequest, Player } from './types'
+import type { ChatMessage, GameType, PlayRequest, Player } from './types'
 
 // Event names must match backend/Api/GameHub.fs's *Event literals.
 export const HubEvents = {
@@ -12,6 +12,8 @@ export const HubEvents = {
   RoomPlayers: 'RoomPlayers',
   PlayRequestReceived: 'PlayRequestReceived',
   PlayRequestWithdrawn: 'PlayRequestWithdrawn',
+  PlayRequestAccepted: 'PlayRequestAccepted',
+  PlayRequestDenied: 'PlayRequestDenied',
   PlayerLeft: 'PlayerLeft',
   PlayerDisconnected: 'PlayerDisconnected',
   Error: 'Error',
@@ -190,16 +192,29 @@ export function onRoomPlayers(handler: (players: Player[]) => void): () => void 
   }
 }
 
-/** Sends (or retargets) a play request to `toPlayerId`. */
-export async function sendPlayRequest(toPlayerId: string): Promise<void> {
+/** Sends (or retargets) a play request to `toPlayerId`, for the `gameType`
+ * chosen beforehand — see game-type.ts. */
+export async function sendPlayRequest(toPlayerId: string, gameType: GameType): Promise<void> {
   const hub = await getGameHubConnection()
-  await hub.invoke('SendPlayRequest', toPlayerId)
+  await hub.invoke('SendPlayRequest', toPlayerId, gameType)
 }
 
 /** Withdraws whatever play request the caller currently has pending, if any. */
 export async function withdrawPlayRequest(): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('WithdrawPlayRequest')
+}
+
+/** Accepts the pending request from `fromPlayerId` addressed to the caller. */
+export async function acceptPlayRequest(fromPlayerId: string): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('AcceptPlayRequest', fromPlayerId)
+}
+
+/** Denies the pending request from `fromPlayerId` addressed to the caller. */
+export async function denyPlayRequest(fromPlayerId: string): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('DenyPlayRequest', fromPlayerId)
 }
 
 /** Subscribes to play requests sent/retargeted anywhere in the caller's
@@ -233,6 +248,41 @@ export function onPlayRequestWithdrawn(handler: (fromPlayerId: string) => void):
   return () => {
     cancelled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestWithdrawn, listener))
+  }
+}
+
+/** Subscribes to a play request being accepted anywhere in the caller's
+ * room — payload is (fromPlayerId, toPlayerId) identifying which request,
+ * same as onPlayRequestDenied. Filter to whichever side of the pair
+ * matters to you, same pattern as filtering ChatMessageReceived by room
+ * membership. Returns an unsubscribe function. */
+export function onPlayRequestAccepted(handler: (fromPlayerId: string, toPlayerId: string) => void): () => void {
+  let cancelled = false
+  const listener = (fromPlayerId: string, toPlayerId: string) => {
+    if (!cancelled) handler(fromPlayerId, toPlayerId)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestAccepted, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestAccepted, listener))
+  }
+}
+
+/** Subscribes to a play request being denied — same payload shape as
+ * onPlayRequestAccepted. Returns an unsubscribe function. */
+export function onPlayRequestDenied(handler: (fromPlayerId: string, toPlayerId: string) => void): () => void {
+  let cancelled = false
+  const listener = (fromPlayerId: string, toPlayerId: string) => {
+    if (!cancelled) handler(fromPlayerId, toPlayerId)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestDenied, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestDenied, listener))
   }
 }
 

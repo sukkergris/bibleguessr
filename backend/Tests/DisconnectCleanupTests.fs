@@ -84,18 +84,21 @@ let ``removeStaleDisconnections drops play requests sent or received by a remove
         { FromPlayerId = removedPlayer.Id
           FromPlayerName = removedPlayer.Name
           ToPlayerId = otherPlayer.Id
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow }
 
     let requestToRemoved: PlayRequest =
         { FromPlayerId = thirdPlayer.Id
           FromPlayerName = thirdPlayer.Name
           ToPlayerId = removedPlayer.Id
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow }
 
     let requestUnrelated: PlayRequest =
         { FromPlayerId = otherPlayer.Id
           FromPlayerName = otherPlayer.Name
           ToPlayerId = thirdPlayer.Id
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow }
 
     let room =

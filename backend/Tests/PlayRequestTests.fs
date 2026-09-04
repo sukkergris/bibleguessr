@@ -16,12 +16,14 @@ let ``a retargeted request carries the sender's name forward correctly`` () =
         { FromPlayerId = sender
           FromPlayerName = "Alice"
           ToPlayerId = firstTarget
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow }
 
     let secondRequest: PlayRequest =
         { FromPlayerId = sender
           FromPlayerName = "Alice"
           ToPlayerId = secondTarget
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow.AddSeconds(1.0) }
 
     let room = Room.create (RoomCode "1234")
@@ -43,6 +45,7 @@ let ``two different players can each have one pending request to the same target
         { FromPlayerId = sender
           FromPlayerName = "someone"
           ToPlayerId = target
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow }
 
     let room = Room.create (RoomCode "1234")
@@ -62,6 +65,7 @@ let ``withdrawing one sender's request does not affect another sender's request 
         { FromPlayerId = sender
           FromPlayerName = "someone"
           ToPlayerId = target
+          GameType = AllVerses
           SentAt = DateTimeOffset.UtcNow }
 
     let room = Room.create (RoomCode "1234")

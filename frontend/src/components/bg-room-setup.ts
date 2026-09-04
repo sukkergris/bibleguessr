@@ -1,7 +1,10 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
+import { gameTypeFromRestriction, type GameTypeScope } from '../game-type'
 import {
+  acceptPlayRequest,
+  denyPlayRequest,
   joinRoom,
   joinWorldChat,
   onChatHistory,
@@ -11,6 +14,8 @@ import {
   onPlayerDisconnected,
   onPlayerJoined,
   onPlayerLeft,
+  onPlayRequestAccepted,
+  onPlayRequestDenied,
   onPlayRequestReceived,
   onPlayRequestWithdrawn,
   onRoomPlayers,
@@ -19,10 +24,11 @@ import {
   withdrawPlayRequest,
   type ConnectionState,
 } from '../signalr-client'
-import type { ChatMessage, PlayRequest, Player } from '../types'
+import type { ChatMessage, PlayRequest, Player, VerseRestriction } from '../types'
 import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-name-storage'
 import './chat-panel'
 import './play-requests'
+import './game-type-select'
 
 type Screen =
   | { step: 'choose' }
@@ -73,6 +79,23 @@ export class RoomSetup extends LitElement {
   @state()
   private sentRequestToId?: string
 
+  /** The game type scope + restriction I've currently got selected in
+   * <bg-game-type-select> — used to build the GameType sent along with the
+   * next play request I make (see game-type.ts). Defaults to 'all', same
+   * default as the selector itself. */
+  @state()
+  private challengeScope: GameTypeScope = 'all'
+
+  @state()
+  private challengeRestriction?: VerseRestriction
+
+  /** The translation offered to <bg-game-type-select>'s book/chapter
+   * selectors — the first one the backend reports, same "just pick one to
+   * start" simplicity as the rest of the room screen (no translation
+   * picker exists here today). Loaded once on entering a room. */
+  @state()
+  private challengeTranslation?: string
+
   @state()
   private error?: string
 
@@ -87,6 +110,8 @@ export class RoomSetup extends LitElement {
   private _unsubscribeRoomPlayers?: () => void
   private _unsubscribePlayRequestReceived?: () => void
   private _unsubscribePlayRequestWithdrawn?: () => void
+  private _unsubscribePlayRequestAccepted?: () => void
+  private _unsubscribePlayRequestDenied?: () => void
   private _unsubscribePlayerDisconnected?: () => void
   private _unsubscribePlayerLeft?: () => void
 
@@ -99,6 +124,8 @@ export class RoomSetup extends LitElement {
     this._unsubscribeRoomPlayers?.()
     this._unsubscribePlayRequestReceived?.()
     this._unsubscribePlayRequestWithdrawn?.()
+    this._unsubscribePlayRequestAccepted?.()
+    this._unsubscribePlayRequestDenied?.()
     this._unsubscribePlayerDisconnected?.()
     this._unsubscribePlayerLeft?.()
     super.disconnectedCallback()
@@ -175,6 +202,12 @@ export class RoomSetup extends LitElement {
         ${isDisconnected ? html`<p class="error">Lost connection to the server — trying to reconnect…</p>` : null}
         ${this.error ? html`<p class="error">${this.error}</p>` : null}
 
+        <bg-game-type-select
+          .verseSource=${api}
+          .translation=${this.challengeTranslation}
+          @game-type-changed=${this._onGameTypeChanged}
+        ></bg-game-type-select>
+
         <bg-chat-panel
           .players=${this.players}
           .messages=${this.messages}
@@ -188,6 +221,8 @@ export class RoomSetup extends LitElement {
           .requests=${this.playRequests}
           .sentRequestToName=${this._sentRequestToName()}
           @withdraw-play-request=${this._onWithdrawPlayRequest}
+          @accept-play-request=${this._onAcceptPlayRequest}
+          @deny-play-request=${this._onDenyPlayRequest}
         ></bg-play-requests>
 
         <button type="button" class="secondary" @click=${this._onLeaveRoom}>Back to chat selection</button>
@@ -274,6 +309,12 @@ export class RoomSetup extends LitElement {
       }
       this.playRequests = this.playRequests.filter((r) => r.fromPlayerId !== fromPlayerId)
     })
+    this._unsubscribePlayRequestAccepted = onPlayRequestAccepted((fromPlayerId, toPlayerId) => {
+      this._resolvePlayRequest(fromPlayerId, toPlayerId)
+    })
+    this._unsubscribePlayRequestDenied = onPlayRequestDenied((fromPlayerId, toPlayerId) => {
+      this._resolvePlayRequest(fromPlayerId, toPlayerId)
+    })
     this._unsubscribeHubError = onHubError((message) => {
       this.error = message
     })
@@ -297,6 +338,25 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = me.id
     saveRememberedPlayerName(playerName)
     this.screen = { step: 'in-room', roomCode, playerName }
+
+    if (!this.challengeTranslation) {
+      api
+        .getTranslations()
+        .then((translations) => {
+          this.challengeTranslation = translations[0]
+        })
+        .catch((err) => console.error('[bg-room-setup] failed to load translations for game type select', err))
+    }
+  }
+
+  /** Common handling for a play request being resolved (accepted or
+   * denied) anywhere in the room — drop it from whichever local list it's
+   * tracked in, on either side of the exchange. */
+  private _resolvePlayRequest(fromPlayerId: string, _toPlayerId: string) {
+    this.playRequests = this.playRequests.filter((r) => r.fromPlayerId !== fromPlayerId)
+    if (fromPlayerId === this.myPlayerId) {
+      this.sentRequestToId = undefined
+    }
   }
 
   private _onChatSubmit(event: CustomEvent<string>) {
@@ -306,7 +366,8 @@ export class RoomSetup extends LitElement {
   }
 
   private _onPlayerSelected(event: CustomEvent<string>) {
-    sendPlayRequest(event.detail).catch((err) => {
+    const gameType = gameTypeFromRestriction(this.challengeScope, this.challengeRestriction)
+    sendPlayRequest(event.detail, gameType).catch((err) => {
       console.error('[bg-room-setup] failed to send play request', err)
     })
   }
@@ -314,6 +375,23 @@ export class RoomSetup extends LitElement {
   private _onWithdrawPlayRequest() {
     withdrawPlayRequest().catch((err) => {
       console.error('[bg-room-setup] failed to withdraw play request', err)
+    })
+  }
+
+  private _onGameTypeChanged(event: CustomEvent<{ scope: GameTypeScope; restriction?: VerseRestriction }>) {
+    this.challengeScope = event.detail.scope
+    this.challengeRestriction = event.detail.restriction
+  }
+
+  private _onAcceptPlayRequest(event: CustomEvent<string>) {
+    acceptPlayRequest(event.detail).catch((err) => {
+      console.error('[bg-room-setup] failed to accept play request', err)
+    })
+  }
+
+  private _onDenyPlayRequest(event: CustomEvent<string>) {
+    denyPlayRequest(event.detail).catch((err) => {
+      console.error('[bg-room-setup] failed to deny play request', err)
     })
   }
 
@@ -336,6 +414,8 @@ export class RoomSetup extends LitElement {
     this._unsubscribeRoomPlayers?.()
     this._unsubscribePlayRequestReceived?.()
     this._unsubscribePlayRequestWithdrawn?.()
+    this._unsubscribePlayRequestAccepted?.()
+    this._unsubscribePlayRequestDenied?.()
     this._unsubscribePlayerDisconnected?.()
     this._unsubscribePlayerLeft?.()
 
@@ -344,6 +424,8 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = ''
     this.playRequests = []
     this.sentRequestToId = undefined
+    this.challengeScope = 'all'
+    this.challengeRestriction = undefined
     this.disconnectedPlayerIds = new Set()
     this.error = undefined
     this.connectionState = 'connected'

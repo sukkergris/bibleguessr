@@ -16,6 +16,7 @@ let private makeRequest fromId toId : PlayRequest =
     { FromPlayerId = fromId
       FromPlayerName = "someone"
       ToPlayerId = toId
+      GameType = AllVerses
       SentAt = DateTimeOffset.UtcNow }
 
 [<Fact>]
@@ -100,3 +101,49 @@ let ``pendingRequestsFor filters by ToPlayerId`` () =
 
     Assert.Equal(1, requestsForA.Length)
     Assert.Equal(senderA, requestsForA.Head.FromPlayerId)
+
+[<Fact>]
+let ``acceptPlayRequest removes the matching request`` () =
+    let sender = makePlayerId ()
+    let target = makePlayerId ()
+
+    let room = Room.create (RoomCode "1234")
+    let room = Room.sendPlayRequest (makeRequest sender target) room
+    let room = Room.acceptPlayRequest sender target room
+
+    Assert.Empty(room.PendingRequests)
+
+[<Fact>]
+let ``acceptPlayRequest leaves other players' requests to the same target untouched`` () =
+    let senderA = makePlayerId ()
+    let senderB = makePlayerId ()
+    let target = makePlayerId ()
+
+    let room = Room.create (RoomCode "1234")
+    let room = Room.sendPlayRequest (makeRequest senderA target) room
+    let room = Room.sendPlayRequest (makeRequest senderB target) room
+    let room = Room.acceptPlayRequest senderA target room
+
+    Assert.Equal(1, room.PendingRequests.Length)
+    Assert.Equal(senderB, room.PendingRequests.Head.FromPlayerId)
+
+[<Fact>]
+let ``denyPlayRequest removes the matching request`` () =
+    let sender = makePlayerId ()
+    let target = makePlayerId ()
+
+    let room = Room.create (RoomCode "1234")
+    let room = Room.sendPlayRequest (makeRequest sender target) room
+    let room = Room.denyPlayRequest sender target room
+
+    Assert.Empty(room.PendingRequests)
+
+[<Fact>]
+let ``acceptPlayRequest is a no-op when the request no longer exists`` () =
+    let sender = makePlayerId ()
+    let target = makePlayerId ()
+    let room = Room.create (RoomCode "1234")
+
+    let room = Room.acceptPlayRequest sender target room
+
+    Assert.Empty(room.PendingRequests)

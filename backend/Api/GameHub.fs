@@ -104,6 +104,21 @@ let PlayRequestReceivedEvent = "PlayRequestReceived"
 [<Literal>]
 let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
 
+/// Sent to the room when the challenged player accepts a play request (see
+/// docs/SCRUM/Feature.RequestToStartMPGame.md) — payload is the
+/// (FromPlayerId, ToPlayerId) pair identifying which request, same
+/// broadcast-to-whole-group tradeoff as PlayRequestReceived. Actually
+/// starting a synced game isn't wired up yet; this just tells both clients
+/// the request was resolved so they can update their UI (e.g. "Bob accepted
+/// your challenge").
+[<Literal>]
+let PlayRequestAcceptedEvent = "PlayRequestAccepted"
+
+/// Sent to the room when the challenged player denies a play request —
+/// same payload shape as PlayRequestAccepted.
+[<Literal>]
+let PlayRequestDeniedEvent = "PlayRequestDenied"
+
 /// Sent to the room when a player is removed after being disconnected
 /// longer than Room.disconnectGracePeriod (see PlayerCleanupService) —
 /// payload is just their PlayerId, enough for clients to drop them from
@@ -210,8 +225,11 @@ type GameHub(rooms: RoomStore) =
         }
 
     /// Sends (or retargets — see Room.sendPlayRequest's REPLACE semantics)
-    /// a play request from the caller to `toPlayerId`.
-    member this.SendPlayRequest(toPlayerId: string) : Task =
+    /// a play request from the caller to `toPlayerId`, for the `gameType`
+    /// the challenger chose beforehand (see
+    /// docs/SCRUM/Feature.RequestToStartMPGame.md) — sent as-is to the whole
+    /// room so the challenged player can see what they're being invited to.
+    member this.SendPlayRequest(toPlayerId: string, gameType: GameType) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
             | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
@@ -228,6 +246,7 @@ type GameHub(rooms: RoomStore) =
                             { FromPlayerId = sender.Id
                               FromPlayerName = sender.Name
                               ToPlayerId = targetId
+                              GameType = gameType
                               SentAt = DateTimeOffset.UtcNow }
 
                         rooms.Set(roomCode, Room.sendPlayRequest request room)
@@ -249,6 +268,39 @@ type GameHub(rooms: RoomStore) =
                     let (PlayerId senderGuid) = sender.Id
                     do! this.Clients.Group(roomCode).SendAsync(PlayRequestWithdrawnEvent, string senderGuid)
         }
+
+    /// Resolves the pending request from `fromPlayerId` to the caller,
+    /// broadcasting `event` to the room — shared by AcceptPlayRequest/
+    /// DenyPlayRequest, which differ only in which pure Room function and
+    /// which event they use. A no-op (no error) if that request is no
+    /// longer there (e.g. withdrawn or retargeted just before the caller's
+    /// click landed), same forgiving pattern as WithdrawPlayRequest.
+    member private this.ResolvePlayRequest
+        (fromPlayerId: string, resolve: PlayerId -> PlayerId -> Room -> Room, event: string)
+        : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, toPlayer) ->
+                match rooms.TryGet(roomCode) with
+                | None -> ()
+                | Some room ->
+                    let fromId = PlayerId(Guid.Parse fromPlayerId)
+                    rooms.Set(roomCode, resolve fromId toPlayer.Id room)
+                    let (PlayerId fromGuid) = fromId
+                    let (PlayerId toGuid) = toPlayer.Id
+                    do! this.Clients.Group(roomCode).SendAsync(event, string fromGuid, string toGuid)
+        }
+
+    /// Accepts the pending request from `fromPlayerId` to the caller. See
+    /// docs/SCRUM/Feature.RequestToStartMPGame.md — actually starting a
+    /// synced game isn't wired up yet, this just resolves the request.
+    member this.AcceptPlayRequest(fromPlayerId: string) : Task =
+        this.ResolvePlayRequest(fromPlayerId, Room.acceptPlayRequest, PlayRequestAcceptedEvent)
+
+    /// Denies the pending request from `fromPlayerId` to the caller.
+    member this.DenyPlayRequest(fromPlayerId: string) : Task =
+        this.ResolvePlayRequest(fromPlayerId, Room.denyPlayRequest, PlayRequestDeniedEvent)
 
     /// Marks the disconnecting player as disconnected (still visible in the
     /// room, just flagged) rather than removing them immediately — a page

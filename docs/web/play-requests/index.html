@@ -12,26 +12,29 @@
       <span class="eyebrow">Feature</span>
       <h1>Start a game from chat</h1>
       <p class="subtitle">
-        Click another online player's name to invite them — they see it in a list below the chat window, and you can
-        withdraw it any time. Spec: <span class="file-ref">docs/SCRUM/Feature.StartMPGame.md</span>.
+        Choose a game type, then click another online player's name to challenge them — they see the game type and
+        can accept or deny, and you can withdraw your request any time. Specs:
+        <span class="file-ref">docs/SCRUM/Feature.StartMPGame.md</span> (send/see/withdraw) and
+        <span class="file-ref">docs/SCRUM/Feature.RequestToStartMPGame.md</span> (game type + accept/deny).
       </p>
 
       <p>Builds on <a href="../multiplayer-rooms/index.html">Multiplayer rooms &amp; chat</a> — read that first if the hub/room basics aren't familiar yet.</p>
 
       <h2>What it does</h2>
       <ul>
-        <li>Click another player's name in the roster → sends them a play request.</li>
-        <li>The receiver sees every request addressed to them in a list below the chat window.</li>
-        <li>A sender can only ever have <strong>one</strong> outstanding request at a time.</li>
-        <li>The sender can withdraw their pending request.</li>
+        <li>Before challenging anyone, pick a game type — All verses, Books, or Chapters (same three types and selectors as singleplayer setup).</li>
+        <li>Click another player's name in the roster → sends them a play request carrying that game type.</li>
+        <li>The receiver sees every request addressed to them, with the game type, below the chat window.</li>
+        <li>The receiver can <strong>accept</strong> or <strong>deny</strong> a request.</li>
+        <li>A sender can only ever have <strong>one</strong> outstanding request at a time, and can withdraw it.</li>
       </ul>
       <div class="callout limitation">
-        <span class="callout-title">Deliberately out of scope</span>
+        <span class="callout-title">Accept doesn't start a game — yet</span>
         <p>
-          There's no accept/decline. The spec only asks for send/see/withdraw, and actually <em>accepting</em> a
-          request would mean starting a synced game — which depends on round sync, which isn't built yet (see
-          <a href="../multiplayer-rooms/index.html">Multiplayer rooms</a>). Building a fake accept button now would
-          just need reworking later, so a request simply sits visible until it's withdrawn or superseded.
+          Accepting only <em>resolves</em> the request (removes it, tells both clients). Actually starting a synced
+          game — picking a shared verse, syncing rounds between the two players — depends on round sync, which
+          isn't built yet (see <a href="../multiplayer-rooms/index.html">Multiplayer rooms</a>). Wiring that up is
+          future work; this feature stops at "both players know the challenge was accepted."
         </p>
       </div>
 
@@ -45,11 +48,23 @@
 
       <h2>Domain model</h2>
       <p><span class="file-ref">backend/Domain/Game.fs</span></p>
-      <pre><code>type PlayRequest =
+      <pre><code>type GameType =
+    | AllVerses
+    | Books of string list
+    | Chapters of Map&lt;string, int list&gt;
+
+type PlayRequest =
     { FromPlayerId: PlayerId
       FromPlayerName: string
       ToPlayerId: PlayerId
+      GameType: GameType
       SentAt: DateTimeOffset }</code></pre>
+      <p>
+        <code>GameType</code> mirrors the shape of the existing <code>/api/verses/random</code> restriction query
+        params (<code>book</code>/<code>bookChapter</code>, see <span class="file-ref">backend/Api/Program.fs</span>
+        and <code>Verse.matchesRestriction</code>) rather than inventing new vocabulary — it's the same
+        all/books/chapters split as singleplayer's <code>SetupScope</code>.
+      </p>
       <p>
         Stored per-room on <code>Room.PendingRequests</code> — there's no cross-room player identity anywhere in
         this codebase (a <code>PlayerId</code> only ever means something within the room that minted it), so a
@@ -73,6 +88,14 @@
             <td>Removes that sender's pending request, if any. No-op otherwise.</td>
           </tr>
           <tr>
+            <td><code>acceptPlayRequest fromPlayerId toPlayerId room</code></td>
+            <td>Removes the matching (sender, target) request, if it still exists. No-op otherwise — the sender may have withdrawn or retargeted just before the click landed.</td>
+          </tr>
+          <tr>
+            <td><code>denyPlayRequest fromPlayerId toPlayerId room</code></td>
+            <td>Same as <code>acceptPlayRequest</code> — the two only differ in which hub event the caller broadcasts afterwards.</td>
+          </tr>
+          <tr>
             <td><code>pendingRequestsFor toPlayerId room</code></td>
             <td>Filters requests addressed to one player.</td>
           </tr>
@@ -90,14 +113,24 @@
         </thead>
         <tbody>
           <tr>
-            <td><code>SendPlayRequest(toPlayerId)</code></td>
+            <td><code>SendPlayRequest(toPlayerId, gameType)</code></td>
             <td>client → server</td>
-            <td>target's <code>PlayerId</code> as a string</td>
+            <td>target's <code>PlayerId</code> string + the chosen <code>GameType</code></td>
           </tr>
           <tr>
             <td><code>WithdrawPlayRequest()</code></td>
             <td>client → server</td>
             <td>—</td>
+          </tr>
+          <tr>
+            <td><code>AcceptPlayRequest(fromPlayerId)</code></td>
+            <td>client → server</td>
+            <td>the challenger's <code>PlayerId</code> string</td>
+          </tr>
+          <tr>
+            <td><code>DenyPlayRequest(fromPlayerId)</code></td>
+            <td>client → server</td>
+            <td>the challenger's <code>PlayerId</code> string</td>
           </tr>
           <tr>
             <td><code>PlayRequestReceived</code></td>
@@ -109,17 +142,28 @@
             <td>server → room group</td>
             <td>the withdrawing sender's <code>PlayerId</code> string</td>
           </tr>
+          <tr>
+            <td><code>PlayRequestAccepted</code></td>
+            <td>server → room group</td>
+            <td>(<code>fromPlayerId</code>, <code>toPlayerId</code>) string pair</td>
+          </tr>
+          <tr>
+            <td><code>PlayRequestDenied</code></td>
+            <td>server → room group</td>
+            <td>(<code>fromPlayerId</code>, <code>toPlayerId</code>) string pair, same shape as <code>PlayRequestAccepted</code></td>
+          </tr>
         </tbody>
       </table>
       <p>
         <code>SendPlayRequest</code> validates the target is still in <code>room.Players</code> before creating the
-        request (<code>"Error"</code>, "That player is no longer in the room" otherwise).
+        request (<code>"Error"</code>, "That player is no longer in the room" otherwise). Accept/deny are
+        forgiving no-ops if the request they name is already gone (withdrawn or retargeted).
       </p>
       <div class="callout limitation">
         <span class="callout-title">Broadcast, not routed</span>
         <p>
-          <code>PlayRequestReceived</code> goes to the <em>whole</em> room group, not just the target — every
-          client just ignores requests not addressed to them (see the frontend section below). This is because
+          Every play-request event goes to the <em>whole</em> room group, not just the parties involved — every
+          client just ignores events not addressed to them (see the frontend section below). This is because
           <code>RoomStore</code> has no <code>PlayerId → connectionId</code> reverse index today, and building one
           just for this felt like more than the change needed. It's explicitly <strong>not</strong> a privacy
           guarantee — a determined client could see it via devtools regardless — just a pragmatic simplification
@@ -129,24 +173,37 @@
 
       <h2>Frontend</h2>
       <p>
-        <span class="file-ref">frontend/src/components/play-requests.ts</span> (<code>&lt;bg-play-requests&gt;</code>) is a
-        new, separate "dumb" view component — kept apart from <code>chat-panel.ts</code> since it's a distinct
-        concern with its own event surface, matching the spec's "a list below the chat window." It shows incoming
-        requests ("X wants to play") and, if the viewer has one outstanding, "Request sent to Y" with a Withdraw
-        button, firing a <code>withdraw-play-request</code> event.
+        <span class="file-ref">frontend/src/components/game-type-select.ts</span>
+        (<code>&lt;bg-game-type-select&gt;</code>) sits above the players list in the room screen and lets the
+        challenger pick All/Books/Chapters, reusing the same <code>&lt;bg-book-selector&gt;</code>/
+        <code>&lt;bg-chapter-selector&gt;</code> components singleplayer setup uses. It fires
+        <code>game-type-changed</code>; <span class="file-ref">bg-room-setup.ts</span> keeps the current selection
+        and turns it into a <code>GameType</code> (via <span class="file-ref">frontend/src/game-type.ts</span>'s
+        <code>gameTypeFromRestriction</code>) each time a player is challenged.
       </p>
       <p>
-        The click target is the <strong>players list only</strong>, not inline chat message sender names — a
-        stable, deliberate click target, versus making every scrolling chat message clickable and risking accidental
-        invites. <span class="file-ref">chat-panel.ts</span> fires <code>player-selected</code> (detail = clicked
-        player's id) when you click someone else's name; your own name renders without the click affordance.
+        <span class="file-ref">frontend/src/components/play-requests.ts</span> (<code>&lt;bg-play-requests&gt;</code>)
+        is a "dumb" view component — kept apart from <code>chat-panel.ts</code> since it's a distinct concern with
+        its own event surface, matching the spec's "a list below the chat window." It shows incoming requests ("X
+        wants to play", plus the game type via <code>describeGameType</code>) with Accept/Deny buttons, and, if the
+        viewer has one outstanding, "Request sent to Y" with a Withdraw button. It fires
+        <code>accept-play-request</code>/<code>deny-play-request</code>/<code>withdraw-play-request</code> events.
+      </p>
+      <p>
+        The click target for <em>sending</em> a challenge is the <strong>players list only</strong>, not inline
+        chat message sender names — a stable, deliberate click target, versus making every scrolling chat message
+        clickable and risking accidental invites. <span class="file-ref">chat-panel.ts</span> fires
+        <code>player-selected</code> (detail = clicked player's id) when you click someone else's name; your own
+        name renders without the click affordance.
       </p>
       <p>
         <span class="file-ref">bg-room-setup.ts</span> owns <code>playRequests: PlayRequest[]</code> (addressed to
         me) and <code>sentRequestToId?: string</code> (my own outstanding request). On
         <code>PlayRequestReceived</code>: if the sender is <em>me</em>, it's an echo of my own send/retarget, so it
         updates <code>sentRequestToId</code> instead of appending to the list; otherwise, if it's addressed to me,
-        it replaces any existing entry from that sender (mirroring REPLACE) and appends.
+        it replaces any existing entry from that sender (mirroring REPLACE) and appends. On
+        <code>PlayRequestAccepted</code>/<code>PlayRequestDenied</code>, the named request is dropped from
+        <code>playRequests</code>, and <code>sentRequestToId</code> clears if it was mine.
       </p>
 
       <h2>Verify it</h2>
@@ -154,11 +211,16 @@
         <li>
           Backend: <span class="file-ref">backend/Tests/RoomTests.fs</span> and
           <span class="file-ref">backend/Tests/PlayRequestTests.fs</span> — REPLACE semantics, independent senders
-          to the same target, isolated withdrawal.
+          to the same target, isolated withdrawal, accept/deny resolving the matching request only.
         </li>
         <li>
-          End-to-end: <span class="file-ref">frontend/e2e/play-request.spec.ts</span> — two browser contexts, full
-          send → receive → withdraw round trip against live dev servers.
+          Frontend unit: <span class="file-ref">frontend/src/game-type.test.ts</span> — building a
+          <code>GameType</code> from a chosen scope/restriction, and describing one for display.
+        </li>
+        <li>
+          End-to-end: <span class="file-ref">frontend/e2e/play-request.spec.ts</span> (send → receive → withdraw)
+          and <span class="file-ref">frontend/e2e/play-request-accept-deny.spec.ts</span> (send → accept, send →
+          deny) — two browser contexts each, against live dev servers.
         </li>
         <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
       </ul>
@@ -166,6 +228,8 @@
       <footer class="page-footer">
         Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
         <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">frontend/src/game-type.ts</span> ·
+        <span class="file-ref">frontend/src/components/game-type-select.ts</span> ·
         <span class="file-ref">frontend/src/components/play-requests.ts</span> ·
         <span class="file-ref">frontend/src/components/chat-panel.ts</span> ·
         <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> ·

@@ -41,13 +41,27 @@ export interface ChatMessage {
   sentAt: string
 }
 
-/** A "start a game" invite one player sends another — see
- * docs/SCRUM/Feature.StartMPGame.md. Send/see/withdraw only; accepting a
- * request depends on round sync, which doesn't exist yet. */
+/**
+ * Which verses a challenged game will draw from — chosen by the challenger
+ * before sending the request, so the challenged player can see what
+ * they're being invited to. See docs/SCRUM/Feature.RequestToStartMPGame.md
+ * and backend/Domain/Game.fs's GameType, which this mirrors.
+ */
+export type GameType =
+  | { Case: 'AllVerses' }
+  | { Case: 'Books'; Fields: [string[]] }
+  | { Case: 'Chapters'; Fields: [Record<string, number[]>] }
+
+/** A "start a game" invite one player sends another, for the GameType they
+ * chose beforehand — see docs/SCRUM/Feature.StartMPGame.md and
+ * docs/SCRUM/Feature.RequestToStartMPGame.md. The challenged player can
+ * accept or deny it; actually starting a synced game depends on round
+ * sync, which doesn't exist yet. */
 export interface PlayRequest {
   fromPlayerId: string
   fromPlayerName: string
   toPlayerId: string
+  gameType: GameType
   sentAt: string
 }
 

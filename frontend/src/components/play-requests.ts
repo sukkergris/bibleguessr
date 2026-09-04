@@ -1,21 +1,23 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
+import { describeGameType } from '../game-type'
 import type { PlayRequest } from '../types'
 
 /**
  * The list of play requests addressed to the viewing player, shown below
- * the chat window — see docs/SCRUM/Feature.StartMPGame.md. Also shows the
- * player's own outstanding sent request (if any), with a Withdraw button.
+ * the chat window — see docs/SCRUM/Feature.StartMPGame.md and
+ * docs/SCRUM/Feature.RequestToStartMPGame.md. Also shows the player's own
+ * outstanding sent request (if any), with a Withdraw button. Each incoming
+ * request shows the game type the challenger chose (see game-type.ts) and
+ * Accept/Deny buttons.
  *
- * Deliberately no accept/decline: accepting a request depends on round
- * sync, which isn't built yet, so a request just sits visible until its
- * sender withdraws it or retargets someone else (REPLACE semantics — see
- * backend/Domain/Game.fs's Room.sendPlayRequest).
+ * Accepting/denying only resolves the request itself — actually starting a
+ * synced game (picking a shared verse, syncing rounds) depends on round
+ * sync, which isn't built yet, so that stays a separate future feature.
  *
  * Dumb view component, same pattern as chat-panel.ts: the parent owns the
- * `requests`/`sentRequestToId` state and the actual SignalR call, this
- * only fires a `withdraw-play-request` CustomEvent when the player clicks
- * Withdraw.
+ * `requests`/`sentRequestToId` state and the actual SignalR calls, this
+ * only fires CustomEvents when the player clicks a button.
  */
 @customElement('bg-play-requests')
 export class PlayRequests extends LitElement {
@@ -48,7 +50,20 @@ export class PlayRequests extends LitElement {
         ${this.requests.length > 0
           ? html`
               <ul>
-                ${this.requests.map((r) => html`<li>${r.fromPlayerName} wants to play</li>`)}
+                ${this.requests.map(
+                  (r) => html`
+                    <li>
+                      <span>
+                        <strong>${r.fromPlayerName}</strong> wants to play
+                        <span class="game-type">${describeGameType(r.gameType)}</span>
+                      </span>
+                      <span class="actions">
+                        <button type="button" @click=${() => this._onAccept(r.fromPlayerId)}>Accept</button>
+                        <button type="button" class="deny" @click=${() => this._onDeny(r.fromPlayerId)}>Deny</button>
+                      </span>
+                    </li>
+                  `,
+                )}
               </ul>
             `
           : null}
@@ -58,6 +73,18 @@ export class PlayRequests extends LitElement {
 
   private _onWithdraw() {
     this.dispatchEvent(new CustomEvent('withdraw-play-request', { bubbles: true, composed: true }))
+  }
+
+  private _onAccept(fromPlayerId: string) {
+    this.dispatchEvent(
+      new CustomEvent<string>('accept-play-request', { detail: fromPlayerId, bubbles: true, composed: true }),
+    )
+  }
+
+  private _onDeny(fromPlayerId: string) {
+    this.dispatchEvent(
+      new CustomEvent<string>('deny-play-request', { detail: fromPlayerId, bubbles: true, composed: true }),
+    )
   }
 
   static styles = css`
@@ -94,10 +121,26 @@ export class PlayRequests extends LitElement {
     }
 
     li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
       padding: 0.4rem 0.6rem;
       border-radius: 6px;
       background: rgba(170, 59, 255, 0.08);
       font-size: 0.9rem;
+    }
+
+    .game-type {
+      display: block;
+      font-size: 0.8rem;
+      opacity: 0.7;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.4rem;
+      flex: none;
     }
 
     button {
@@ -108,6 +151,12 @@ export class PlayRequests extends LitElement {
       color: white;
       font-size: 0.85rem;
       cursor: pointer;
+    }
+
+    button.deny {
+      background: transparent;
+      color: #d33;
+      border: 1px solid #d33;
     }
   `
 }

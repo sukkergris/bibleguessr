@@ -41,7 +41,9 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
           </tr>
           <tr>
             <td><code>RoomTests.fs</code></td>
-            <td><code>addMessage</code> truncation/ordering, play-request send/withdraw/filter functions.</td>
+            <td>
+              <code>addMessage</code> truncation/ordering, play-request send/withdraw/accept/deny/filter functions.
+            </td>
           </tr>
           <tr>
             <td><code>PlayRequestTests.fs</code></td>
@@ -73,6 +75,13 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
             <td><code>scoring.test.ts</code></td>
             <td>Same scenarios as the backend's <code>ScoringTests.fs</code>, for side-by-side comparison.</td>
           </tr>
+          <tr>
+            <td><code>game-type.test.ts</code></td>
+            <td>
+              Building a <code>GameType</code> from a chosen scope/restriction, and describing one for display —
+              see <a href="../play-requests/index.html">Start a game from chat</a>.
+            </td>
+          </tr>
         </tbody>
       </table>
       <div class="callout limitation">
@@ -85,7 +94,7 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
       </div>
 
       <h2>End-to-end — Playwright</h2>
-      <p><span class="file-ref">frontend/playwright.config.ts</span> — both specs use two independent browser contexts to simulate two separate players against the same live server.</p>
+      <p><span class="file-ref">frontend/playwright.config.ts</span> — every spec uses two independent browser contexts to simulate two separate players against the same live server.</p>
       <table>
         <thead>
           <tr>
@@ -97,6 +106,13 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
           <tr>
             <td><code>play-request.spec.ts</code></td>
             <td>Full send → receive → withdraw round trip.</td>
+          </tr>
+          <tr>
+            <td><code>play-request-accept-deny.spec.ts</code></td>
+            <td>
+              Send → receive (with the chosen game type shown) → accept, and send → receive → deny — the request
+              clears on both sides either way.
+            </td>
           </tr>
           <tr>
             <td><code>player-presence.spec.ts</code></td>

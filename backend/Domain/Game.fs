@@ -40,15 +40,30 @@ type ChatMessage =
       Text: string
       SentAt: DateTimeOffset }
 
+/// Which verses a challenged game will draw from — chosen by the challenger
+/// before sending the request (see docs/SCRUM/Feature.RequestToStartMPGame.md),
+/// so the challenged player can see what they're being invited to. Mirrors
+/// the shape of the /api/verses/random restriction query params (see
+/// Program.fs and Verse.matchesRestriction) rather than introducing a new
+/// vocabulary: AllVerses is "no restriction", Books narrows to a subset of
+/// books, Chapters narrows further to specific chapters within books.
+type GameType =
+    | AllVerses
+    | Books of string list
+    | Chapters of Map<string, int list>
+
 /// A "start a game" invite one player sends another, by clicking their name
-/// in the room's players list (see docs/SCRUM/Feature.StartMPGame.md). Only
-/// send/see/withdraw are in scope for this feature — accepting a request to
-/// actually start a synced game depends on round sync, which doesn't exist
-/// yet, so there's deliberately no accept/decline here.
+/// in the room's players list (see docs/SCRUM/Feature.StartMPGame.md), for
+/// the GameType they chose beforehand. The challenged player can accept or
+/// deny it (see docs/SCRUM/Feature.RequestToStartMPGame.md) — accepting or
+/// denying just resolves the request itself; actually starting a synced
+/// game (picking a shared verse, syncing rounds) depends on round sync,
+/// which doesn't exist yet, so that stays a separate future feature.
 type PlayRequest =
     { FromPlayerId: PlayerId
       FromPlayerName: string
       ToPlayerId: PlayerId
+      GameType: GameType
       SentAt: DateTimeOffset }
 
 type Room =
@@ -105,6 +120,29 @@ module Room =
     /// Removes whatever request `fromPlayerId` currently has pending, if any.
     let withdrawPlayRequest (fromPlayerId: PlayerId) (room: Room) =
         { room with PendingRequests = room.PendingRequests |> List.filter (fun r -> r.FromPlayerId <> fromPlayerId) }
+
+    /// Removes the pending request from `fromPlayerId` to `toPlayerId`, if it
+    /// still exists — shared by acceptPlayRequest/denyPlayRequest, which
+    /// differ only in which event the caller broadcasts afterwards. A no-op
+    /// if that exact request is no longer there (e.g. already withdrawn or
+    /// retargeted), same forgiving semantics as withdrawPlayRequest.
+    let private removePlayRequest (fromPlayerId: PlayerId) (toPlayerId: PlayerId) (room: Room) =
+        { room with
+            PendingRequests =
+                room.PendingRequests
+                |> List.filter (fun r -> not (r.FromPlayerId = fromPlayerId && r.ToPlayerId = toPlayerId)) }
+
+    /// The challenged player accepts `fromPlayerId`'s request to them —
+    /// resolves (removes) the request. Starting an actual synced game isn't
+    /// wired up yet (see PlayRequest's doc comment); this just clears the
+    /// invite so both players' UI can reflect the outcome.
+    let acceptPlayRequest (fromPlayerId: PlayerId) (toPlayerId: PlayerId) (room: Room) =
+        removePlayRequest fromPlayerId toPlayerId room
+
+    /// The challenged player denies `fromPlayerId`'s request to them —
+    /// resolves (removes) the request without starting anything.
+    let denyPlayRequest (fromPlayerId: PlayerId) (toPlayerId: PlayerId) (room: Room) =
+        removePlayRequest fromPlayerId toPlayerId room
 
     /// All requests currently addressed to `toPlayerId`.
     let pendingRequestsFor (toPlayerId: PlayerId) (room: Room) =
