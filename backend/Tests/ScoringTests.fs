@@ -4,12 +4,15 @@ open System
 open Xunit
 open BibleGuessr.Domain
 
-let private verse =
-    Verse.create "John" 3 16 "For God so loved the world..." "Test Translation"
+// pointsForVerseGuess (the singleplayer scorer these tests cover) matches
+// by book NAME only — see MultiplayerScoringByNumberTests.fs for the
+// number-based isCorrectGuess these BookNumber values are irrelevant to.
+let private verse: VerseReference = { Book = "John"; BookNumber = 43; Chapter = 3; VerseNumber = 16 }
 
 let private makeGuess book chapter verseNumber : Guess =
     { PlayerId = PlayerId(Guid.NewGuid())
       Book = book
+      BookNumber = None
       Chapter = chapter
       VerseNumber = verseNumber
       SubmittedAt = DateTimeOffset.UtcNow }

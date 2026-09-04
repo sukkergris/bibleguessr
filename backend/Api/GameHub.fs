@@ -119,6 +119,17 @@ let PlayRequestAcceptedEvent = "PlayRequestAccepted"
 [<Literal>]
 let PlayRequestDeniedEvent = "PlayRequestDenied"
 
+/// Sent to the room's two active-game players once the final round of a
+/// GameSession has been scored (game completed normally), or as soon as a
+/// game ends early via forfeit (a player left/disconnected past the grace
+/// period, or explicitly forfeited — see GameHub.ForfeitGame and
+/// PlayerCleanupService). Payload: (Scores, PlayerA, PlayerB, Reason) — see
+/// GameOverReason. Broadcast to the whole room group, same
+/// broadcast-and-filter tradeoff as every other play-request/game event
+/// here (see PlayRequestReceivedEvent's doc comment).
+[<Literal>]
+let GameOverEvent = "GameOver"
+
 /// Sent to the room when a player is removed after being disconnected
 /// longer than Room.disconnectGracePeriod (see PlayerCleanupService) —
 /// payload is just their PlayerId, enough for clients to drop them from
@@ -145,7 +156,77 @@ let PlayerDisconnectedEvent = "PlayerDisconnected"
 /// dropped rather than broadcast.
 let private maxChatMessageLength = 500
 
-type GameHub(rooms: RoomStore) =
+/// Picks a random verse REFERENCE (book/chapter/verseNumber — never text,
+/// see VerseReference's doc comment) matching `gameType`'s restriction
+/// from `verses` — the same Verse.matchesRestrictionByNumber +
+/// Random.Shared.Next idiom /api/verses/random uses (see Program.fs), now
+/// also needed server-side since the server (not the client) picks each
+/// multiplayer round's verse. `verses` is the server's own pool — the
+/// reference edition whose OWN book numbers everything is matched
+/// against (see Verse.bookNumbers): `gameType`'s Books/Chapters carry
+/// book numbers from the CHALLENGER's own source, matched here by number
+/// (not name) against `verses`' own numbering, so a challenger's "Dommer"
+/// and the server's "Dommerne" still match correctly. Each player's
+/// client resolves the returned reference against their OWN chosen
+/// VerseSource for the actual displayable text. None if nothing matches
+/// (an empty/misconfigured book+chapter selection).
+let private pickRandomVerse (verses: Verse list) (gameType: GameType) : VerseReference option =
+    let numbersByBookName = Verse.bookNumbers verses
+    let books, chaptersByBook = GameType.restrictionOf gameType
+    let candidates = verses |> List.filter (Verse.matchesRestrictionByNumber numbersByBookName books chaptersByBook)
+
+    if candidates.IsEmpty then
+        None
+    else
+        Some(Verse.referenceOfIn numbersByBookName candidates[Random.Shared.Next(candidates.Length)])
+
+/// Scores the current round of `session` in the room at `roomCode`,
+/// broadcasts RoundScored, then either ends the game (broadcasting
+/// GameOver) or advances to a freshly-picked verse (broadcasting
+/// RoundStarted) — shared by GameHub.SubmitGuess (both players guessed)
+/// and RoundTimeoutService's sweep (deadline elapsed), so both paths use
+/// identical resolve-then-advance-or-end logic. `group` is the room's
+/// already-resolved IClientProxy (this.Clients.Group(roomCode) from a live
+/// hub call, or hubContext.Clients.Group(roomCode) from the sweep) rather
+/// than the whole Clients object, so this works from either caller without
+/// depending on which (incompatible) IHubClients-family interface each one
+/// actually implements.
+let private resolveRound
+    (group: IClientProxy)
+    (verses: Verse list)
+    (rooms: RoomStore)
+    (roomCode: string)
+    (room: Room)
+    (session: GameSession)
+    : Task =
+    task {
+        let scored = GameSession.scoreRound DateTimeOffset.UtcNow session
+        let roomAfterScoring = Room.updateGame (fun _ -> scored) room
+        rooms.Set(roomCode, roomAfterScoring)
+        do! group.SendAsync(RoundScoredEvent, scored)
+
+        let endWithCompleted () =
+            let roomAfterEnd = Room.endGame roomAfterScoring
+            rooms.Set(roomCode, roomAfterEnd)
+            group.SendAsync(GameOverEvent, scored.Scores, scored.PlayerA, scored.PlayerB, Completed)
+
+        if GameSession.isOver scored then
+            do! endWithCompleted ()
+        else
+            match pickRandomVerse verses scored.GameType with
+            | None ->
+                // The book/chapter selection stopped matching anything
+                // (shouldn't normally happen — it matched at game start)
+                // — end the game rather than get stuck InProgress forever.
+                do! endWithCompleted ()
+            | Some nextVerse ->
+                let advanced = GameSession.advanceRound nextVerse DateTimeOffset.UtcNow scored
+                let roomAfterAdvance = Room.updateGame (fun _ -> advanced) roomAfterScoring
+                rooms.Set(roomCode, roomAfterAdvance)
+                do! group.SendAsync(RoundStartedEvent, advanced)
+    }
+
+type GameHub(rooms: RoomStore, verses: Verse list) =
     inherit Hub()
 
     /// Adds the caller to `room` as a new player, registers the connection,
@@ -225,11 +306,15 @@ type GameHub(rooms: RoomStore) =
         }
 
     /// Sends (or retargets — see Room.sendPlayRequest's REPLACE semantics)
-    /// a play request from the caller to `toPlayerId`, for the `gameType`
-    /// the challenger chose beforehand (see
-    /// docs/SCRUM/Feature.RequestToStartMPGame.md) — sent as-is to the whole
-    /// room so the challenged player can see what they're being invited to.
-    member this.SendPlayRequest(toPlayerId: string, gameType: GameType) : Task =
+    /// a play request from the caller to `toPlayerId`, for the `gameType`/
+    /// `roundCount`/`timeLimitSeconds` the challenger chose beforehand (see
+    /// docs/SCRUM/Feature.RequestToStartMPGame.md and
+    /// docs/SCRUM/Feature.Time.md) — sent as-is to the whole room so the
+    /// challenged player can see what they're being invited to.
+    /// `timeLimitSeconds` is None (or 0) for "no limit" — translated to
+    /// TimeLimit here rather than asking the client to construct a
+    /// {Case:'Unlimited'}-shaped DU value by hand.
+    member this.SendPlayRequest(toPlayerId: string, gameType: GameType, roundCount: int, timeLimitSeconds: int option) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
             | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
@@ -241,12 +326,23 @@ type GameHub(rooms: RoomStore) =
 
                     match room.Players |> List.tryFind (fun p -> p.Id = targetId) with
                     | None -> do! this.Clients.Caller.SendAsync("Error", "That player is no longer in the room")
+                    | Some _ when Room.isInActiveGame sender.Id room ->
+                        do! this.Clients.Caller.SendAsync("Error", "You can't send a play request while a game is in progress")
+                    | Some _ when Room.isInActiveGame targetId room ->
+                        do! this.Clients.Caller.SendAsync("Error", "That player is already in a game")
                     | Some _ ->
+                        let timeLimit =
+                            match timeLimitSeconds with
+                            | None | Some 0 -> Unlimited
+                            | Some seconds -> LimitedTo(TimeSpan.FromSeconds(float seconds))
+
                         let request =
                             { FromPlayerId = sender.Id
                               FromPlayerName = sender.Name
                               ToPlayerId = targetId
                               GameType = gameType
+                              RoundCount = roundCount
+                              RoundTimeLimit = timeLimit
                               SentAt = DateTimeOffset.UtcNow }
 
                         rooms.Set(roomCode, Room.sendPlayRequest request room)
@@ -269,15 +365,18 @@ type GameHub(rooms: RoomStore) =
                     do! this.Clients.Group(roomCode).SendAsync(PlayRequestWithdrawnEvent, string senderGuid)
         }
 
-    /// Resolves the pending request from `fromPlayerId` to the caller,
-    /// broadcasting `event` to the room — shared by AcceptPlayRequest/
-    /// DenyPlayRequest, which differ only in which pure Room function and
-    /// which event they use. A no-op (no error) if that request is no
-    /// longer there (e.g. withdrawn or retargeted just before the caller's
-    /// click landed), same forgiving pattern as WithdrawPlayRequest.
-    member private this.ResolvePlayRequest
-        (fromPlayerId: string, resolve: PlayerId -> PlayerId -> Room -> Room, event: string)
-        : Task =
+    /// Accepts the pending request from `fromPlayerId` to the caller —
+    /// resolves the request AND starts the game it described: picks the
+    /// first verse (impure — Random, via pickRandomVerse, same idiom as
+    /// /api/verses/random), then broadcasts PlayRequestAccepted (unchanged,
+    /// for "they accepted" UI feedback) immediately followed by
+    /// RoundStarted (new) carrying the full GameSession. A no-op (no
+    /// broadcast at all) if the request was no longer there (e.g.
+    /// withdrawn a moment earlier) — naturally means "if it's gone, no
+    /// game starts", no separate guard needed for that race. Guarded by
+    /// the one-active-game-per-player rule: refuses (caller-only Error) if
+    /// either player already has a game running.
+    member this.AcceptPlayRequest(fromPlayerId: string) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
             | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
@@ -286,21 +385,123 @@ type GameHub(rooms: RoomStore) =
                 | None -> ()
                 | Some room ->
                     let fromId = PlayerId(Guid.Parse fromPlayerId)
-                    rooms.Set(roomCode, resolve fromId toPlayer.Id room)
-                    let (PlayerId fromGuid) = fromId
-                    let (PlayerId toGuid) = toPlayer.Id
-                    do! this.Clients.Group(roomCode).SendAsync(event, string fromGuid, string toGuid)
+
+                    if Room.isInActiveGame fromId room || Room.isInActiveGame toPlayer.Id room then
+                        do! this.Clients.Caller.SendAsync("Error", "You or that player already have a game in progress")
+                    else
+                        match room.PendingRequests |> List.tryFind (fun r -> r.FromPlayerId = fromId && r.ToPlayerId = toPlayer.Id) with
+                        | None -> ()
+                        | Some request ->
+                            match pickRandomVerse verses request.GameType with
+                            | None ->
+                                do! this.Clients.Caller.SendAsync(
+                                        "Error",
+                                        "No verses match that game's book/chapter selection"
+                                    )
+                            | Some firstVerse ->
+                                let updated, accepted =
+                                    Room.acceptPlayRequest fromId toPlayer.Id firstVerse DateTimeOffset.UtcNow room
+
+                                rooms.Set(roomCode, updated)
+
+                                match accepted with
+                                | None -> ()
+                                | Some _ ->
+                                    let (PlayerId fromGuid) = fromId
+                                    let (PlayerId toGuid) = toPlayer.Id
+                                    do! this.Clients.Group(roomCode).SendAsync(PlayRequestAcceptedEvent, string fromGuid, string toGuid)
+
+                                    match updated.ActiveGame with
+                                    | Some session -> do! this.Clients.Group(roomCode).SendAsync(RoundStartedEvent, session)
+                                    | None -> ()
         }
 
-    /// Accepts the pending request from `fromPlayerId` to the caller. See
-    /// docs/SCRUM/Feature.RequestToStartMPGame.md — actually starting a
-    /// synced game isn't wired up yet, this just resolves the request.
-    member this.AcceptPlayRequest(fromPlayerId: string) : Task =
-        this.ResolvePlayRequest(fromPlayerId, Room.acceptPlayRequest, PlayRequestAcceptedEvent)
-
-    /// Denies the pending request from `fromPlayerId` to the caller.
+    /// Denies the pending request from `fromPlayerId` to the caller —
+    /// resolves (removes) the request without starting anything. A no-op
+    /// (no error) if that request is no longer there, same forgiving
+    /// pattern as WithdrawPlayRequest.
     member this.DenyPlayRequest(fromPlayerId: string) : Task =
-        this.ResolvePlayRequest(fromPlayerId, Room.denyPlayRequest, PlayRequestDeniedEvent)
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, toPlayer) ->
+                match rooms.TryGet(roomCode) with
+                | None -> ()
+                | Some room ->
+                    let fromId = PlayerId(Guid.Parse fromPlayerId)
+                    rooms.Set(roomCode, Room.denyPlayRequest fromId toPlayer.Id room)
+                    let (PlayerId fromGuid) = fromId
+                    let (PlayerId toGuid) = toPlayer.Id
+                    do! this.Clients.Group(roomCode).SendAsync(PlayRequestDeniedEvent, string fromGuid, string toGuid)
+        }
+
+    /// Submits the caller's guess for the current round of their active
+    /// game. `bookNumber` is the guessed book's 1-based position in the
+    /// CALLER'S OWN VerseSource's Bible order (see
+    /// frontend/src/game-type.ts) — None if their own source couldn't
+    /// resolve one for what they typed, in which case scoring falls back
+    /// to name matching (see Scoring.isCorrectGuess). Errors (caller-only,
+    /// no broadcast) if the caller isn't in a room, isn't in an active
+    /// game, or the game's current round isn't InProgress (e.g. a late
+    /// resubmit racing the round already resolving). On success: records
+    /// the guess, and — if this completes both players' guesses for the
+    /// round — resolves it (see resolveRound). No broadcast on an
+    /// individual submission; the round only announces itself once
+    /// resolved (via RoundScored/RoundStarted/GameOver).
+    member this.SubmitGuess(book: string, bookNumber: int option, chapter: int option, verseNumber: int option) : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, player) ->
+                match rooms.TryGet(roomCode) with
+                | None -> do! this.Clients.Caller.SendAsync("Error", "Room not found")
+                | Some room ->
+                    match room.ActiveGame with
+                    | Some session when session.PlayerA = player.Id || session.PlayerB = player.Id ->
+                        match session.Round with
+                        | Scored _
+                        | WaitingForPlayers ->
+                            do! this.Clients.Caller.SendAsync("Error", "This round is no longer accepting guesses")
+                        | InProgress _ ->
+                            let guess: Guess =
+                                { PlayerId = player.Id
+                                  Book = book
+                                  BookNumber = bookNumber
+                                  Chapter = chapter
+                                  VerseNumber = verseNumber
+                                  SubmittedAt = DateTimeOffset.UtcNow }
+
+                            let withGuess = Room.updateGame (GameSession.submitGuess player.Id guess) room
+                            rooms.Set(roomCode, withGuess)
+
+                            match withGuess.ActiveGame with
+                            | Some updatedSession when GameSession.bothGuessed updatedSession ->
+                                do! resolveRound (this.Clients.Group(roomCode)) verses rooms roomCode withGuess updatedSession
+                            | _ -> ()
+                    | _ -> do! this.Clients.Caller.SendAsync("Error", "You don't have an active game")
+        }
+
+    /// The caller forfeits their active game, if they have one — ends the
+    /// game (Room.forfeitGame) and broadcasts GameOver(Forfeited) naming
+    /// the opponent as the surviving player. A no-op (no error) if the
+    /// caller doesn't have an active game — mirrors WithdrawPlayRequest's
+    /// forgiving semantics.
+    member this.ForfeitGame() : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, player) ->
+                match rooms.TryGet(roomCode) with
+                | None -> ()
+                | Some room ->
+                    match room.ActiveGame with
+                    | Some session when session.PlayerA = player.Id || session.PlayerB = player.Id ->
+                        let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
+                        let updated = Room.forfeitGame player.Id room
+                        rooms.Set(roomCode, updated)
+                        do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
+                    | _ -> ()
+        }
 
     /// Marks the disconnecting player as disconnected (still visible in the
     /// room, just flagged) rather than removing them immediately — a page
@@ -332,6 +533,11 @@ type GameHub(rooms: RoomStore) =
 /// PlayerLeft (and cleaning up their play requests — see
 /// Room.removeStaleDisconnections) so every other client's roster drops
 /// them without needing to wait for their own next RoomPlayers snapshot.
+/// If a removed player was mid-game, their ActiveGame is forfeited too
+/// (see removeStaleDisconnections) — this sweep broadcasts GameOver
+/// (Forfeited) to notify the surviving opponent, same "auto-forfeit after
+/// the disconnect grace period" behavior as everywhere else disconnection
+/// is handled in this app.
 type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>) =
     inherit Microsoft.Extensions.Hosting.BackgroundService()
 
@@ -347,13 +553,59 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>) =
 
                 for room in rooms.AllRooms() do
                     let (RoomCode roomCode) = room.Code
-                    let updated, removedIds = Room.removeStaleDisconnections cutoff room
+                    let forfeitedGame = room.ActiveGame
+                    let updated, removedIds, forfeitedOpponent = Room.removeStaleDisconnections cutoff room
 
                     if not removedIds.IsEmpty then
                         rooms.Set(roomCode, updated)
 
                         for PlayerId removedGuid in removedIds do
                             do! hubContext.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string removedGuid)
+
+                        match forfeitedGame with
+                        | Some session ->
+                            do!
+                                hubContext.Clients
+                                    .Group(roomCode)
+                                    .SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
+                        | None -> ()
+
+                try
+                    do! Task.Delay(sweepInterval, stoppingToken)
+                with :? OperationCanceledException ->
+                    ()
+        }
+
+/// Periodically sweeps every room's ActiveGame for a round whose time
+/// limit has elapsed and auto-resolves it (scores whoever guessed,
+/// implicit 0 for whoever didn't, then advances/ends the game) — mirrors
+/// PlayerCleanupService's sweep-and-broadcast-via-IHubContext pattern
+/// exactly, since this is the same shape of problem: something server-
+/// initiated that isn't triggered by any client call. A 1-second interval
+/// (vs. PlayerCleanupService's 30s) so a short round timer still feels
+/// responsive — still trivially cheap for what's normally a handful of
+/// in-memory rooms. Self-healing against races with SubmitGuess resolving
+/// the same round moments earlier: GameSession.isRoundExpired only matches
+/// a round that's still InProgress, so a round SubmitGuess already
+/// advanced/scored is simply skipped on the next tick — no cancellation
+/// or locking needed, consistent with RoomStore's atomic ConcurrentDictionary.Set.
+type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubContext<GameHub>) =
+    inherit Microsoft.Extensions.Hosting.BackgroundService()
+
+    let sweepInterval = TimeSpan.FromSeconds 1.0
+
+    override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
+        task {
+            while not stoppingToken.IsCancellationRequested do
+                let now = DateTimeOffset.UtcNow
+
+                for room in rooms.AllRooms() do
+                    let (RoomCode roomCode) = room.Code
+
+                    match room.ActiveGame with
+                    | Some session when GameSession.isRoundExpired now session ->
+                        do! resolveRound (hubContext.Clients.Group(roomCode)) verses rooms roomCode room session
+                    | _ -> ()
 
                 try
                     do! Task.Delay(sweepInterval, stoppingToken)

@@ -9,6 +9,12 @@ import { test, expect, type Page } from '@playwright/test'
 async function joinWorldChat(page: Page, name: string) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
+  // The server-translation dropdown auto-selects its first option once
+  // loaded — wait for that (rather than a fixed timeout) before the name
+  // field/Join button, which are disabled until a translation is chosen
+  // (see docs/SCRUM/Feature.RequestToStartMPGame.md's per-player-translation
+  // note: this happens before the name field, not after).
+  await expect(page.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
   await page.getByPlaceholder('e.g. Alice').fill(name)
   await page.getByRole('button', { name: 'Join World chat' }).click()
   // Lands "in-room" once the join round-trip (and the RoomPlayers/

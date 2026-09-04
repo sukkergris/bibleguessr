@@ -79,6 +79,39 @@ let parseChapterFile (fileName: string) (html: string) : Verse list option =
             Verse.create book chapter (int m.Groups["num"].Value) text TranslationLabel)
         |> Some
 
+/// Fixes a data-quality artifact found in the scraped source: a handful of
+/// chapter files title their book with a stray trailing period (e.g.
+/// "Jeremias." on Jeremiah 29/46/48) where every other chapter of the same
+/// book has none ("Jeremias") — the `<h1>` text is taken verbatim as the
+/// book name (see parseChapterFile), so without this fix those few
+/// chapters silently become a DIFFERENT, 67th "book" from the other 51571
+/// chapters of Jeremiah. That matters well beyond cosmetics: every book
+/// number downstream of the split is derived from this list's distinct
+/// book count and first-encounter order (see Verse.bookNumbers in
+/// BibleGuessr.Domain) for cross-translation/cross-file matching (see
+/// docs/SCRUM/Feature.RequestToStartMPGame.md's per-player-translation
+/// note) — one extra phantom book here shifts every later book's number
+/// by one, which is what let a multiplayer round reference an impossible
+/// chapter/verse (e.g. "Markus 25:38" — the real Markus has 16 chapters).
+///
+/// Deliberately NOT a blanket "strip every trailing period" — some book
+/// names are LEGITIMATELY abbreviated with one (e.g. "Matt." for Matthew,
+/// used consistently on every one of its chapters) and must stay as-is.
+/// Only merges a period-suffixed spelling into its un-suffixed twin when
+/// that twin is ALSO present in `verses` — i.e. only fixes an inconsistency
+/// between two spellings of what's otherwise the same book, never
+/// "corrects" a book that's consistently spelled with a period everywhere.
+let normalizeBookNames (verses: Verse list) : Verse list =
+    let bookNames = verses |> List.map (fun v -> v.Book) |> Set.ofList
+
+    let normalize (book: string) =
+        if book.EndsWith(".") && bookNames.Contains(book.TrimEnd('.')) then
+            book.TrimEnd('.')
+        else
+            book
+
+    verses |> List.map (fun v -> { v with Book = normalize v.Book })
+
 /// Loads all verses from every `*.html` entry in the zip archive at
 /// `zipPath`. Entries that don't parse as a chapter page (no <h1>/<pre>)
 /// are skipped.
@@ -99,6 +132,7 @@ let loadFromZip (zipPath: string) : Verse list =
             match parseChapterFile entry.Name html with
             | Some verses -> verses
             | None -> [])
+        |> normalizeBookNames
 
 /// Loads all verses from the first `*.zip` file found under `directory`.
 let loadFromDirectory (directory: string) : Verse list =

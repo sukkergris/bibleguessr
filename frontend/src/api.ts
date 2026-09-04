@@ -1,4 +1,4 @@
-import type { Room, Verse, VerseRestriction, VerseSource } from './types'
+import type { Room, Verse, VerseReference, VerseRestriction, VerseSource } from './types'
 
 // Configure via a Vite env var (frontend/.env.local) if the backend isn't
 // running on the default dev port, e.g. VITE_API_BASE_URL=http://localhost:5080
@@ -122,6 +122,25 @@ export const api = {
     const params = new URLSearchParams({ book, chapter: String(chapter) })
     if (translation) params.set('translation', translation)
     return getJson<number[]>(`/api/verse-numbers?${params}`)
+  },
+  // Resolves a multiplayer round's bare VerseReference (book/chapter/
+  // verseNumber, no text — see types.ts's RoundState doc comment) to this
+  // translation's full Verse. See /api/verses/lookup in Program.fs.
+  // Sends `bookNumber` alongside `book` — the server prefers it, since
+  // `reference.book` is just the spelling from whichever pool picked the
+  // round's verse (typically a DIFFERENT translation than the one being
+  // asked here), and matching by name would reintroduce the exact
+  // cross-translation spelling mismatch bookNumber exists to fix (see
+  // types.ts's VerseReference doc comment).
+  lookupVerse: (reference: VerseReference, translation?: string) => {
+    const params = new URLSearchParams({
+      book: reference.book,
+      bookNumber: String(reference.bookNumber),
+      chapter: String(reference.chapter),
+      verseNumber: String(reference.verseNumber),
+    })
+    if (translation) params.set('translation', translation)
+    return getJson<Verse>(`/api/verses/lookup?${params}`)
   },
   createRoom: () => postJson<Room>('/api/rooms'),
   // Sends a Bible-file upload error report — see

@@ -23,8 +23,22 @@ type ReportRequest =
 let main args =
     let builder = WebApplication.CreateBuilder(args)
 
+    // MapFormat.Object (rather than the library's default, an array of
+    // [key, value] pairs) makes every F# Map serialize as a plain JSON
+    // object — {"1":[1,2]}, not [[1,[1,2]]] — matching what the frontend
+    // has always assumed for every Map-backed field that crosses this
+    // boundary (GameSession.Scores/GuessesThisRound, GameType.Chapters —
+    // see types.ts's Record<string,...>/Record<number,...> mirrors).
+    // Using the array-of-pairs default silently broke all of these: a
+    // multiplayer round's displayed score was always 0 (Map.scores[id]
+    // read against an array returns undefined, masked by a "?? 0"
+    // fallback) and sending a Chapters-scoped challenge threw a server
+    // error outright, since the client sent an object where the default
+    // format expected pairs.
+    let jsonOptions = JsonFSharpOptions.Default().WithMapFormat(MapFormat.Object)
+
     builder.Services.ConfigureHttpJsonOptions(fun options ->
-        options.SerializerOptions.Converters.Add(JsonFSharpConverter()))
+        options.SerializerOptions.Converters.Add(JsonFSharpConverter(jsonOptions)))
     |> ignore
 
     builder.Services.AddHttpLogging(fun options ->
@@ -47,7 +61,7 @@ let main args =
 
     builder.Services
         .AddSignalR()
-        .AddJsonProtocol(fun options -> options.PayloadSerializerOptions.Converters.Add(JsonFSharpConverter()))
+        .AddJsonProtocol(fun options -> options.PayloadSerializerOptions.Converters.Add(JsonFSharpConverter(jsonOptions)))
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore
 
@@ -68,6 +82,11 @@ let main args =
     let verses = BibelenDkLoader.loadFromDirectory versesDirectory
 
     builder.Services.AddSingleton<Verse list>(verses) |> ignore
+
+    // Periodically resolves any multiplayer round whose time limit has
+    // elapsed, even if a player never guessed — see GameHub.fs's
+    // RoundTimeoutService.
+    builder.Services.AddHostedService<GameHub.RoundTimeoutService>() |> ignore
 
     // SMTP settings for the bug-report endpoint — see MailSender.fs and
     // docs/SCRUM/Feature.ErrorMessageBibleLoader.md. Local dev points these
@@ -181,6 +200,66 @@ let main args =
                 failwith "No verses match the requested translation/book/chapter selection"
             else
                 candidates[Random.Shared.Next(candidates.Length)])
+    )
+    |> ignore
+
+    // Resolves an exact verse reference to its full text for one
+    // translation — needed because a multiplayer round's server state is
+    // a bare VerseReference (see backend/Domain/Verses.fs's doc comment:
+    // the server never sends verse text over the wire, since two players
+    // in the same game may each be reading a different translation).
+    // Each client calls this against its OWN chosen translation to render
+    // the round's verse locally — see frontend/src/api.ts's lookupVerse.
+    //
+    // Prefers `bookNumber` (this translation's OWN Bible-order position —
+    // see Verse.bookNumberOf/bookAtNumber) over `book` (a name) whenever
+    // it's given: a VerseReference's Book field is just the spelling from
+    // whichever pool picked the round's verse (typically a DIFFERENT
+    // translation than this endpoint is now being asked to search), so
+    // matching by name here would reintroduce the exact cross-translation
+    // spelling-mismatch bug BookNumber exists to fix (see
+    // VerseReference's doc comment). `book` stays supported as a fallback
+    // for callers with no number at all (e.g. local-verses.ts's own
+    // lookupVerse resolves by number first and falls back to name the
+    // same way — see local-verses.ts).
+    app.MapGet(
+        "/api/verses/lookup",
+        Func<Verse list, HttpRequest, Verse>(fun verses request ->
+            let translation = request.Query["translation"]
+            let book = request.Query["book"].ToString()
+
+            let bookNumber =
+                match Int32.TryParse(request.Query["bookNumber"].ToString()) with
+                | true, n -> Some n
+                | false, _ -> None
+
+            let chapter =
+                match Int32.TryParse(request.Query["chapter"].ToString()) with
+                | true, c -> c
+                | false, _ -> failwith "chapter must be a number"
+
+            let verseNumber =
+                match Int32.TryParse(request.Query["verseNumber"].ToString()) with
+                | true, v -> v
+                | false, _ -> failwith "verseNumber must be a number"
+
+            let byTranslation =
+                if translation.Count = 0 then
+                    verses
+                else
+                    let t = translation.ToString()
+                    verses |> List.filter (fun v -> v.Translation = t)
+
+            let matchesBook =
+                match bookNumber with
+                | Some number ->
+                    let resolvedBook = Verse.bookAtNumber byTranslation number
+                    fun (v: Verse) -> Some v.Book = resolvedBook
+                | None -> fun (v: Verse) -> String.Equals(v.Book, book, StringComparison.OrdinalIgnoreCase)
+
+            match byTranslation |> List.tryFind (fun v -> matchesBook v && v.Chapter = chapter && v.VerseNumber = verseNumber) with
+            | Some verse -> verse
+            | None -> failwith "That verse doesn't exist in the requested translation")
     )
     |> ignore
 

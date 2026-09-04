@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, property } from 'lit/decorators.js'
+import { customElement, property, state } from 'lit/decorators.js'
 import { describeGameType } from '../game-type'
-import type { PlayRequest } from '../types'
+import type { GameType, PlayRequest, VerseSource } from '../types'
 
 /**
  * The list of play requests addressed to the viewing player, shown below
@@ -31,6 +31,50 @@ export class PlayRequests extends LitElement {
   @property({ attribute: false })
   sentRequestToName?: string
 
+  /** The VIEWING player's own chosen verse source — used to resolve each
+   * request's GameType (book NUMBERS — see types.ts's GameType doc
+   * comment) to THIS viewer's own book-name spelling for display (see
+   * game-type.ts's describeGameType, which is async for this reason). */
+  @property({ attribute: false })
+  verseSource?: VerseSource
+
+  @property({ attribute: false })
+  translation?: string
+
+  // Resolved description text per request, keyed by fromPlayerId — since
+  // describeGameType is async (it resolves book numbers against
+  // verseSource), this can't just be called inline in render().
+  @state()
+  private _descriptions = new Map<string, string>()
+
+  willUpdate(changedProperties: Map<string, unknown>) {
+    if (
+      changedProperties.has('requests') ||
+      changedProperties.has('verseSource') ||
+      changedProperties.has('translation')
+    ) {
+      this._resolveDescriptions()
+    }
+  }
+
+  private _resolveDescriptions() {
+    if (!this.verseSource) return
+    const verseSource = this.verseSource
+
+    for (const request of this.requests) {
+      if (this._descriptions.has(request.fromPlayerId)) continue
+      this._describeAndStore(request.fromPlayerId, request.gameType, verseSource)
+    }
+  }
+
+  private _describeAndStore(fromPlayerId: string, gameType: GameType, verseSource: VerseSource) {
+    describeGameType(gameType, verseSource, this.translation).then((description) => {
+      const updated = new Map(this._descriptions)
+      updated.set(fromPlayerId, description)
+      this._descriptions = updated
+    })
+  }
+
   render() {
     return html`
       <div class="panel">
@@ -55,7 +99,7 @@ export class PlayRequests extends LitElement {
                     <li>
                       <span>
                         <strong>${r.fromPlayerName}</strong> wants to play
-                        <span class="game-type">${describeGameType(r.gameType)}</span>
+                        <span class="game-type">${this._descriptions.get(r.fromPlayerId) ?? '…'}</span>
                       </span>
                       <span class="actions">
                         <button type="button" @click=${() => this._onAccept(r.fromPlayerId)}>Accept</button>

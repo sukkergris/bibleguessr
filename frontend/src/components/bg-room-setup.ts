@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { gameTypeFromRestriction, type GameTypeScope } from '../game-type'
+import { gameTypeFromRestriction } from '../game-type'
 import {
   acceptPlayRequest,
   denyPlayRequest,
@@ -24,17 +24,35 @@ import {
   withdrawPlayRequest,
   type ConnectionState,
 } from '../signalr-client'
-import type { ChatMessage, PlayRequest, Player, VerseRestriction } from '../types'
+import type { ChatMessage, PlayRequest, Player } from '../types'
 import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-name-storage'
 import './chat-panel'
 import './play-requests'
-import './game-type-select'
+import './challenge-settings'
+import './multiplayer-game'
+import './multiplayer-results'
+import './translation-source-select'
+import type { ChallengeSettings } from './challenge-settings'
+import type { MultiplayerGameOverDetail } from './multiplayer-results'
+import type { TranslationChoice } from './translation-source-select'
 
 type Screen =
   | { step: 'choose' }
   | { step: 'creating' }
   | { step: 'joining' }
   | { step: 'in-room'; roomCode?: string; playerName: string }
+
+/** The player I'm now in a synced game with — set once a PlayRequestAccepted
+ * resolves for a request involving me (either as challenger or challenged),
+ * cleared once <bg-multiplayer-game> reports the game ended (game-over or
+ * game-ended). Owning just "who" here (not the round/score/timer machinery
+ * itself, which <bg-multiplayer-game> owns entirely) keeps this identity
+ * fact available for the room-level UI (e.g. hiding the challenge
+ * affordance) without duplicating state that already lives in the child. */
+interface ActiveGameOpponent {
+  id: string
+  name: string
+}
 
 /**
  * Multiplayer entry point: create a new room or join one by code, then land
@@ -48,6 +66,18 @@ export class RoomSetup extends LitElement {
 
   @state()
   private roomCodeInput = ''
+
+  /** This player's own translation/Bible-file choice — picked BEFORE the
+   * name field (see docs/SCRUM/Feature.RequestToStartMPGame.md's
+   * per-player-translation note: each player picks their own, and players
+   * don't need to match each other). Used both to feed the challenge-type
+   * book/chapter selectors when this player challenges someone, and to
+   * resolve a multiplayer round's VerseReference to displayable text
+   * locally — see <bg-multiplayer-game>. Undefined until
+   * <bg-translation-source-select> reports a valid choice; Create/Join/
+   * World-chat are disabled until then. */
+  @state()
+  private myTranslationChoice?: TranslationChoice
 
   // Pre-filled from this browser's remembered name (if any) — see
   // player-name-storage.ts. Just a convenience: the server still mints a
@@ -79,22 +109,24 @@ export class RoomSetup extends LitElement {
   @state()
   private sentRequestToId?: string
 
-  /** The game type scope + restriction I've currently got selected in
-   * <bg-game-type-select> — used to build the GameType sent along with the
-   * next play request I make (see game-type.ts). Defaults to 'all', same
-   * default as the selector itself. */
+  /** The game type/round count/time limit I've currently got selected in
+   * <bg-challenge-settings> — used to build the play request I send when I
+   * click a player's name (see game-type.ts's gameTypeFromRestriction).
+   * Defaults match the selector's own defaults. */
   @state()
-  private challengeScope: GameTypeScope = 'all'
+  private challengeSettings: ChallengeSettings = { scope: 'all', roundCount: 5 }
 
+  /** Set once a play request involving me is accepted — the game screen
+   * (<bg-multiplayer-game>) replaces the game-type-select/chat/play-requests
+   * block while this is set. See ActiveGameOpponent. */
   @state()
-  private challengeRestriction?: VerseRestriction
+  private activeGameOpponent?: ActiveGameOpponent
 
-  /** The translation offered to <bg-game-type-select>'s book/chapter
-   * selectors — the first one the backend reports, same "just pick one to
-   * start" simplicity as the rest of the room screen (no translation
-   * picker exists here today). Loaded once on entering a room. */
+  /** Set once <bg-multiplayer-game> reports the game ended normally
+   * (game-over) — shows <bg-multiplayer-results> in place of the game
+   * screen until the player dismisses it. */
   @state()
-  private challengeTranslation?: string
+  private mpResults?: MultiplayerGameOverDetail
 
   @state()
   private error?: string
@@ -140,12 +172,21 @@ export class RoomSetup extends LitElement {
 
   private _renderChoose() {
     const isBusy = this.screen.step === 'creating' || this.screen.step === 'joining'
+    const canProceed = isBusy ? false : !!this.myTranslationChoice && !!this.playerNameInput.trim()
 
     return html`
       <div class="setup">
         <h1>Multiplayer</h1>
 
         ${this.error ? html`<p class="error">${this.error}</p>` : null}
+
+        <div class="translation-block">
+          <h2>Your Bible</h2>
+          <p class="translation-hint">
+            Pick your own translation or upload your own file — other players don't need to match you.
+          </p>
+          <bg-translation-source-select @translation-changed=${this._onTranslationChanged}></bg-translation-source-select>
+        </div>
 
         <label>
           Your name
@@ -157,7 +198,7 @@ export class RoomSetup extends LitElement {
           />
         </label>
 
-        <button type="button" ?disabled=${isBusy || !this.playerNameInput.trim()} @click=${this._onCreateRoom}>
+        <button type="button" ?disabled=${!canProceed} @click=${this._onCreateRoom}>
           Create a room
         </button>
 
@@ -169,21 +210,12 @@ export class RoomSetup extends LitElement {
             placeholder="Room code"
             maxlength="4"
           />
-          <button
-            type="button"
-            ?disabled=${isBusy || !this.playerNameInput.trim() || !this.roomCodeInput.trim()}
-            @click=${this._onJoinRoom}
-          >
+          <button type="button" ?disabled=${!canProceed || !this.roomCodeInput.trim()} @click=${this._onJoinRoom}>
             Join
           </button>
         </div>
 
-        <button
-          type="button"
-          class="secondary"
-          ?disabled=${isBusy || !this.playerNameInput.trim()}
-          @click=${this._onJoinWorldChat}
-        >
+        <button type="button" class="secondary" ?disabled=${!canProceed} @click=${this._onJoinWorldChat}>
           Join World chat
         </button>
       </div>
@@ -217,29 +249,46 @@ export class RoomSetup extends LitElement {
             `
           : null}
 
-        <bg-game-type-select
-          .verseSource=${api}
-          .translation=${this.challengeTranslation}
-          @game-type-changed=${this._onGameTypeChanged}
-        ></bg-game-type-select>
+        ${this.mpResults
+          ? html`<bg-multiplayer-results .result=${this.mpResults} @back-to-room=${this._onBackToRoomFromResults}></bg-multiplayer-results>`
+          : this.activeGameOpponent
+            ? html`<bg-multiplayer-game
+                .myPlayerId=${this.myPlayerId}
+                .myPlayerName=${this.playerNameInput.trim()}
+                .opponentId=${this.activeGameOpponent.id}
+                .opponentName=${this.activeGameOpponent.name}
+                .translation=${this.myTranslationChoice?.translation}
+                .verseSource=${this.myTranslationChoice?.verseSource}
+                @game-over=${this._onMultiplayerGameOver}
+                @game-ended=${this._onMultiplayerGameEnded}
+              ></bg-multiplayer-game>`
+            : html`
+                <bg-challenge-settings
+                  .verseSource=${this.myTranslationChoice?.verseSource}
+                  .translation=${this.myTranslationChoice?.translation}
+                  @challenge-settings-changed=${this._onChallengeSettingsChanged}
+                ></bg-challenge-settings>
 
-        <bg-chat-panel
-          .players=${this.players}
-          .messages=${this.messages}
-          .myPlayerId=${this.myPlayerId}
-          .connectionState=${this.connectionState}
-          .disconnectedPlayerIds=${this.disconnectedPlayerIds}
-          @chat-submit=${this._onChatSubmit}
-          @player-selected=${this._onPlayerSelected}
-        ></bg-chat-panel>
+                <bg-chat-panel
+                  .players=${this.players}
+                  .messages=${this.messages}
+                  .myPlayerId=${this.myPlayerId}
+                  .connectionState=${this.connectionState}
+                  .disconnectedPlayerIds=${this.disconnectedPlayerIds}
+                  @chat-submit=${this._onChatSubmit}
+                  @player-selected=${this._onPlayerSelected}
+                ></bg-chat-panel>
 
-        <bg-play-requests
-          .requests=${this.playRequests}
-          .sentRequestToName=${this._sentRequestToName()}
-          @withdraw-play-request=${this._onWithdrawPlayRequest}
-          @accept-play-request=${this._onAcceptPlayRequest}
-          @deny-play-request=${this._onDenyPlayRequest}
-        ></bg-play-requests>
+                <bg-play-requests
+                  .requests=${this.playRequests}
+                  .sentRequestToName=${this._sentRequestToName()}
+                  .verseSource=${this.myTranslationChoice?.verseSource}
+                  .translation=${this.myTranslationChoice?.translation}
+                  @withdraw-play-request=${this._onWithdrawPlayRequest}
+                  @accept-play-request=${this._onAcceptPlayRequest}
+                  @deny-play-request=${this._onDenyPlayRequest}
+                ></bg-play-requests>
+              `}
 
         <button type="button" class="secondary" @click=${this._onLeaveRoom}>
           Back to chat selection
@@ -329,6 +378,17 @@ export class RoomSetup extends LitElement {
     })
     this._unsubscribePlayRequestAccepted = onPlayRequestAccepted((fromPlayerId, toPlayerId) => {
       this._resolvePlayRequest(fromPlayerId, toPlayerId)
+
+      // A game only starts for the two players actually involved — every
+      // other client in the room also sees this broadcast (see
+      // GameHub.fs's targeting doc comment) but has no stake in it.
+      if (fromPlayerId === this.myPlayerId) {
+        const opponent = this.players.find((p) => p.id === toPlayerId)
+        if (opponent) this.activeGameOpponent = { id: opponent.id, name: opponent.name }
+      } else if (toPlayerId === this.myPlayerId) {
+        const opponent = this.players.find((p) => p.id === fromPlayerId)
+        if (opponent) this.activeGameOpponent = { id: opponent.id, name: opponent.name }
+      }
     })
     this._unsubscribePlayRequestDenied = onPlayRequestDenied((fromPlayerId, toPlayerId) => {
       this._resolvePlayRequest(fromPlayerId, toPlayerId)
@@ -356,15 +416,6 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = me.id
     saveRememberedPlayerName(playerName)
     this.screen = { step: 'in-room', roomCode, playerName }
-
-    if (!this.challengeTranslation) {
-      api
-        .getTranslations()
-        .then((translations) => {
-          this.challengeTranslation = translations[0]
-        })
-        .catch((err) => console.error('[bg-room-setup] failed to load translations for game type select', err))
-    }
   }
 
   /** Common handling for a play request being resolved (accepted or
@@ -384,10 +435,16 @@ export class RoomSetup extends LitElement {
   }
 
   private _onPlayerSelected(event: CustomEvent<string>) {
-    const gameType = gameTypeFromRestriction(this.challengeScope, this.challengeRestriction)
-    sendPlayRequest(event.detail, gameType).catch((err) => {
-      console.error('[bg-room-setup] failed to send play request', err)
-    })
+    const targetId = event.detail
+    const { scope, restriction, roundCount, timeLimitSeconds } = this.challengeSettings
+    const verseSource = this.myTranslationChoice?.verseSource
+    if (!verseSource) return
+
+    gameTypeFromRestriction(scope, verseSource, this.myTranslationChoice?.translation, restriction)
+      .then((gameType) => sendPlayRequest(targetId, gameType, roundCount, timeLimitSeconds))
+      .catch((err) => {
+        console.error('[bg-room-setup] failed to send play request', err)
+      })
   }
 
   private _onWithdrawPlayRequest() {
@@ -396,9 +453,12 @@ export class RoomSetup extends LitElement {
     })
   }
 
-  private _onGameTypeChanged(event: CustomEvent<{ scope: GameTypeScope; restriction?: VerseRestriction }>) {
-    this.challengeScope = event.detail.scope
-    this.challengeRestriction = event.detail.restriction
+  private _onChallengeSettingsChanged(event: CustomEvent<ChallengeSettings>) {
+    this.challengeSettings = event.detail
+  }
+
+  private _onTranslationChanged(event: CustomEvent<TranslationChoice | undefined>) {
+    this.myTranslationChoice = event.detail
   }
 
   private _onAcceptPlayRequest(event: CustomEvent<string>) {
@@ -411,6 +471,26 @@ export class RoomSetup extends LitElement {
     denyPlayRequest(event.detail).catch((err) => {
       console.error('[bg-room-setup] failed to deny play request', err)
     })
+  }
+
+  // The game ended normally (or by forfeit) — the server-authoritative
+  // GameOver reached <bg-multiplayer-game>, which built the results detail
+  // for us. Show the results screen; the game screen itself unmounts since
+  // activeGameOpponent clears too (see _renderRoom's branching).
+  private _onMultiplayerGameOver(event: CustomEvent<MultiplayerGameOverDetail>) {
+    this.mpResults = event.detail
+    this.activeGameOpponent = undefined
+  }
+
+  // The game view tore itself down locally without a results screen — the
+  // opponent left the room entirely (see <bg-multiplayer-game>'s
+  // onPlayerLeft handling). Just return to the normal room view.
+  private _onMultiplayerGameEnded() {
+    this.activeGameOpponent = undefined
+  }
+
+  private _onBackToRoomFromResults() {
+    this.mpResults = undefined
   }
 
   private _sentRequestToName(): string | undefined {
@@ -442,8 +522,9 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = ''
     this.playRequests = []
     this.sentRequestToId = undefined
-    this.challengeScope = 'all'
-    this.challengeRestriction = undefined
+    this.challengeSettings = { scope: 'all', roundCount: 5 }
+    this.activeGameOpponent = undefined
+    this.mpResults = undefined
     this.disconnectedPlayerIds = new Set()
     this.error = undefined
     this.connectionState = 'connected'
@@ -460,6 +541,23 @@ export class RoomSetup extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 1rem;
+    }
+
+    .translation-block {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .translation-block h2 {
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .translation-hint {
+      margin: 0;
+      font-size: 0.8rem;
+      opacity: 0.7;
     }
 
     h1 {

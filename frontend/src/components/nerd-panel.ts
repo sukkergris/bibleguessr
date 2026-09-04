@@ -27,6 +27,12 @@ export class NerdPanel extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     window.addEventListener('keydown', this._onKeydown)
+
+    // Deliberate, permanent console hint — keep this even when trimming
+    // other logging elsewhere. The nerd panel has no visible on-page
+    // affordance (no button, no menu entry), so the console is the only
+    // place a developer/tester learns the shortcut exists at all.
+    console.log('[bg-nerd-panel] Open the nerd panel with Ctrl+Shift+N')
   }
 
   disconnectedCallback() {

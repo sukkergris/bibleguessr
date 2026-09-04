@@ -22,3 +22,7 @@ Keep the `README.md` minimal and intended for developers. Explain how to use `do
 
 Always consider using DDD in some form, but do not follow it blindly or dogmatically.
 Always consider using TDD, but do not follow it dogmatically.
+
+## Data security
+
+Uploaded verse text must never be sent to the server or to other players. Only the book number, chapter number, and verse number may be transmitted.

@@ -48,7 +48,7 @@ export class GameTypeSelect extends LitElement {
                 class=${this.scope === scope ? 'active' : ''}
                 @click=${() => this._onScopeSelected(scope)}
               >
-                ${scope === 'all' ? 'All' : scope === 'books' ? 'Books' : 'Chapters'}
+                ${scope === 'all' ? 'The Bible' : scope === 'books' ? 'Books' : 'Chapters'}
               </button>
             `,
           )}

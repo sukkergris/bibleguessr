@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(task dotnet:dev)",
+      "Bash(disown)",
+      "Bash(task frontend:dev)",
+      "Bash(curl -s -o /dev/null -w \"backend:%{http_code}\\\\n\" http://localhost:5162/api/health)",
+      "Bash(curl -s -o /dev/null -w \"frontend:%{http_code}\\\\n\" http://localhost:5173)",
+      "Bash(curl -s \"http://localhost:5162/api/books-in-bible-order\")",
+      "Bash(python3 -m json.tool)"
+    ]
+  }
+}

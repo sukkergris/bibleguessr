@@ -9,12 +9,19 @@
     <Compile Include="RoomTests.fs" />
     <Compile Include="ScoringTests.fs" />
     <Compile Include="PlayRequestTests.fs" />
+    <Compile Include="GameSessionTests.fs" />
+    <Compile Include="RoomActiveGameTests.fs" />
     <Compile Include="DisconnectCleanupTests.fs" />
     <Compile Include="VerseRestrictionTests.fs" />
+    <Compile Include="BookNumberTests.fs" />
+    <Compile Include="GameTypeNumberTests.fs" />
+    <Compile Include="MultiplayerScoringByNumberTests.fs" />
+    <Compile Include="BibelenDkLoaderTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Domain\BibleGuessr.Domain.fsproj" />
+    <ProjectReference Include="..\Api\BibleGuessr.Api.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

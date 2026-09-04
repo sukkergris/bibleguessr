@@ -1,12 +1,13 @@
 import * as signalR from '@microsoft/signalr'
 import { api } from './api'
-import type { ChatMessage, GameType, PlayRequest, Player } from './types'
+import type { ChatMessage, GameOverReason, GameSession, GameType, Guess, PlayRequest, Player } from './types'
 
 // Event names must match backend/Api/GameHub.fs's *Event literals.
 export const HubEvents = {
   PlayerJoined: 'PlayerJoined',
   RoundStarted: 'RoundStarted',
   RoundScored: 'RoundScored',
+  GameOver: 'GameOver',
   ChatMessageReceived: 'ChatMessageReceived',
   ChatHistory: 'ChatHistory',
   RoomPlayers: 'RoomPlayers',
@@ -192,11 +193,19 @@ export function onRoomPlayers(handler: (players: Player[]) => void): () => void 
   }
 }
 
-/** Sends (or retargets) a play request to `toPlayerId`, for the `gameType`
- * chosen beforehand — see game-type.ts. */
-export async function sendPlayRequest(toPlayerId: string, gameType: GameType): Promise<void> {
+/** Sends (or retargets) a play request to `toPlayerId`, for the
+ * `gameType`/`roundCount`/`timeLimitSeconds` chosen beforehand — see
+ * game-type.ts. `timeLimitSeconds` undefined (or 0) means no limit; the
+ * hub translates that into backend/Domain/Game.fs's TimeLimit, so this
+ * never needs to construct a {Case:'Unlimited'}-shaped value by hand. */
+export async function sendPlayRequest(
+  toPlayerId: string,
+  gameType: GameType,
+  roundCount: number,
+  timeLimitSeconds?: number,
+): Promise<void> {
   const hub = await getGameHubConnection()
-  await hub.invoke('SendPlayRequest', toPlayerId, gameType)
+  await hub.invoke('SendPlayRequest', toPlayerId, gameType, roundCount, timeLimitSeconds ?? null)
 }
 
 /** Withdraws whatever play request the caller currently has pending, if any. */
@@ -205,7 +214,8 @@ export async function withdrawPlayRequest(): Promise<void> {
   await hub.invoke('WithdrawPlayRequest')
 }
 
-/** Accepts the pending request from `fromPlayerId` addressed to the caller. */
+/** Accepts the pending request from `fromPlayerId` addressed to the caller
+ * — starts the GameSession it described; see onRoundStarted. */
 export async function acceptPlayRequest(fromPlayerId: string): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('AcceptPlayRequest', fromPlayerId)
@@ -215,6 +225,26 @@ export async function acceptPlayRequest(fromPlayerId: string): Promise<void> {
 export async function denyPlayRequest(fromPlayerId: string): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('DenyPlayRequest', fromPlayerId)
+}
+
+/** Submits the caller's guess for the current round of their active game.
+ * `guess.bookNumber` (the guessed book's number in the CALLER'S OWN
+ * VerseSource — see game-type.ts's bookNumberOfGuess) is what lets the
+ * server score by number instead of name; undefined falls back to name
+ * matching server-side. The server determines correctness/points and
+ * broadcasts RoundScored once both players have guessed or the round's
+ * time limit elapses — this call's own resolution carries no result. */
+export async function submitGuess(guess: Guess): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('SubmitGuess', guess.book, guess.bookNumber, guess.chapter, guess.verseNumber)
+}
+
+/** Forfeits the caller's active game, if they have one — ends it and
+ * notifies the opponent via GameOver(Forfeited). A no-op if the caller
+ * doesn't have an active game. */
+export async function forfeitGame(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('ForfeitGame')
 }
 
 /** Subscribes to play requests sent/retargeted anywhere in the caller's
@@ -283,6 +313,63 @@ export function onPlayRequestDenied(handler: (fromPlayerId: string, toPlayerId: 
   return () => {
     cancelled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestDenied, listener))
+  }
+}
+
+/** Subscribes to a multiplayer round starting — the first (roundIndex: 0,
+ * right after AcceptPlayRequest succeeds) or any subsequent one (after the
+ * previous round resolved). Payload is the full GameSession — see
+ * types.ts's GameSession doc comment for why this is a full snapshot
+ * rather than a delta. Returns an unsubscribe function. */
+export function onRoundStarted(handler: (session: GameSession) => void): () => void {
+  let cancelled = false
+  const listener = (session: GameSession) => {
+    if (!cancelled) handler(session)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.RoundStarted, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.RoundStarted, listener))
+  }
+}
+
+/** Subscribes to a multiplayer round resolving (both players guessed, or
+ * the time limit elapsed) — payload is the full GameSession, with `round`
+ * now the Scored case. Returns an unsubscribe function. */
+export function onRoundScored(handler: (session: GameSession) => void): () => void {
+  let cancelled = false
+  const listener = (session: GameSession) => {
+    if (!cancelled) handler(session)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.RoundScored, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.RoundScored, listener))
+  }
+}
+
+/** Subscribes to a multiplayer game ending — either the final round
+ * completed normally, or a player forfeited (left/disconnected past the
+ * grace period, or explicitly forfeited). Payload is (scores, playerA,
+ * playerB, reason) — scores is a full running total per player id, same
+ * as GameSession's, not a delta. Returns an unsubscribe function. */
+export function onGameOver(
+  handler: (scores: Record<string, number>, playerA: string, playerB: string, reason: GameOverReason) => void,
+): () => void {
+  let cancelled = false
+  const listener = (scores: Record<string, number>, playerA: string, playerB: string, reason: GameOverReason) => {
+    if (!cancelled) handler(scores, playerA, playerB, reason)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.GameOver, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.GameOver, listener))
   }
 }
 

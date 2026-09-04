@@ -1,6 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { describeGameType, gameTypeFromRestriction, scopeOf } from './game-type'
-import type { GameType } from './types'
+import {
+  allowedBooksForGuessForm,
+  allowedChaptersForGuessForm,
+  bookNumberOfGuess,
+  describeGameType,
+  gameTypeFromRestriction,
+  lockedBookForGuessForm,
+  scopeOf,
+} from './game-type'
+import type { GameType, VerseSource } from './types'
+
+// A minimal VerseSource stub whose only meaningful behavior is
+// getBooksInBibleOrder(translation) — everything else is unused by the
+// functions under test here.
+function stubSource(booksInBibleOrder: string[]): VerseSource {
+  return {
+    getTranslations: () => Promise.resolve([]),
+    getRandomVerse: () => Promise.reject(new Error('not used in this test')),
+    getBooks: () => Promise.resolve([...booksInBibleOrder].sort()),
+    getBooksInBibleOrder: () => Promise.resolve(booksInBibleOrder),
+    getChapters: () => Promise.resolve([]),
+    getVerseNumbers: () => Promise.resolve([]),
+    lookupVerse: () => Promise.reject(new Error('not used in this test')),
+  }
+}
+
+const GENESIS_TO_LEVITICUS = ['Genesis', 'Exodus', 'Leviticus']
 
 describe('scopeOf', () => {
   it('maps AllVerses to all', () => {
@@ -8,52 +33,156 @@ describe('scopeOf', () => {
   })
 
   it('maps Books to books', () => {
-    expect(scopeOf({ Case: 'Books', Fields: [['Genesis']] })).toBe('books')
+    expect(scopeOf({ Case: 'Books', Fields: [[1]] })).toBe('books')
   })
 
   it('maps Chapters to chapters', () => {
-    expect(scopeOf({ Case: 'Chapters', Fields: [{ Genesis: [1] }] })).toBe('chapters')
+    expect(scopeOf({ Case: 'Chapters', Fields: [{ 1: [1] }] })).toBe('chapters')
   })
 })
 
 describe('gameTypeFromRestriction', () => {
-  it('builds AllVerses for the all scope regardless of restriction', () => {
-    expect(gameTypeFromRestriction('all', { books: ['Genesis'], chaptersByBook: {} })).toEqual({ Case: 'AllVerses' })
-  })
-
-  it('builds AllVerses for books scope with no restriction selected yet', () => {
-    expect(gameTypeFromRestriction('books', undefined)).toEqual({ Case: 'AllVerses' })
-  })
-
-  it('builds Books from a books-scope restriction', () => {
-    const restriction = { books: ['Genesis', 'Exodus'], chaptersByBook: {} }
-    expect(gameTypeFromRestriction('books', restriction)).toEqual({
-      Case: 'Books',
-      Fields: [['Genesis', 'Exodus']],
+  it('builds AllVerses for the all scope regardless of restriction', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const result = await gameTypeFromRestriction('all', source, undefined, {
+      books: ['Genesis'],
+      chaptersByBook: {},
     })
+    expect(result).toEqual({ Case: 'AllVerses' })
   })
 
-  it('builds Chapters from a chapters-scope restriction', () => {
-    const restriction = { books: ['Genesis'], chaptersByBook: { Genesis: [1, 2] } }
-    expect(gameTypeFromRestriction('chapters', restriction)).toEqual({
-      Case: 'Chapters',
-      Fields: [{ Genesis: [1, 2] }],
-    })
+  it('builds AllVerses for books scope with no restriction selected yet', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const result = await gameTypeFromRestriction('books', source, undefined, undefined)
+    expect(result).toEqual({ Case: 'AllVerses' })
+  })
+
+  it('builds Books with book numbers resolved from the source Bible order', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const restriction = { books: ['Genesis', 'Leviticus'], chaptersByBook: {} }
+
+    const result = await gameTypeFromRestriction('books', source, undefined, restriction)
+
+    expect(result).toEqual({ Case: 'Books', Fields: [[1, 3]] })
+  })
+
+  it('builds Chapters with book numbers and their chapter sets', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const restriction = { books: ['Exodus'], chaptersByBook: { Exodus: [1, 2] } }
+
+    const result = await gameTypeFromRestriction('chapters', source, undefined, restriction)
+
+    expect(result).toEqual({ Case: 'Chapters', Fields: [{ 2: [1, 2] }] })
+  })
+
+  it('drops a selected book the source cannot resolve a number for', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const restriction = { books: ['Genesis', 'Numbers'], chaptersByBook: {} }
+
+    const result = await gameTypeFromRestriction('books', source, undefined, restriction)
+
+    expect(result).toEqual({ Case: 'Books', Fields: [[1]] })
   })
 })
 
 describe('describeGameType', () => {
-  it('describes AllVerses', () => {
-    expect(describeGameType({ Case: 'AllVerses' })).toBe('All verses')
+  it('describes AllVerses without needing the source', async () => {
+    const source = stubSource([])
+    expect(await describeGameType({ Case: 'AllVerses' }, source, undefined)).toBe('All verses')
   })
 
-  it('describes Books as a comma-separated list', () => {
-    const gameType: GameType = { Case: 'Books', Fields: [['Genesis', 'Exodus']] }
-    expect(describeGameType(gameType)).toBe('Genesis, Exodus')
+  it('describes Books by resolving numbers to the VIEWER’S OWN spelling', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const gameType: GameType = { Case: 'Books', Fields: [[1, 3]] }
+
+    expect(await describeGameType(gameType, source, undefined)).toBe('Genesis, Leviticus')
   })
 
-  it('describes Chapters with sorted chapter numbers per book', () => {
-    const gameType: GameType = { Case: 'Chapters', Fields: [{ Genesis: [3, 1, 2] }] }
-    expect(describeGameType(gameType)).toBe('Genesis 1, 2, 3')
+  it('describes Chapters with sorted chapter numbers per resolved book', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const gameType: GameType = { Case: 'Chapters', Fields: [{ 1: [3, 1, 2] }] }
+
+    expect(await describeGameType(gameType, source, undefined)).toBe('Genesis 1, 2, 3')
+  })
+
+  it('falls back to "Book N" for a number the viewer’s own source cannot resolve', async () => {
+    const source = stubSource(['Genesis'])
+    const gameType: GameType = { Case: 'Books', Fields: [[99]] }
+
+    expect(await describeGameType(gameType, source, undefined)).toBe('Book 99')
+  })
+})
+
+describe('allowedBooksForGuessForm', () => {
+  it('resolves book numbers to the given source’s own spelling', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const gameType: GameType = { Case: 'Books', Fields: [[1, 2]] }
+
+    expect(await allowedBooksForGuessForm(gameType, source, undefined)).toEqual(['Genesis', 'Exodus'])
+  })
+
+  it('returns undefined for AllVerses', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    expect(await allowedBooksForGuessForm({ Case: 'AllVerses' }, source, undefined)).toBeUndefined()
+  })
+
+  it('returns undefined for Chapters', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const gameType: GameType = { Case: 'Chapters', Fields: [{ 1: [1] }] }
+    expect(await allowedBooksForGuessForm(gameType, source, undefined)).toBeUndefined()
+  })
+
+  it('drops a book number the source cannot resolve', async () => {
+    const source = stubSource(['Genesis'])
+    const gameType: GameType = { Case: 'Books', Fields: [[1, 99]] }
+    expect(await allowedBooksForGuessForm(gameType, source, undefined)).toEqual(['Genesis'])
+  })
+})
+
+describe('lockedBookForGuessForm', () => {
+  it('resolves the single book number to the given source’s own spelling', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const gameType: GameType = { Case: 'Chapters', Fields: [{ 2: [1, 2] }] }
+
+    expect(await lockedBookForGuessForm(gameType, source, undefined)).toBe('Exodus')
+  })
+
+  it('returns undefined for AllVerses', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    expect(await lockedBookForGuessForm({ Case: 'AllVerses' }, source, undefined)).toBeUndefined()
+  })
+
+  it('returns undefined for Books', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    const gameType: GameType = { Case: 'Books', Fields: [[1]] }
+    expect(await lockedBookForGuessForm(gameType, source, undefined)).toBeUndefined()
+  })
+})
+
+describe('allowedChaptersForGuessForm', () => {
+  it('returns the chapter list for the locked book number in Chapters', () => {
+    const gameType: GameType = { Case: 'Chapters', Fields: [{ 1: [1, 2, 3] }] }
+    expect(allowedChaptersForGuessForm(gameType)).toEqual([1, 2, 3])
+  })
+
+  it('returns undefined for AllVerses', () => {
+    expect(allowedChaptersForGuessForm({ Case: 'AllVerses' })).toBeUndefined()
+  })
+
+  it('returns undefined for Books', () => {
+    const gameType: GameType = { Case: 'Books', Fields: [[1]] }
+    expect(allowedChaptersForGuessForm(gameType)).toBeUndefined()
+  })
+})
+
+describe('bookNumberOfGuess', () => {
+  it('resolves a typed book name to its number in the source', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    expect(await bookNumberOfGuess('Exodus', source, undefined)).toBe(2)
+  })
+
+  it('returns undefined for a book the source does not recognize', async () => {
+    const source = stubSource(GENESIS_TO_LEVITICUS)
+    expect(await bookNumberOfGuess('Numbers', source, undefined)).toBeUndefined()
   })
 })

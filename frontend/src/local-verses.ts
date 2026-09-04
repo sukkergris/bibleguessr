@@ -1,6 +1,7 @@
 // A VerseSource backed by an in-memory Verse[] parsed client-side from a
 // file the player supplied (see epub-parser.ts) — no backend involved.
-import type { Verse, VerseRestriction, VerseSource } from './types'
+import { bookAtNumber } from './book-numbers'
+import type { Verse, VerseReference, VerseRestriction, VerseSource } from './types'
 
 // Applies a VerseRestriction (see docs/SCRUM/Feature.BibleSelector.md) to an
 // in-memory Verse[] — no backend involved for the local-file case, this
@@ -65,5 +66,37 @@ export function createLocalVerseSource(verses: Verse[]): VerseSource {
           (a, b) => a - b,
         ),
       ),
+
+    // Prefers `reference.bookNumber` (this file's OWN Bible-order position
+    // — see book-numbers.ts) over `reference.book` (a name): `book` is
+    // just the spelling from whichever pool picked the round's verse,
+    // typically a DIFFERENT translation/file than this one, so matching
+    // by name here would reintroduce the exact cross-translation spelling
+    // mismatch bookNumber exists to fix (see types.ts's VerseReference
+    // doc comment). Falls back to name matching only if bookNumber
+    // resolves to nothing in THIS file's own book list (e.g. this file is
+    // missing that book entirely).
+    lookupVerse: (reference: VerseReference) => {
+      const booksInBibleOrder: string[] = []
+      const seen = new Set<string>()
+      for (const v of verses) {
+        if (!seen.has(v.book)) {
+          seen.add(v.book)
+          booksInBibleOrder.push(v.book)
+        }
+      }
+
+      const resolvedBook = bookAtNumber(booksInBibleOrder, reference.bookNumber) ?? reference.book
+
+      const found = verses.find(
+        (v) =>
+          v.book.toLowerCase() === resolvedBook.toLowerCase() &&
+          v.chapter === reference.chapter &&
+          v.verseNumber === reference.verseNumber,
+      )
+      return found
+        ? Promise.resolve(found)
+        : Promise.reject(new Error(`${resolvedBook} ${reference.chapter}:${reference.verseNumber} isn't in this file.`))
+    },
   }
 }

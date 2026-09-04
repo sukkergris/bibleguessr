@@ -35,7 +35,7 @@ let ``removeStaleDisconnections removes a player disconnected before the cutoff`
     let room = Room.markDisconnected player.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
-    let updated, removedIds = Room.removeStaleDisconnections cutoff room
+    let updated, removedIds, _ = Room.removeStaleDisconnections cutoff room
 
     Assert.Equal<PlayerId list>([ player.Id ], removedIds)
     Assert.DoesNotContain(player, updated.Players)
@@ -49,7 +49,7 @@ let ``removeStaleDisconnections keeps a player disconnected more recently than t
     let room = Room.markDisconnected player.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
-    let updated, removedIds = Room.removeStaleDisconnections cutoff room
+    let updated, removedIds, _ = Room.removeStaleDisconnections cutoff room
 
     Assert.Empty(removedIds)
     Assert.Contains(player, updated.Players)
@@ -67,7 +67,7 @@ let ``removeStaleDisconnections leaves a still-connected player untouched`` () =
     let room = Room.markDisconnected disconnected.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
-    let updated, removedIds = Room.removeStaleDisconnections cutoff room
+    let updated, removedIds, _ = Room.removeStaleDisconnections cutoff room
 
     Assert.Equal<PlayerId list>([ disconnected.Id ], removedIds)
     Assert.Contains(connected, updated.Players)
@@ -85,6 +85,8 @@ let ``removeStaleDisconnections drops play requests sent or received by a remove
           FromPlayerName = removedPlayer.Name
           ToPlayerId = otherPlayer.Id
           GameType = AllVerses
+          RoundCount = 5
+          RoundTimeLimit = Unlimited
           SentAt = DateTimeOffset.UtcNow }
 
     let requestToRemoved: PlayRequest =
@@ -92,6 +94,8 @@ let ``removeStaleDisconnections drops play requests sent or received by a remove
           FromPlayerName = thirdPlayer.Name
           ToPlayerId = removedPlayer.Id
           GameType = AllVerses
+          RoundCount = 5
+          RoundTimeLimit = Unlimited
           SentAt = DateTimeOffset.UtcNow }
 
     let requestUnrelated: PlayRequest =
@@ -99,6 +103,8 @@ let ``removeStaleDisconnections drops play requests sent or received by a remove
           FromPlayerName = otherPlayer.Name
           ToPlayerId = thirdPlayer.Id
           GameType = AllVerses
+          RoundCount = 5
+          RoundTimeLimit = Unlimited
           SentAt = DateTimeOffset.UtcNow }
 
     let room =
@@ -109,7 +115,7 @@ let ``removeStaleDisconnections drops play requests sent or received by a remove
     let room = Room.markDisconnected removedPlayer.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
-    let updated, _ = Room.removeStaleDisconnections cutoff room
+    let updated, _, _ = Room.removeStaleDisconnections cutoff room
 
     Assert.Equal<PlayRequest list>([ requestUnrelated ], updated.PendingRequests)
 
@@ -119,7 +125,7 @@ let ``removeStaleDisconnections is a no-op when nobody is disconnected`` () =
     let room = { Room.create (RoomCode "1234") with Players = [ player ] }
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
-    let updated, removedIds = Room.removeStaleDisconnections cutoff room
+    let updated, removedIds, _ = Room.removeStaleDisconnections cutoff room
 
     Assert.Empty(removedIds)
     Assert.Equal<Player list>(room.Players, updated.Players)
