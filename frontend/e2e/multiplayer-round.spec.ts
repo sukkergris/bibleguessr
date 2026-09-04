@@ -338,44 +338,48 @@ test('opponent tab closing mid-game shows a disconnected indicator', async ({ br
   }
 })
 
-test('leaving mid-game via Forfeit prompts a confirm dialog', async ({ browser }) => {
-  const ctxA = await browser.newContext()
-  const ctxB = await browser.newContext()
-  const pageA = await ctxA.newPage()
-  const pageB = await ctxB.newPage()
+test('leaving mid-game via Forfeit uses the custom confirmation dialog', async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext();
+  const ctxB = await browser.newContext();
+  const pageA = await ctxA.newPage();
+  const pageB = await ctxB.newPage();
 
   try {
-    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
-    const aliceName = `Alice${suffix}f`
-    const bobName = `Bob${suffix}f`
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`;
+    const aliceName = `Alice${suffix}f`;
+    const bobName = `Bob${suffix}f`;
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinWorldChat(pageA, aliceName);
+    await joinWorldChat(pageB, bobName);
 
-    const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
-    await bobInRoster.click()
+    const bobInRoster = pageA
+      .getByRole('listitem')
+      .filter({ hasText: bobName });
+    await bobInRoster.click();
 
-    const requestOnBobsScreen = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
-    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()
+    const requestOnBobsScreen = pageB
+      .getByRole('listitem')
+      .filter({ hasText: `${aliceName} wants to play` });
+    await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click();
 
-    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+    await expect(pageA.getByText('Round 1 /')).toBeVisible();
 
-    let dialogSeen = false
-    pageA.once('dialog', (dialog) => {
-      dialogSeen = true
-      void dialog.accept()
-    })
-    await pageA.getByRole('button', { name: 'Forfeit' }).click()
-
-    await expect.poll(() => dialogSeen).toBe(true)
+    await pageA.getByRole('button', { name: 'Forfeit' }).click();
+    const forfeitDialog = pageA.getByRole('dialog', { name: 'Forfeit game?' });
+    await expect(forfeitDialog).toBeVisible();
+    await forfeitDialog
+      .getByRole('button', { name: 'Forfeit', exact: true })
+      .click();
 
     // Once forfeited, the server's GameOver reaches Bob too.
-    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible()
+    await expect(pageB.locator('bg-multiplayer-results')).toBeVisible();
   } finally {
-    await ctxA.close()
-    await ctxB.close()
+    await ctxA.close();
+    await ctxB.close();
   }
-})
+});
 
 // Regression test for a real bug: GameHub.LeaveRoom (and the disconnect
 // sweep after the grace period) broadcasts PlayerLeft BEFORE GameOver for
@@ -495,11 +499,6 @@ test('a player whose uploaded file spells a book differently than the server can
   }
 })
 
-// See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — a player who
-// doesn't submit a guess before the round's time limit elapses sees
-// "Choked!" in the reveal, and so does their opponent (the reveal always
-// shows both players' outcomes to both sides — see
-// multiplayer-game.ts's _renderRoundReveal doc comment).
 // See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — a player who
 // doesn't submit a guess before the round's time limit elapses sees
 // "Choked!" in the reveal, and so does their opponent (the reveal always

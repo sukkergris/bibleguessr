@@ -146,26 +146,26 @@ const COUNTDOWN_DANGER_COLORS = [
 @customElement('bg-multiplayer-game')
 export class MultiplayerGame extends LitElement {
   @property({ attribute: false })
-  myPlayerId = ''
+  myPlayerId = '';
 
   @property({ attribute: false })
-  myPlayerName = ''
+  myPlayerName = '';
 
   @property({ attribute: false })
-  opponentId = ''
+  opponentId = '';
 
   @property({ attribute: false })
-  opponentName = ''
+  opponentName = '';
 
   @property({ attribute: false })
-  translation?: string
+  translation?: string;
 
   /** This player's own chosen verse source — see bg-room-setup.ts's
    * pre-name translation/file picker. Used both by <bg-guess-form>'s
    * autocomplete AND to resolve each round's VerseReference to
    * displayable text (see _resolveVerse). */
   @property({ attribute: false })
-  verseSource?: VerseSource
+  verseSource?: VerseSource;
 
   /** The most recent RoundStarted session bg-room-setup.ts had already
    * seen for this game by the time this component mounted, if any — see
@@ -181,25 +181,25 @@ export class MultiplayerGame extends LitElement {
    * this the same way a live onRoundStarted event would, before
    * subscribing to future ones. */
   @property({ attribute: false })
-  initialSession?: GameSession
+  initialSession?: GameSession;
 
   @state()
-  private session?: GameSession
+  private session?: GameSession;
 
   /** The current round's verse, resolved from its VerseReference against
    * `verseSource` — undefined while resolving or before a round has
    * started. See _resolveVerse. */
   @state()
-  private resolvedVerse?: Verse
+  private resolvedVerse?: Verse;
 
   /** Set when `verseSource` couldn't resolve the current round's
    * VerseReference (a translation/file mismatch — see the class doc
    * comment) — shown in place of the verse card's text for this round. */
   @state()
-  private verseResolutionError?: string
+  private verseResolutionError?: string;
 
   @state()
-  private myGuess?: Guess
+  private myGuess?: Guess;
 
   /** The guess form's book restriction, resolved from `session.gameType`
    * (which carries book NUMBERS — see types.ts's GameType doc comment)
@@ -209,42 +209,48 @@ export class MultiplayerGame extends LitElement {
    * only some of them updated. */
   @state()
   private guessFormRestriction: {
-    allowedBooks?: string[]
-    lockedBook?: string
-    allowedChapters?: number[]
-  } = {}
+    allowedBooks?: string[];
+    lockedBook?: string;
+    allowedChapters?: number[];
+  } = {};
 
   @state()
-  private opponentConnectionState: 'connected' | 'disconnected' = 'connected'
+  private opponentConnectionState: 'connected' | 'disconnected' = 'connected';
 
   /** This game's round-by-round history, accumulated locally as
    * RoundScored events arrive — see multiplayer-results.ts's doc comment
    * on why the server itself doesn't send this. */
   @state()
-  private rounds: MultiplayerRoundSummary[] = []
+  private rounds: MultiplayerRoundSummary[] = [];
 
   // Ticked locally to redraw the countdown — see COUNTDOWN_TICK_MS. Not
   // itself meaningful state beyond "cause a re-render"; computeRemainingSeconds
   // reads it fresh each render.
   @state()
-  private _now = Date.now()
+  private _now = Date.now();
 
-  private _unsubscribeRoundStarted?: () => void
-  private _unsubscribeRoundScored?: () => void
-  private _unsubscribeGameOver?: () => void
-  private _unsubscribePlayerDisconnected?: () => void
-  private _tickHandle?: ReturnType<typeof setInterval>
+  @state()
+  private forfeitDialogOpen = false;
+
+  @state()
+  private forfeiting = false;
+
+  private _unsubscribeRoundStarted?: () => void;
+  private _unsubscribeRoundScored?: () => void;
+  private _unsubscribeGameOver?: () => void;
+  private _unsubscribePlayerDisconnected?: () => void;
+  private _tickHandle?: ReturnType<typeof setInterval>;
 
   // Bookkeeping for countdown-danger-changed's edge/dwell detection (see
   // updated() below) — deliberately a plain field, not @state, since
   // writing it must never itself trigger another re-render.
-  private _wasActive = false
+  private _wasActive = false;
 
   // When the CURRENT reveal is allowed to be replaced by a queued-up
   // RoundStarted/GameOver — see _holdReveal, set the instant a
   // RoundScored is applied (REVEAL_HOLD_MS in the future). undefined
   // whenever there's no reveal currently showing (e.g. mid-round).
-  private _revealHoldUntil?: number
+  private _revealHoldUntil?: number;
   // A RoundStarted/GameOver that arrived before _revealHoldUntil passed —
   // applied once the hold expires (see _holdReveal). At most one of
   // these is ever buffered at a time: the round that's ending has, by
@@ -252,11 +258,17 @@ export class MultiplayerGame extends LitElement {
   // game ending), never both.
   private _pendingAfterReveal?:
     | { kind: 'roundStarted'; session: GameSession }
-    | { kind: 'gameOver'; scores: Record<string, number>; playerA: string; playerB: string; reason: GameOverReason }
-  private _revealHoldTimeout?: ReturnType<typeof setTimeout>
+    | {
+        kind: 'gameOver';
+        scores: Record<string, number>;
+        playerA: string;
+        playerB: string;
+        reason: GameOverReason;
+      };
+  private _revealHoldTimeout?: ReturnType<typeof setTimeout>;
 
   connectedCallback() {
-    super.connectedCallback()
+    super.connectedCallback();
 
     // Apply whatever RoundStarted session bg-room-setup.ts had already
     // captured for this game before this element even mounted — see
@@ -266,7 +278,7 @@ export class MultiplayerGame extends LitElement {
     // _applyRoundStarted logic a live event would, so this is exactly as
     // if that first RoundStarted had been received live.
     if (this.initialSession && this._isMySession(this.initialSession)) {
-      this._applyRoundStarted(this.initialSession)
+      this._applyRoundStarted(this.initialSession);
     }
 
     // Every game event is broadcast to the WHOLE room, not routed to just
@@ -277,46 +289,58 @@ export class MultiplayerGame extends LitElement {
     // opponent, exactly the way bg-room-setup.ts already filters
     // PlayRequestReceived/Accepted by player id.
     this._unsubscribeRoundStarted = onRoundStarted((session) => {
-      if (!this._isMySession(session)) return
+      if (!this._isMySession(session)) return;
       // If a reveal is still being held on screen (see _holdReveal),
       // this round hasn't actually been "seen" yet — queue it rather
       // than replacing the reveal early.
       if (this._revealHoldUntil !== undefined) {
-        this._pendingAfterReveal = { kind: 'roundStarted', session }
-        return
+        this._pendingAfterReveal = { kind: 'roundStarted', session };
+        return;
       }
-      this._applyRoundStarted(session)
-    })
+      this._applyRoundStarted(session);
+    });
     this._unsubscribeRoundScored = onRoundScored((session) => {
-      if (!this._isMySession(session)) return
-      this.session = session
-      this._recordRoundResult(session)
-      this._resolveCurrentVerse()
-      this._holdReveal()
-    })
-    this._unsubscribeGameOver = onGameOver((scores, playerA, playerB, reason) => {
-      if (!this._isMyGame(playerA, playerB)) return
-      // A Forfeited end (opponent left/disconnected) cuts through
-      // immediately, even mid-hold — the game is already over for a
-      // reason unrelated to this round's own reveal, so continuing to
-      // show "+N points"/"Choked!" for a few more moments would be
-      // actively misleading, not a nice-to-have pause. Only a normal
-      // Completed ending respects the hold, so the FINAL round's own
-      // reveal gets the same readable pause as every other round before
-      // the results screen replaces it.
-      if (reason.Case === 'Completed' && this._revealHoldUntil !== undefined) {
-        this._pendingAfterReveal = { kind: 'gameOver', scores, playerA, playerB, reason }
-        return
+      if (!this._isMySession(session)) return;
+      this.session = session;
+      this._recordRoundResult(session);
+      this._resolveCurrentVerse();
+      this._holdReveal();
+    });
+    this._unsubscribeGameOver = onGameOver(
+      (scores, playerA, playerB, reason) => {
+        if (!this._isMyGame(playerA, playerB)) return;
+        // A Forfeited end (opponent left/disconnected) cuts through
+        // immediately, even mid-hold — the game is already over for a
+        // reason unrelated to this round's own reveal, so continuing to
+        // show "+N points"/"Choked!" for a few more moments would be
+        // actively misleading, not a nice-to-have pause. Only a normal
+        // Completed ending respects the hold, so the FINAL round's own
+        // reveal gets the same readable pause as every other round before
+        // the results screen replaces it.
+        if (
+          reason.Case === 'Completed' &&
+          this._revealHoldUntil !== undefined
+        ) {
+          this._pendingAfterReveal = {
+            kind: 'gameOver',
+            scores,
+            playerA,
+            playerB,
+            reason,
+          };
+          return;
+        }
+        this._onGameOver(scores, playerA, playerB, reason);
       }
-      this._onGameOver(scores, playerA, playerB, reason)
-    })
+    );
     this._unsubscribePlayerDisconnected = onPlayerDisconnected((playerId) => {
-      if (playerId === this.opponentId) this.opponentConnectionState = 'disconnected'
-    })
+      if (playerId === this.opponentId)
+        this.opponentConnectionState = 'disconnected';
+    });
 
     this._tickHandle = setInterval(() => {
-      this._now = Date.now()
-    }, COUNTDOWN_TICK_MS)
+      this._now = Date.now();
+    }, COUNTDOWN_TICK_MS);
   }
 
   // Starts (or restarts) the reveal's minimum on-screen hold — see
@@ -325,32 +349,41 @@ export class MultiplayerGame extends LitElement {
   // it (the next RoundStarted, or a Completed GameOver) is what actually
   // waits.
   private _holdReveal() {
-    this._revealHoldUntil = Date.now() + REVEAL_HOLD_MS
-    if (this._revealHoldTimeout !== undefined) clearTimeout(this._revealHoldTimeout)
+    this._revealHoldUntil = Date.now() + REVEAL_HOLD_MS;
+    if (this._revealHoldTimeout !== undefined)
+      clearTimeout(this._revealHoldTimeout);
     this._revealHoldTimeout = setTimeout(() => {
-      this._revealHoldUntil = undefined
-      this._revealHoldTimeout = undefined
-      const pending = this._pendingAfterReveal
-      this._pendingAfterReveal = undefined
-      if (!pending) return
-      if (pending.kind === 'roundStarted') this._applyRoundStarted(pending.session)
-      else this._onGameOver(pending.scores, pending.playerA, pending.playerB, pending.reason)
-    }, REVEAL_HOLD_MS)
+      this._revealHoldUntil = undefined;
+      this._revealHoldTimeout = undefined;
+      const pending = this._pendingAfterReveal;
+      this._pendingAfterReveal = undefined;
+      if (!pending) return;
+      if (pending.kind === 'roundStarted')
+        this._applyRoundStarted(pending.session);
+      else
+        this._onGameOver(
+          pending.scores,
+          pending.playerA,
+          pending.playerB,
+          pending.reason
+        );
+    }, REVEAL_HOLD_MS);
   }
 
   disconnectedCallback() {
-    this._unsubscribeRoundStarted?.()
-    this._unsubscribeRoundScored?.()
-    this._unsubscribeGameOver?.()
-    this._unsubscribePlayerDisconnected?.()
-    if (this._tickHandle !== undefined) clearInterval(this._tickHandle)
-    if (this._revealHoldTimeout !== undefined) clearTimeout(this._revealHoldTimeout)
+    this._unsubscribeRoundStarted?.();
+    this._unsubscribeRoundScored?.();
+    this._unsubscribeGameOver?.();
+    this._unsubscribePlayerDisconnected?.();
+    if (this._tickHandle !== undefined) clearInterval(this._tickHandle);
+    if (this._revealHoldTimeout !== undefined)
+      clearTimeout(this._revealHoldTimeout);
     // If this element unmounts (forfeit, opponent leaves, game-over)
     // while the blink was active, tell bg-app.ts it's over — otherwise
     // the class/property would linger on document.body forever, since
     // nothing else would ever fire the "leaving" edge for us.
-    this._stopCountdownDanger()
-    super.disconnectedCallback()
+    this._stopCountdownDanger();
+    super.disconnectedCallback();
   }
 
   /** Fires the countdown-danger "leaving" edge, if the blink was running.
@@ -364,15 +397,15 @@ export class MultiplayerGame extends LitElement {
    * Scored, so updated() reported active:false on its own), which is
    * exactly why the bug only ever showed up on forfeit. */
   private _stopCountdownDanger() {
-    if (!this._wasActive) return
-    this._wasActive = false
+    if (!this._wasActive) return;
+    this._wasActive = false;
     this.dispatchEvent(
       new CustomEvent('countdown-danger-changed', {
         detail: { active: false },
         bubbles: true,
         composed: true,
-      }),
-    )
+      })
+    );
   }
 
   // Reports the countdown-danger state to bg-app.ts (see that
@@ -384,8 +417,8 @@ export class MultiplayerGame extends LitElement {
   // stays there, so a finished game/round doesn't keep firing empty
   // events forever.
   protected updated() {
-    const active = this._inFinalCountdown
-    if (!active && !this._wasActive) return
+    const active = this._inFinalCountdown;
+    if (!active && !this._wasActive) return;
     this.dispatchEvent(
       new CustomEvent('countdown-danger-changed', {
         detail: {
@@ -396,9 +429,9 @@ export class MultiplayerGame extends LitElement {
         },
         bubbles: true,
         composed: true,
-      }),
-    )
-    this._wasActive = active
+      })
+    );
+    this._wasActive = active;
   }
 
   // Applies a RoundStarted session — shared by connectedCallback's
@@ -406,13 +439,13 @@ export class MultiplayerGame extends LitElement {
   // both go through identical logic (see initialSession's doc comment).
   // Caller is responsible for the _isMySession filter check.
   private _applyRoundStarted(session: GameSession) {
-    const isFirstRound = !this.session
-    this.session = session
-    this.myGuess = undefined
-    this._resolveCurrentVerse()
+    const isFirstRound = !this.session;
+    this.session = session;
+    this.myGuess = undefined;
+    this._resolveCurrentVerse();
     // gameType is fixed for the whole game (see types.ts's GameSession),
     // so this only needs resolving once, on the first round.
-    if (isFirstRound) this._resolveGuessFormRestriction(session.gameType)
+    if (isFirstRound) this._resolveGuessFormRestriction(session.gameType);
   }
 
   // Whether `session`/`(playerA, playerB)` belongs to MY game with
@@ -420,12 +453,12 @@ export class MultiplayerGame extends LitElement {
   // connectedCallback above. Order-independent since either player could
   // be PlayerA or PlayerB depending on who was the challenger.
   private _isMySession(session: GameSession): boolean {
-    return this._isMyGame(session.playerA, session.playerB)
+    return this._isMyGame(session.playerA, session.playerB);
   }
 
   private _isMyGame(playerA: string, playerB: string): boolean {
-    const pair = new Set([playerA, playerB])
-    return pair.has(this.myPlayerId) && pair.has(this.opponentId)
+    const pair = new Set([playerA, playerB]);
+    return pair.has(this.myPlayerId) && pair.has(this.opponentId);
   }
 
   // Appends this round's outcome (my points / opponent's points) to the
@@ -434,27 +467,32 @@ export class MultiplayerGame extends LitElement {
   // backend/Domain/Game.fs's GameSession.GuessesThisRound doc comment),
   // so this is the only place that history is ever assembled.
   private _recordRoundResult(session: GameSession) {
-    if (session.round.Case !== 'Scored') return
-    const [verse, results] = session.round.Fields
+    if (session.round.Case !== 'Scored') return;
+    const [verse, results] = session.round.Fields;
 
-    const pointsFor = (playerId: string) => results.find((r) => r.playerId === playerId)?.pointsAwarded ?? 0
+    const pointsFor = (playerId: string) =>
+      results.find((r) => r.playerId === playerId)?.pointsAwarded ?? 0;
 
     this.rounds = [
       ...this.rounds,
-      { verse, myPoints: pointsFor(this.myPlayerId), opponentPoints: pointsFor(this.opponentId) },
-    ]
+      {
+        verse,
+        myPoints: pointsFor(this.myPlayerId),
+        opponentPoints: pointsFor(this.opponentId),
+      },
+    ];
   }
 
   private _onGameOver(
     scores: Record<string, number>,
     playerA: string,
     playerB: string,
-    reason: GameOverReason,
+    reason: GameOverReason
   ) {
-    void playerA
-    void playerB
-    const myScore = scores[this.myPlayerId] ?? 0
-    const opponentScore = scores[this.opponentId] ?? 0
+    void playerA;
+    void playerB;
+    const myScore = scores[this.myPlayerId] ?? 0;
+    const opponentScore = scores[this.opponentId] ?? 0;
 
     const detail: MultiplayerGameOverDetail = {
       myPlayerName: this.myPlayerName,
@@ -466,17 +504,26 @@ export class MultiplayerGame extends LitElement {
           ? { kind: 'completed' }
           : {
               kind: 'forfeited',
-              winnerIsMe: reason.Fields[0] === undefined ? undefined : reason.Fields[0] === this.myPlayerId,
+              winnerIsMe:
+                reason.Fields[0] === undefined
+                  ? undefined
+                  : reason.Fields[0] === this.myPlayerId,
             },
       rounds: this.rounds,
-    }
+    };
 
     // Before handing off to the results screen — see
     // _stopCountdownDanger's doc comment on why a Forfeited ending needs
     // this explicitly rather than relying on disconnectedCallback.
-    this._stopCountdownDanger()
+    this._stopCountdownDanger();
 
-    this.dispatchEvent(new CustomEvent<MultiplayerGameOverDetail>('game-over', { detail, bubbles: true, composed: true }))
+    this.dispatchEvent(
+      new CustomEvent<MultiplayerGameOverDetail>('game-over', {
+        detail,
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   // The current round's bare reference (book/chapter/verseNumber only —
@@ -484,10 +531,11 @@ export class MultiplayerGame extends LitElement {
   // what actually has text to display, resolved from this against
   // `verseSource` — see _resolveCurrentVerse.
   private get _currentReference(): VerseReference | undefined {
-    if (!this.session) return undefined
-    return this.session.round.Case === 'InProgress' || this.session.round.Case === 'Scored'
+    if (!this.session) return undefined;
+    return this.session.round.Case === 'InProgress' ||
+      this.session.round.Case === 'Scored'
       ? this.session.round.Fields[0]
-      : undefined
+      : undefined;
   }
 
   // Resolves _currentReference to a displayable Verse against THIS
@@ -495,30 +543,35 @@ export class MultiplayerGame extends LitElement {
   // by the opponent (see the class doc comment). Called after every
   // RoundStarted/RoundScored, since each carries a new/updated reference.
   private _resolveCurrentVerse() {
-    const reference = this._currentReference
-    this.resolvedVerse = undefined
-    this.verseResolutionError = undefined
+    const reference = this._currentReference;
+    this.resolvedVerse = undefined;
+    this.verseResolutionError = undefined;
 
-    if (!reference || !this.verseSource) return
+    if (!reference || !this.verseSource) return;
 
     // Guard against a stale response landing after a later round has
     // already started (e.g. a slow lookup for round 1 resolving after
     // round 2's reference already replaced it) — only apply the result if
     // the reference it was resolved for is still the current one.
-    const requestedFor = reference
+    const requestedFor = reference;
 
     this.verseSource
       .lookupVerse(reference, this.translation)
       .then((verse) => {
-        if (this._currentReference !== requestedFor) return
-        this.resolvedVerse = verse
+        if (this._currentReference !== requestedFor) return;
+        this.resolvedVerse = verse;
       })
       .catch((err) => {
-        if (this._currentReference !== requestedFor) return
-        console.error('[bg-multiplayer-game] failed to resolve verse reference', err)
+        if (this._currentReference !== requestedFor) return;
+        console.error(
+          '[bg-multiplayer-game] failed to resolve verse reference',
+          err
+        );
         this.verseResolutionError =
-          err instanceof Error ? err.message : "This verse isn't available in your chosen translation/file."
-      })
+          err instanceof Error
+            ? err.message
+            : "This verse isn't available in your chosen translation/file.";
+      });
   }
 
   // Resolves the guess form's book/chapter restriction from `gameType`
@@ -527,24 +580,28 @@ export class MultiplayerGame extends LitElement {
   // for whatever books/chapters the challenger restricted the game to —
   // see game-type.ts's allowedBooksForGuessForm/lockedBookForGuessForm.
   private _resolveGuessFormRestriction(gameType: GameType) {
-    if (!this.verseSource) return
-    const verseSource = this.verseSource
+    if (!this.verseSource) return;
+    const verseSource = this.verseSource;
 
     Promise.all([
       allowedBooksForGuessForm(gameType, verseSource, this.translation),
       lockedBookForGuessForm(gameType, verseSource, this.translation),
     ]).then(([allowedBooks, lockedBook]) => {
-      this.guessFormRestriction = { allowedBooks, lockedBook, allowedChapters: allowedChaptersForGuessForm(gameType) }
-    })
+      this.guessFormRestriction = {
+        allowedBooks,
+        lockedBook,
+        allowedChapters: allowedChaptersForGuessForm(gameType),
+      };
+    });
   }
 
   private get _revealed() {
-    return this.session?.round.Case === 'Scored'
+    return this.session?.round.Case === 'Scored';
   }
 
   private get _deadline(): string | undefined {
-    if (!this.session) return undefined
-    return deadlineOf(this.session.roundStartedAt, this.session.roundTimeLimit)
+    if (!this.session) return undefined;
+    return deadlineOf(this.session.roundStartedAt, this.session.roundTimeLimit);
   }
 
   // A round whose own time limit is too short for "final 7 seconds" to
@@ -555,8 +612,9 @@ export class MultiplayerGame extends LitElement {
   // window at all (computeRemainingSeconds returns undefined for them),
   // so this only matters for a short LimitedTo value.
   private get _roundTimeLimitSeconds(): number | undefined {
-    if (!this.session || this.session.roundTimeLimit.Case !== 'LimitedTo') return undefined
-    return parseTimeSpanMs(this.session.roundTimeLimit.Fields[0]) / 1000
+    if (!this.session || this.session.roundTimeLimit.Case !== 'LimitedTo')
+      return undefined;
+    return parseTimeSpanMs(this.session.roundTimeLimit.Fields[0]) / 1000;
   }
 
   // See docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md — the final 7
@@ -567,10 +625,19 @@ export class MultiplayerGame extends LitElement {
   // exactly inside this window can't leave the blink stuck on — a scored
   // round has no countdown to be urgent about.
   private get _inFinalCountdown(): boolean {
-    const limitSeconds = this._roundTimeLimitSeconds
-    if (limitSeconds !== undefined && limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS) return false
-    const remaining = computeRemainingSeconds(this._deadline, this._now)
-    return remaining !== undefined && remaining > 0 && remaining <= 7 && !this._revealed
+    const limitSeconds = this._roundTimeLimitSeconds;
+    if (
+      limitSeconds !== undefined &&
+      limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS
+    )
+      return false;
+    const remaining = computeRemainingSeconds(this._deadline, this._now);
+    return (
+      remaining !== undefined &&
+      remaining > 0 &&
+      remaining <= 7 &&
+      !this._revealed
+    );
   }
 
   // "Increasing intensity" = the flash genuinely accelerates, not a
@@ -580,10 +647,20 @@ export class MultiplayerGame extends LitElement {
   // set by bg-app.ts — see index.css) rather than driven by a continuous
   // JS animation loop or a CSS-only step-function.
   private get _dangerAnimationSeconds(): number | undefined {
-    const limitSeconds = this._roundTimeLimitSeconds
-    if (limitSeconds !== undefined && limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS) return undefined
-    const remaining = computeRemainingSeconds(this._deadline, this._now)
-    if (remaining === undefined || remaining <= 0 || remaining > 7 || this._revealed) return undefined
+    const limitSeconds = this._roundTimeLimitSeconds;
+    if (
+      limitSeconds !== undefined &&
+      limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS
+    )
+      return undefined;
+    const remaining = computeRemainingSeconds(this._deadline, this._now);
+    if (
+      remaining === undefined ||
+      remaining <= 0 ||
+      remaining > 7 ||
+      this._revealed
+    )
+      return undefined;
     // 7s remaining -> BLINK_CYCLE_SLOWEST_SECONDS (1 flash/sec). 0s
     // remaining -> whichever "fastest" the player's own local "Enter
     // epilepsy-inducing stress mode" checkbox selects
@@ -600,14 +677,14 @@ export class MultiplayerGame extends LitElement {
     // shape, different vertical scale) so it can drive the slowest..fastest
     // interpolation below cleanly. The rescale changes no curvature, only
     // the range — it's still exponential, not polynomial/eased.
-    const slowest = BLINK_CYCLE_SLOWEST_SECONDS
+    const slowest = BLINK_CYCLE_SLOWEST_SECONDS;
     const fastest = loadEpilepsyStressModeEnabled()
       ? BLINK_CYCLE_FASTEST_SECONDS_STRESS
-      : BLINK_CYCLE_FASTEST_SECONDS_SAFE
-    const growth = BLINK_RAMP_GROWTH
-    const progress = 1 - remaining / 7
-    const eased = (growth ** progress - 1) / (growth - 1)
-    return Math.round((slowest - (slowest - fastest) * eased) * 100) / 100
+      : BLINK_CYCLE_FASTEST_SECONDS_SAFE;
+    const growth = BLINK_RAMP_GROWTH;
+    const progress = 1 - remaining / 7;
+    const eased = (growth ** progress - 1) / (growth - 1);
+    return Math.round((slowest - (slowest - fastest) * eased) * 100) / 100;
   }
 
   // Which COUNTDOWN_DANGER_COLORS entry is "live" right now — pinned to
@@ -619,12 +696,22 @@ export class MultiplayerGame extends LitElement {
   // of the same remaining value) — Math.floor would instead switch a
   // full second earlier than the number does.
   private get _dangerFlashColor(): string | undefined {
-    const limitSeconds = this._roundTimeLimitSeconds
-    if (limitSeconds !== undefined && limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS) return undefined
-    const remaining = computeRemainingSeconds(this._deadline, this._now)
-    if (remaining === undefined || remaining <= 0 || remaining > 7 || this._revealed) return undefined
-    const secondsLeft = Math.min(7, Math.ceil(remaining))
-    return COUNTDOWN_DANGER_COLORS[7 - secondsLeft]
+    const limitSeconds = this._roundTimeLimitSeconds;
+    if (
+      limitSeconds !== undefined &&
+      limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS
+    )
+      return undefined;
+    const remaining = computeRemainingSeconds(this._deadline, this._now);
+    if (
+      remaining === undefined ||
+      remaining <= 0 ||
+      remaining > 7 ||
+      this._revealed
+    )
+      return undefined;
+    const secondsLeft = Math.min(7, Math.ceil(remaining));
+    return COUNTDOWN_DANGER_COLORS[7 - secondsLeft];
   }
 
   // Which of index.css's 4 countdown-blink-* keyframe blocks is "live"
@@ -648,14 +735,24 @@ export class MultiplayerGame extends LitElement {
   // round runs out) without needing a genuinely continuous percentage,
   // which CSS's static keyframe offsets don't allow at all.
   private get _dangerFlashShape(): string | undefined {
-    const limitSeconds = this._roundTimeLimitSeconds
-    if (limitSeconds !== undefined && limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS) return undefined
-    const remaining = computeRemainingSeconds(this._deadline, this._now)
-    if (remaining === undefined || remaining <= 0 || remaining > 7 || this._revealed) return undefined
-    if (remaining > 5) return 'countdown-blink-wide'
-    if (remaining > 3) return 'countdown-blink-medium'
-    if (remaining > 1) return 'countdown-blink-narrow'
-    return 'countdown-blink-sharp'
+    const limitSeconds = this._roundTimeLimitSeconds;
+    if (
+      limitSeconds !== undefined &&
+      limitSeconds <= MIN_BLINKABLE_ROUND_SECONDS
+    )
+      return undefined;
+    const remaining = computeRemainingSeconds(this._deadline, this._now);
+    if (
+      remaining === undefined ||
+      remaining <= 0 ||
+      remaining > 7 ||
+      this._revealed
+    )
+      return undefined;
+    if (remaining > 5) return 'countdown-blink-wide';
+    if (remaining > 3) return 'countdown-blink-medium';
+    if (remaining > 1) return 'countdown-blink-narrow';
+    return 'countdown-blink-sharp';
   }
 
   render() {
@@ -667,17 +764,26 @@ export class MultiplayerGame extends LitElement {
     // so this loading window IS part of "the game" from the player's
     // perspective. Only the round-specific body (verse/guess form/reveal)
     // needs session data to render anything meaningful.
-    const myScore = this.session?.scores[this.myPlayerId] ?? 0
-    const opponentScore = this.session ? (this.session.scores[this.opponentId] ?? 0) : 0
+    const myScore = this.session?.scores[this.myPlayerId] ?? 0;
+    const opponentScore = this.session
+      ? (this.session.scores[this.opponentId] ?? 0)
+      : 0;
 
     return html`
       <header class="mp-header">
         <div class="scoreboard">
           <span class="me">${this.myPlayerName}: ${myScore}</span>
           ${this.session
-            ? html`<span class="round-label">Round ${this.session.roundIndex + 1} / ${this.session.roundCount}</span>`
+            ? html`
+                <span class="round-label">
+                  Round ${this.session.roundIndex + 1} /
+                  ${this.session.roundCount}
+                </span>
+              `
             : null}
-          <span class="opponent ${this.opponentConnectionState}">${this.opponentName}: ${opponentScore}</span>
+          <span class="opponent ${this.opponentConnectionState}">
+            ${this.opponentName}: ${opponentScore}
+          </span>
         </div>
         ${this._renderCountdown()}
       </header>
@@ -686,14 +792,22 @@ export class MultiplayerGame extends LitElement {
         ? html`
             <div class="opponent-status" role="status">
               <strong>${this.opponentName}'s connection dropped.</strong>
-              Waiting to see if they reconnect — the game will end automatically if they don't come back.
+              Waiting to see if they reconnect — the game will end automatically
+              if they don't come back.
             </div>
           `
         : null}
-      ${this.session ? this._renderRoundBody() : html`<p class="loading">Waiting for the first verse…</p>`}
+      ${this.session
+        ? this._renderRoundBody()
+        : html`
+            <p class="loading">Waiting for the first verse…</p>
+          `}
 
-      <button type="button" class="secondary" @click=${this._onForfeit}>Forfeit</button>
-    `
+      <button type="button" class="secondary" @click=${this._openForfeitDialog}>
+        Forfeit
+      </button>
+      ${this.forfeitDialogOpen ? this._renderForfeitDialog() : null}
+    `;
   }
 
   // The verse card + guess-form/locked-in/reveal area — split out of
@@ -708,51 +822,71 @@ export class MultiplayerGame extends LitElement {
     if (this.verseResolutionError) {
       return html`
         <p class="verse-error">
-          ${this.verseResolutionError} You can't guess this round, but it'll still resolve once
-          ${this.opponentName} guesses${this._deadline ? ' or the timer runs out' : ''}.
+          ${this.verseResolutionError} You can't guess this round, but it'll
+          still resolve once ${this.opponentName}
+          guesses${this._deadline ? ' or the timer runs out' : ''}.
         </p>
-      `
+      `;
     }
 
     return html`
-      <bg-verse-card .verse=${this.resolvedVerse} .revealed=${this._revealed}></bg-verse-card>
+      <bg-verse-card
+        .verse=${this.resolvedVerse}
+        .revealed=${this._revealed}
+      ></bg-verse-card>
 
       ${this._revealed
         ? this._renderRoundReveal()
         : this.myGuess
-          ? html`<p class="locked-in">Guess locked in — waiting for ${this.opponentName}…</p>`
-          : html`<bg-guess-form
-              .disabled=${!this.resolvedVerse}
-              .translation=${this.translation}
-              .verseSource=${this.verseSource}
-              .allowedBooks=${this.guessFormRestriction.allowedBooks}
-              .lockedBook=${this.guessFormRestriction.lockedBook}
-              .allowedChapters=${this.guessFormRestriction.allowedChapters}
-              @guess-submitted=${this._onGuessSubmitted}
-            ></bg-guess-form>`}
-    `
+          ? html`
+              <p class="locked-in">
+                Guess locked in — waiting for ${this.opponentName}…
+              </p>
+            `
+          : html`
+              <bg-guess-form
+                .disabled=${!this.resolvedVerse}
+                .translation=${this.translation}
+                .verseSource=${this.verseSource}
+                .allowedBooks=${this.guessFormRestriction.allowedBooks}
+                .lockedBook=${this.guessFormRestriction.lockedBook}
+                .allowedChapters=${this.guessFormRestriction.allowedChapters}
+                @guess-submitted=${this._onGuessSubmitted}
+              ></bg-guess-form>
+            `}
+    `;
   }
 
   private _renderCountdown() {
-    const remaining = computeRemainingSeconds(this._deadline, this._now)
-    if (remaining === undefined) return html`<span class="timer timer-infinite" title="No time limit">∞</span>`
-    return html`<span class="timer ${remaining <= 5 ? 'urgent' : ''}">${remaining}s</span>`
+    const remaining = computeRemainingSeconds(this._deadline, this._now);
+    if (remaining === undefined)
+      return html`
+        <span class="timer timer-infinite" title="No time limit">∞</span>
+      `;
+    return html`
+      <span class="timer ${remaining <= 5 ? 'urgent' : ''}">${remaining}s</span>
+    `;
   }
 
   private _renderRoundReveal() {
-    if (this.session?.round.Case !== 'Scored') return null
-    const [, results] = this.session.round.Fields
-    const myResult = results.find((r) => r.playerId === this.myPlayerId)
-    const opponentResult = results.find((r) => r.playerId === this.opponentId)
+    if (this.session?.round.Case !== 'Scored') return null;
+    const [, results] = this.session.round.Fields;
+    const myResult = results.find((r) => r.playerId === this.myPlayerId);
+    const opponentResult = results.find((r) => r.playerId === this.opponentId);
 
     return html`
       <div class="reveal">
-        <p class="reveal-line">You: ${myResult ? `+${myResult.pointsAwarded} points` : 'Choked!'}</p>
         <p class="reveal-line">
-          ${this.opponentName}: ${opponentResult ? `+${opponentResult.pointsAwarded} points` : 'Choked!'}
+          You: ${myResult ? `+${myResult.pointsAwarded} points` : 'Choked!'}
+        </p>
+        <p class="reveal-line">
+          ${this.opponentName}:
+          ${opponentResult
+            ? `+${opponentResult.pointsAwarded} points`
+            : 'Choked!'}
         </p>
       </div>
-    `
+    `;
   }
 
   // Resolves MY OWN book number for the guessed book (see
@@ -761,17 +895,75 @@ export class MultiplayerGame extends LitElement {
   // Guess.bookNumber's doc comment), fixing the bug where a correct
   // guess against a differently-spelled book would score as wrong.
   private _onGuessSubmitted(event: CustomEvent<Guess>) {
-    this.myGuess = event.detail
+    this.myGuess = event.detail;
 
     const resolveBookNumber = this.verseSource
       ? bookNumberOfGuess(event.detail.book, this.verseSource, this.translation)
-      : Promise.resolve(undefined)
+      : Promise.resolve(undefined);
 
     resolveBookNumber
       .then((bookNumber) => submitGuess({ ...event.detail, bookNumber }))
       .catch((err) => {
-        console.error('[bg-multiplayer-game] failed to submit guess', err)
-      })
+        console.error('[bg-multiplayer-game] failed to submit guess', err);
+      });
+  }
+
+  private _renderForfeitDialog() {
+    return html`
+      <div class="dialog-backdrop" @click=${this._onDialogBackdropClick}>
+        <section
+          class="forfeit-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forfeit-title"
+          @click=${(event: Event) => event.stopPropagation()}
+          @keydown=${this._onForfeitDialogKeydown}
+        >
+          <h2 id="forfeit-title">Forfeit game?</h2>
+          <p>
+            Leave your game with ${this.opponentName}? This will end the game
+            for you.
+          </p>
+          <div class="dialog-actions">
+            <button
+              type="button"
+              class="secondary"
+              @click=${this._closeForfeitDialog}
+              ?disabled=${this.forfeiting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="danger"
+              @click=${this._confirmForfeit}
+              ?disabled=${this.forfeiting}
+            >
+              ${this.forfeiting ? 'Forfeiting…' : 'Forfeit'}
+            </button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  private _openForfeitDialog() {
+    this.forfeitDialogOpen = true;
+  }
+
+  private _closeForfeitDialog() {
+    if (!this.forfeiting) this.forfeitDialogOpen = false;
+  }
+
+  private _onDialogBackdropClick(event: Event) {
+    if (event.target === event.currentTarget) this._closeForfeitDialog();
+  }
+
+  private _onForfeitDialogKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this._closeForfeitDialog();
+    }
   }
 
   // Calls the server to forfeit — deliberately does NOT fire game-ended
@@ -779,11 +971,12 @@ export class MultiplayerGame extends LitElement {
   // both players, me included, the same way a normal completion does, so
   // my own results screen appears via that one shared path rather than a
   // separate local teardown racing the server round-trip.
-  private _onForfeit() {
-    if (!window.confirm(`Leave your game with ${this.opponentName}? This forfeits the game.`)) return
+  private _confirmForfeit() {
+    this.forfeiting = true;
     forfeitGame().catch((err) => {
-      console.error('[bg-multiplayer-game] failed to forfeit game', err)
-    })
+      console.error('[bg-multiplayer-game] failed to forfeit game', err);
+      this.forfeiting = false;
+    });
   }
 
   static styles = css`
@@ -887,7 +1080,61 @@ export class MultiplayerGame extends LitElement {
       font-size: 0.85rem;
       cursor: pointer;
     }
-  `
+
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(0, 0, 0, 0.45);
+    }
+
+    .forfeit-dialog {
+      width: min(24rem, 100%);
+      padding: 1.25rem;
+      border-radius: 12px;
+      background: white;
+      color: #201a24;
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.25);
+    }
+
+    .forfeit-dialog h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .forfeit-dialog p {
+      margin: 0.75rem 0 1rem;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.6rem;
+    }
+
+    .dialog-actions button {
+      margin-top: 0;
+    }
+
+    .dialog-actions .danger {
+      padding: 0.5rem 1rem;
+      border: 1px solid #b42318;
+      border-radius: 8px;
+      background: #b42318;
+      color: white;
+      cursor: pointer;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .forfeit-dialog {
+        background: #1f1b24;
+        color: #f5f3f7;
+      }
+    }
+  `;
 }
 
 declare global {
