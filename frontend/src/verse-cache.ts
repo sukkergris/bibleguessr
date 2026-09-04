@@ -1,5 +1,8 @@
-// Caches a parsed local Bible file's verses in IndexedDB so a returning
-// player doesn't have to re-parse the EPUB every session.
+// Caches parsed local Bible files' verses in IndexedDB so a returning
+// player doesn't have to re-parse a file every session, AND can pick
+// between multiple files they've uploaded before (e.g. one EPUB + one RTF
+// export, or several different translations) instead of only ever having
+// the single most recently uploaded one available.
 //
 // Important: this caches the PARSED result, not the raw file. Browsers
 // don't allow silently re-reading a File across sessions without a new user
@@ -11,13 +14,12 @@
 import type { Verse } from './types'
 
 // Bump whenever epub-parser.ts's or rtf-parser.ts's parsing logic changes,
-// so a stale cache (parsed with older, possibly-different logic) is
-// detected and dropped rather than silently served.
+// so entries parsed with older, possibly-different logic are detected and
+// dropped rather than silently served.
 const PARSER_VERSION = 1
 
 const DB_NAME = 'bibleguessr'
 const STORE_NAME = 'local-bible-cache'
-const RECORD_KEY = 'current'
 
 export interface CachedBible {
   fingerprint: string
@@ -28,7 +30,9 @@ export interface CachedBible {
 }
 
 /** `name:size:lastModified` — cheap to compute, no file I/O, sufficient to
- * detect "very likely the same file" without hashing tens of MB client-side. */
+ * detect "very likely the same file" without hashing tens of MB client-side.
+ * Doubles as the record's storage key, so uploading the same file twice
+ * overwrites its old entry rather than duplicating it. */
 export function fingerprintFile(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`
 }
@@ -46,20 +50,19 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
-/** Reads the cached parse, if any, and only if it matches the current parser
- * version (a stale cache from an older parser is treated as absent). */
-export async function readCache(): Promise<CachedBible | undefined> {
+/** Lists every cached Bible file, newest first — only entries parsed with
+ * the current parser version (a stale entry from an older parser is
+ * treated as absent, same as before, just per-entry instead of globally). */
+export async function listCache(): Promise<CachedBible[]> {
   const db = await openDb()
   try {
-    return await new Promise((resolve, reject) => {
+    const all = await new Promise<CachedBible[]>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly')
-      const request = tx.objectStore(STORE_NAME).get(RECORD_KEY)
-      request.onsuccess = () => {
-        const record = request.result as CachedBible | undefined
-        resolve(record?.parserVersion === PARSER_VERSION ? record : undefined)
-      }
+      const request = tx.objectStore(STORE_NAME).getAll()
+      request.onsuccess = () => resolve(request.result as CachedBible[])
       request.onerror = () => reject(request.error ?? new Error('Failed to read verse cache'))
     })
+    return all.filter((entry) => entry.parserVersion === PARSER_VERSION).sort((a, b) => b.cachedAt - a.cachedAt)
   } finally {
     db.close()
   }
@@ -71,9 +74,26 @@ export async function writeCache(fingerprint: string, translation: string, verse
     const record: CachedBible = { fingerprint, parserVersion: PARSER_VERSION, translation, verses, cachedAt: Date.now() }
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
-      tx.objectStore(STORE_NAME).put(record, RECORD_KEY)
+      tx.objectStore(STORE_NAME).put(record, fingerprint)
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error ?? new Error('Failed to write verse cache'))
+    })
+  } finally {
+    db.close()
+  }
+}
+
+/** Removes one cached file — offered so a player can clear an entry they
+ * no longer want listed (e.g. uploaded the wrong file, or wants to free
+ * the storage) without clearing everything. */
+export async function deleteCacheEntry(fingerprint: string): Promise<void> {
+  const db = await openDb()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite')
+      tx.objectStore(STORE_NAME).delete(fingerprint)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error ?? new Error('Failed to delete verse cache entry'))
     })
   } finally {
     db.close()

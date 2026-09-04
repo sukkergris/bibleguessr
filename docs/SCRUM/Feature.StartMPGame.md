@@ -7,4 +7,4 @@ The receiving player should see all request from other players in a list to belo
 
 Each player can send 1 and only 1 other online player a play request
 
-The player sending the request should be able to redraw the request
+The player sending the request should be able to redraw the request   

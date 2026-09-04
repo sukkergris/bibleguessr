@@ -57,6 +57,46 @@ function stripTags(html: string): string {
   return html.replace(stripTagsRegex, '')
 }
 
+// EPUB's package metadata file (OEBPS/content.opf is the JW Library export's
+// path for it; opf:package's manifest can in principle place it anywhere,
+// but every export this app has been tested against uses this exact path)
+// carries the translation's real title and language, e.g.:
+//   <dc:title>Ny Verden-Oversættelsen (nwt-D)</dc:title>
+//   <dc:language>da</dc:language>
+// This is far more useful than the uploaded filename for telling multiple
+// cached translations apart, since JW Library / bible export tools tend to
+// name every download the same generic thing (e.g. "Bible NWT.epub"
+// regardless of language) — the filename alone can't distinguish a Danish
+// NWT from an English one.
+const titleRegex = /<dc:title[^>]*>([^<]*)<\/dc:title>/
+const languageRegex = /<dc:language[^>]*>([^<]*)<\/dc:language>/
+
+/**
+ * Reads OEBPS/content.opf's <dc:title>/<dc:language> out of an EPUB, for a
+ * display name like "Ny Verden-Oversættelsen (nwt-D) (da)". Returns
+ * undefined if the EPUB has no such file or no title (some non-JW EPUB
+ * exports may not) — callers should fall back to the filename in that case.
+ */
+export async function detectEpubTranslationName(file: File): Promise<string | undefined> {
+  const buffer = await file.arrayBuffer()
+
+  const entries = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(new Uint8Array(buffer), { filter: (entry) => entry.name.endsWith('content.opf') }, (err, unzipped) =>
+      err ? reject(err) : resolve(unzipped),
+    )
+  })
+
+  const opfBytes = Object.values(entries)[0]
+  if (!opfBytes) return undefined
+
+  const opfXml = new TextDecoder('utf-8').decode(opfBytes)
+  const title = titleRegex.exec(opfXml)?.[1]?.trim()
+  const language = languageRegex.exec(opfXml)?.[1]?.trim()
+
+  if (!title) return undefined
+  return language ? `${title} (${language})` : title
+}
+
 // The browser has no built-in equivalent of .NET's WebUtility.HtmlDecode
 // other than round-tripping through the DOM — cheap for the short,
 // per-verse strings this is called on.

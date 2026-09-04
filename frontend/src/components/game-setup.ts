@@ -2,7 +2,7 @@ import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { createLocalVerseSource } from '../local-verses'
-import { fingerprintFile, readCache, writeCache, type CachedBible } from '../verse-cache'
+import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from '../verse-cache'
 import type { VerseSource } from '../types'
 
 export interface GameOptions {
@@ -52,7 +52,7 @@ export class GameSetup extends LitElement {
   private fileState: FileState = { status: 'idle' }
 
   @state()
-  private cached?: CachedBible
+  private cachedFiles: CachedBible[] = []
 
   @state()
   private dragOver = false
@@ -71,8 +71,12 @@ export class GameSetup extends LitElement {
         this.error = err instanceof Error ? err.message : 'Failed to load translations.'
       })
 
-    readCache()
-      .then((cached) => (this.cached = cached))
+    this._refreshCache()
+  }
+
+  private _refreshCache() {
+    listCache()
+      .then((cached) => (this.cachedFiles = cached))
       .catch((err) => console.error('[game-setup] failed to read verse cache', err))
   }
 
@@ -151,8 +155,8 @@ export class GameSetup extends LitElement {
   }
 
   private _renderFileMode() {
-    if (this.fileState.status === 'idle' && this.cached) {
-      return this._renderCachedCard(this.cached)
+    if (this.fileState.status === 'idle' && this.cachedFiles.length > 0) {
+      return this._renderCachedList()
     }
 
     if (this.fileState.status === 'parsing') {
@@ -170,8 +174,8 @@ export class GameSetup extends LitElement {
       return html`
         <div class="file-status">
           <p>✓ Using <strong>${this.fileState.fileName}</strong> (${this.fileState.translation})</p>
-          <button type="button" class="secondary" @click=${() => (this.fileState = { status: 'picking' })}>
-            Use a different file
+          <button type="button" class="secondary" @click=${() => (this.fileState = { status: 'idle' })}>
+            Choose a different file
           </button>
         </div>
       `
@@ -194,13 +198,35 @@ export class GameSetup extends LitElement {
     `
   }
 
-  private _renderCachedCard(cached: CachedBible) {
+  private _renderCachedList() {
     return html`
-      <div class="file-status">
-        <p>Continue with <strong>${cached.fingerprint.split(':')[0]}</strong> — ${cached.verses.length} verses cached</p>
-        <button type="button" @click=${() => this._useCached(cached)}>Continue</button>
+      <div class="cached-list">
+        <p class="cached-list-label">Use a Bible file you've already uploaded:</p>
+        <ul>
+          ${this.cachedFiles.map(
+            (cached) => html`
+              <li>
+                <button type="button" class="cached-entry" @click=${() => this._useCached(cached)}>
+                  <strong>${cached.translation}</strong>
+                  <span class="cached-entry-detail"
+                    >${cached.fingerprint.split(':')[0]} · ${cached.verses.length} verses</span
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="cached-remove"
+                  title="Remove this cached file"
+                  aria-label="Remove ${cached.fingerprint.split(':')[0]} from cache"
+                  @click=${() => this._removeCached(cached)}
+                >
+                  ✕
+                </button>
+              </li>
+            `,
+          )}
+        </ul>
         <button type="button" class="secondary" @click=${() => (this.fileState = { status: 'picking' })}>
-          Use a different file
+          Upload a different file
         </button>
       </div>
     `
@@ -213,6 +239,12 @@ export class GameSetup extends LitElement {
       translation: cached.translation,
       verseSource: createLocalVerseSource(cached.verses),
     }
+  }
+
+  private _removeCached(cached: CachedBible) {
+    deleteCacheEntry(cached.fingerprint)
+      .then(() => this._refreshCache())
+      .catch((err) => console.error('[game-setup] failed to remove cached file', err))
   }
 
   private _onFileInputChange = (e: Event) => {
@@ -237,14 +269,21 @@ export class GameSetup extends LitElement {
       return
     }
 
-    const translation = file.name.replace(/\.(epub|zip)$/i, '')
+    // Downloaded exports are frequently all named the same generic thing
+    // (e.g. every JW Library EPUB export is "Bible NWT.epub" regardless of
+    // language) — the filename alone can't tell two cached translations
+    // apart. EPUBs carry a real title/language in their own metadata; use
+    // that when available and fall back to the filename otherwise (RTF
+    // exports have no equivalent metadata file to read).
+    const fallbackName = file.name.replace(/\.(epub|zip)$/i, '')
+    const epubParser = isEpub ? await import('../epub-parser') : undefined
+    const translation = (await epubParser?.detectEpubTranslationName(file).catch(() => undefined)) ?? fallbackName
+
     this.fileState = { status: 'parsing', fileName: file.name, processed: 0, total: 1 }
 
     try {
       const verses = isEpub
-        ? await (
-            await import('../epub-parser')
-          ).parseEpub(file, translation, (progress) => {
+        ? await epubParser!.parseEpub(file, translation, (progress) => {
             this.fileState = { status: 'parsing', fileName: file.name, ...progress }
           })
         : await (
@@ -262,6 +301,7 @@ export class GameSetup extends LitElement {
       }
 
       await writeCache(fingerprintFile(file), translation, verses)
+      this._refreshCache()
       this.fileState = { status: 'ready', fileName: file.name, translation, verseSource: createLocalVerseSource(verses) }
     } catch (err) {
       console.error('[game-setup] failed to parse Bible file', err)
@@ -456,6 +496,99 @@ export class GameSetup extends LitElement {
       font-size: 0.8rem;
       color: #6b6375;
       text-align: center;
+    }
+
+    .cached-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .cached-list-label {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #6b6375;
+      text-align: left;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .cached-list-label {
+        color: #9ca3af;
+      }
+    }
+
+    .cached-list ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .cached-list li {
+      display: flex;
+      align-items: stretch;
+      gap: 0.4rem;
+    }
+
+    .cached-entry {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.15rem;
+      padding: 0.6rem 0.8rem;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      background: transparent;
+      color: #2b2630;
+      font-size: 0.9rem;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .cached-entry {
+        color: #e5e1ea;
+      }
+    }
+
+    .cached-entry:hover {
+      border-color: #aa3bff;
+    }
+
+    .cached-entry strong {
+      overflow-wrap: anywhere;
+    }
+
+    .cached-entry-detail {
+      font-size: 0.8rem;
+      color: #6b6375;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .cached-entry-detail {
+        color: #9ca3af;
+      }
+    }
+
+    .cached-remove {
+      flex: 0 0 auto;
+      width: 2.25rem;
+      padding: 0;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      background: transparent;
+      color: #d33;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .cached-remove:hover {
+      border-color: #d33;
+      background: rgba(221, 51, 51, 0.08);
     }
   `
 }
