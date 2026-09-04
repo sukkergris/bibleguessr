@@ -7,6 +7,7 @@ import type { VerseRestriction, VerseSource } from '../types'
 import type { ChapterSelection } from './chapter-selector'
 import './book-selector'
 import './chapter-selector'
+import './report-error'
 
 export interface GameOptions {
   translation: string
@@ -33,7 +34,7 @@ type FileState =
   | { status: 'picking' }
   | { status: 'parsing'; fileName: string; processed: number; total: number }
   | { status: 'ready'; fileName: string; translation: string; verseSource: VerseSource }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; fileName?: string }
 
 /**
  * Pre-game screen: choose where verses come from (a translation the backend
@@ -334,7 +335,13 @@ export class GameSetup extends LitElement {
     }
 
     return html`
-      ${this.fileState.status === 'error' ? html`<p class="error">${this.fileState.message}</p>` : null}
+      ${this.fileState.status === 'error'
+        ? html`
+            <p class="error">${this.fileState.message}</p>
+            <bg-report-error .errorMessage=${this.fileState.message} .fileName=${this.fileState.fileName}>
+            </bg-report-error>
+          `
+        : null}
       <label
         class="dropzone ${this.dragOver ? 'dragover' : ''}"
         @dragover=${(e: DragEvent) => {
@@ -417,7 +424,11 @@ export class GameSetup extends LitElement {
     const isRtfZip = lowerName.endsWith('.zip')
 
     if (!isEpub && !isRtfZip) {
-      this.fileState = { status: 'error', message: 'Please choose a .epub or .zip (RTF export) file.' }
+      this.fileState = {
+        status: 'error',
+        message: 'Please choose a .epub or .zip (RTF export) file.',
+        fileName: file.name,
+      }
       return
     }
 
@@ -448,6 +459,7 @@ export class GameSetup extends LitElement {
         this.fileState = {
           status: 'error',
           message: 'This file doesn’t look like a supported Bible export — no recognizable chapters were found.',
+          fileName: file.name,
         }
         return
       }
@@ -460,6 +472,7 @@ export class GameSetup extends LitElement {
       this.fileState = {
         status: 'error',
         message: 'This doesn’t look like a valid file (couldn’t open it as a zip).',
+        fileName: file.name,
       }
     }
   }

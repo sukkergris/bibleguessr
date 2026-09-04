@@ -9,13 +9,23 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5162
 // browser console: which URL was requested, whether the request even
 // reached the server (network error) or the server responded with an
 // error status, and how long it took.
-async function request<T>(method: 'GET' | 'POST', path: string): Promise<T> {
+//
+// `body`, when given, is sent as a JSON request body (Content-Type:
+// application/json) — the first use of this was /api/reports (see
+// submitBugReport below); every earlier POST here sent no body at all
+// (createRoom) or used query params (GET endpoints), so this is new.
+async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
   const url = `${API_BASE_URL}${path}`
   const start = performance.now()
 
   let response: Response
   try {
-    response = await fetch(url, { method })
+    response = await fetch(url, {
+      method,
+      ...(body !== undefined
+        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+        : {}),
+    })
   } catch (error) {
     // fetch() throws TypeError for network-level failures: backend down,
     // wrong host/port, CORS rejection, DNS failure, etc. The browser
@@ -36,12 +46,23 @@ async function request<T>(method: 'GET' | 'POST', path: string): Promise<T> {
   const durationMs = Math.round(performance.now() - start)
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '<unreadable body>')
-    console.error(
-      `[api] ${method} ${url} — ${response.status} ${response.statusText} (${durationMs}ms)`,
-      body,
-    )
-    throw new Error(`${method} ${path} failed: ${response.status} ${response.statusText}`)
+    // ASP.NET's default problem-details error body has a "detail" field
+    // with a human-readable message (e.g. /api/reports's rate-limit and
+    // mail-failure responses) — surface that in the thrown error's
+    // message when present, so the UI can show something more useful than
+    // a bare status code; fall back to the raw body text otherwise.
+    const bodyText = await response.text().catch(() => '<unreadable body>')
+    const detail = (() => {
+      try {
+        const parsed = JSON.parse(bodyText) as { detail?: unknown }
+        return typeof parsed.detail === 'string' ? parsed.detail : undefined
+      } catch {
+        return undefined
+      }
+    })()
+
+    console.error(`[api] ${method} ${url} — ${response.status} ${response.statusText} (${durationMs}ms)`, bodyText)
+    throw new Error(detail ?? `${method} ${path} failed: ${response.status} ${response.statusText}`)
   }
 
   console.debug(`[api] ${method} ${url} — ${response.status} (${durationMs}ms)`)
@@ -52,8 +73,8 @@ async function getJson<T>(path: string): Promise<T> {
   return request<T>('GET', path)
 }
 
-async function postJson<T>(path: string): Promise<T> {
-  return request<T>('POST', path)
+async function postJson<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>('POST', path, body)
 }
 
 export const api = {
@@ -103,4 +124,16 @@ export const api = {
     return getJson<number[]>(`/api/verse-numbers?${params}`)
   },
   createRoom: () => postJson<Room>('/api/rooms'),
+  // Sends a Bible-file upload error report — see
+  // docs/SCRUM/Feature.ErrorMessageBibleLoader.md and
+  // components/report-error.ts. Rate-limited server-side (5/IP/day, 100
+  // total/day); a 429 there surfaces here as a thrown Error whose message
+  // is the backend's rate-limit detail text (see request()'s
+  // problem-details handling above).
+  submitBugReport: (report: { description: string; fileName?: string; errorMessage: string }) =>
+    postJson<{ status: string }>('/api/reports', {
+      description: report.description,
+      fileName: report.fileName ?? null,
+      errorMessage: report.errorMessage,
+    }),
 } satisfies VerseSource & Record<string, unknown>

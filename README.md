@@ -67,6 +67,17 @@ End-to-end tests need both dev servers already running (`task dotnet:dev`
 and `task frontend:dev`, in separate terminals) and, once per machine,
 Playwright's browser binaries installed: `cd frontend && npx playwright install`.
 
+Testing the "report this issue" flow (a failed Bible-file upload's report
+button — see `docs/SCRUM/Feature.ErrorMessageBibleLoader.md`) end-to-end
+also needs a local SMTP server to send through. The devcontainer's
+`docker-compose.yml` includes a `mailpit` service for this
+([Mailpit](https://mailpit.axllent.org/)) — bring it up alongside the dev
+container with `docker compose -f .devcontainer/debian/docker-compose.yml
+up -d mailpit`, then view captured mail at <http://localhost:8073>. The
+backend's `appsettings.Development.json` (gitignored — create it locally
+if it doesn't exist) points `Smtp:Host` at `mailpit` on port `1025` by
+default; a real deployment supplies its own `Smtp:*` config the same way.
+
 ## Translation sources
 
 `bibles/bibelen-dk/` holds a public-domain Danish translation, loaded and

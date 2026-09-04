@@ -4,9 +4,20 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open System.Threading.RateLimiting
 open BibleGuessr.Domain
 open BibleGuessr.Api
 open System.Text.Json.Serialization
+
+/// POST /api/reports's request body — see docs/SCRUM/Feature.ErrorMessageBibleLoader.md.
+/// A plain DTO (nullable `string`, not `string option`) since it's bound
+/// directly from client JSON — the JsonFSharpConverter's option-unwrapping
+/// is for values already inside domain types like BugReport, not for
+/// modeling "this JSON field may be null/absent" from an untrusted client.
+type ReportRequest =
+    { Description: string
+      FileName: string
+      ErrorMessage: string }
 
 [<EntryPoint>]
 let main args =
@@ -58,11 +69,68 @@ let main args =
 
     builder.Services.AddSingleton<Verse list>(verses) |> ignore
 
+    // SMTP settings for the bug-report endpoint — see MailSender.fs and
+    // docs/SCRUM/Feature.ErrorMessageBibleLoader.md. Local dev points these
+    // at Mailpit (see .devcontainer/debian/docker-compose.yml's `mailpit`
+    // service — a local SMTP catcher with a web UI at localhost:8073, so
+    // reports can be tested end-to-end without a real mail provider) via
+    // appsettings.Development.json (gitignored, same convention as any
+    // other local/secret config in this project). A real deployment would
+    // supply its own values the same way.
+    let smtpSettings: MailSender.SmtpSettings =
+        { Host = builder.Configuration["Smtp:Host"] |> Option.ofObj |> Option.defaultValue "localhost"
+          Port = builder.Configuration["Smtp:Port"] |> Option.ofObj |> Option.map int |> Option.defaultValue 1025
+          EnableSsl =
+            builder.Configuration["Smtp:EnableSsl"]
+            |> Option.ofObj
+            |> Option.map bool.Parse
+            |> Option.defaultValue false
+          Username = builder.Configuration["Smtp:Username"] |> Option.ofObj |> Option.defaultValue ""
+          Password = builder.Configuration["Smtp:Password"] |> Option.ofObj |> Option.defaultValue ""
+          From =
+            builder.Configuration["Smtp:From"]
+            |> Option.ofObj
+            |> Option.defaultValue "bibleguessr@example.test"
+          To =
+            builder.Configuration["Smtp:To"] |> Option.ofObj |> Option.defaultValue "bibleguessr@example.test" }
+
+    builder.Services.AddSingleton<MailSender.SmtpSettings>(smtpSettings) |> ignore
+
+    // Rate limiting for the bug-report endpoint (the only rate-limited
+    // endpoint in the app today) — see
+    // docs/SCRUM/Feature.ErrorMessageBibleLoader.md. Two fixed-window
+    // limiters, both consulted for every request to this endpoint (see the
+    // endpoint's rate-limit check below, called directly rather than via
+    // ASP.NET's declarative .RequireRateLimiting — that attribute/method
+    // only supports ONE named policy per endpoint, and a policy's
+    // partitioner can only express one partition key, not "per-IP AND
+    // globally" as two independent caps at once). "report-per-ip" caps one
+    // caller's own submissions; "report-global" caps the total across
+    // every caller, so the mail relay/inbox can't be exhausted even by
+    // many distinct IPs.
+    let perIpLimiter =
+        PartitionedRateLimiter.Create<HttpContext, string>(fun context ->
+            let ip = context.Connection.RemoteIpAddress |> Option.ofObj |> Option.map string |> Option.defaultValue "unknown"
+
+            RateLimitPartition.GetFixedWindowLimiter(
+                ip,
+                fun _ -> FixedWindowRateLimiterOptions(PermitLimit = 5, Window = TimeSpan.FromDays 1.0, QueueLimit = 0)
+            ))
+
+    let globalLimiter =
+        new FixedWindowRateLimiter(
+            FixedWindowRateLimiterOptions(PermitLimit = 100, Window = TimeSpan.FromDays 1.0, QueueLimit = 0)
+        )
+
+    builder.Services.AddSingleton<PartitionedRateLimiter<HttpContext>>(perIpLimiter) |> ignore
+    builder.Services.AddSingleton<FixedWindowRateLimiter>(globalLimiter) |> ignore
+
     let app = builder.Build()
 
     let startupLogger = app.Services.GetRequiredService<ILogger<obj>>()
     startupLogger.LogInformation("Verses loaded: {Count}", verses.Length)
     startupLogger.LogInformation("CORS allowed origin: {Origin}", frontendOrigin)
+    startupLogger.LogInformation("SMTP host for bug reports: {Host}:{Port}", smtpSettings.Host, smtpSettings.Port)
 
     app.UseHttpLogging() |> ignore
     app.UseCors() |> ignore
@@ -236,6 +304,51 @@ let main args =
     app.MapPost(
         "/api/rooms",
         Func<GameHub.RoomStore, Room>(fun rooms -> rooms.CreateRoom())
+    )
+    |> ignore
+
+    // Bug reports from a failed Bible-file upload — see
+    // docs/SCRUM/Feature.ErrorMessageBibleLoader.md and game-setup.ts's
+    // "Report this issue" flow. `request` is bound from the POST body as
+    // JSON (the JsonFSharpConverter registered above via
+    // ConfigureHttpJsonOptions handles the F# record); this is the first
+    // endpoint in the app that reads a request body, everything before it
+    // was GET-with-query-params or a body-less POST.
+    app.MapPost(
+        "/api/reports",
+        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ILogger<obj>, ReportRequest, IResult>
+            (fun httpContext perIpLimiter globalLimiter smtp logger request ->
+                // Both limits must permit the request — see the limiters'
+                // construction above for why this is a manual check rather
+                // than declarative .RequireRateLimiting.
+                use ipLease = perIpLimiter.AttemptAcquire(httpContext)
+
+                if not ipLease.IsAcquired then
+                    Results.Problem(statusCode = 429, detail = "Too many reports from this address today. Please try again tomorrow.")
+                else
+                    use globalLease = globalLimiter.AttemptAcquire(1)
+
+                    if not globalLease.IsAcquired then
+                        Results.Problem(
+                            statusCode = 429,
+                            detail = "Too many reports have been submitted today. Please try again tomorrow."
+                        )
+                    else
+                        let report: BugReport =
+                            { Description = request.Description
+                              FileName = request.FileName |> Option.ofObj
+                              ErrorMessage = request.ErrorMessage
+                              SubmittedAt = DateTimeOffset.UtcNow }
+
+                        if MailSender.sendBugReport smtp logger report then
+                            Results.Ok({| status = "sent" |})
+                        else
+                            // The mail relay failed, but this is never the
+                            // caller's fault (bad input would be a 400) —
+                            // 502 signals "we couldn't reach the thing we
+                            // depend on", closest standard status for an
+                            // upstream SMTP failure.
+                            Results.Problem(statusCode = 502, detail = "Failed to send the report. Please try again later."))
     )
     |> ignore
 

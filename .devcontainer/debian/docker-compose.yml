@@ -30,11 +30,49 @@ services:
 
     networks:
       - internal
+  nginx:
+    image: nginx:alpine
+    # pull_policy: missing
+    # container_name: site-fleet-cms-nginx
+    ports:
+      - '80:80'
+      - '443:443'
+    networks:
+      internal:
+        aliases:
+          - bibleguessr.local
+          - www.bibleguessr.local
+
+    volumes:
+      - ../../server-replica/nginx:/etc/nginx:ro
+      # - ../../frontend/habibi-vip-taxi/public/the-forbidden-zone/:/usr/share/nginx/html/the-forbidden-zone:ro
+      - ../../server-replica/letsencrypt_challenges/:/var/www/letsencrypt_challenges
+      - ../../server-replica/letsencrypt/:/etc/letsencrypt:ro
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      dev:
+        condition: service_started
+      mailpit:
+        condition: service_started
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      # 8073: Web-Ui for viewing mails
+      - 8073:8025
+      # 1025: SMTP-port (Where your app are sending mails to)
+      - 1025:1025
+    volumes:
+      - bibleguessr-mailpit-data:/data
+    networks:
+      - internal
 
 volumes:
   bibleguessr-elm-devcontainer:
   bibleguessr-claude-bibleguessr:
   bibleguessr-continue-bibleguessr:
+  bibleguessr-mailpit-data:
 
 networks:
   internal:
