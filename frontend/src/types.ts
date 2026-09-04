@@ -65,13 +65,29 @@ export interface RoundResult {
 }
 
 /**
+ * Narrows which books/chapters a game's verses are drawn from — see
+ * docs/SCRUM/Feature.BibleSelector.md. Undefined (or an empty `books` list)
+ * means "default ALL", the same as no restriction at all.
+ *
+ * `books` alone (level 2, "choose books") is any subset of the books a
+ * translation/file has. `chaptersByBook` narrows further per book (level 3,
+ * "choose books and chapters") — a book present here only offers verses
+ * from the listed chapters; a book in `books` but absent from
+ * `chaptersByBook` offers all of that book's chapters.
+ */
+export interface VerseRestriction {
+  books: string[]
+  chaptersByBook: Record<string, number[]>
+}
+
+/**
  * Where the game gets its verses from: the backend (`api`) or a Bible file
  * the player parsed client-side (`local-verses.ts`'s createLocalVerseSource).
  * `api` already structurally satisfies this — see api.ts.
  */
 export interface VerseSource {
   getTranslations(): Promise<string[]>
-  getRandomVerse(translation?: string): Promise<Verse>
+  getRandomVerse(translation?: string, restriction?: VerseRestriction): Promise<Verse>
   getBooks(translation?: string): Promise<string[]>
   getChapters(book: string, translation?: string): Promise<number[]>
   getVerseNumbers(book: string, chapter: number, translation?: string): Promise<number[]>

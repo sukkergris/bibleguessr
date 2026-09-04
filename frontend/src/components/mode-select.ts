@@ -1,11 +1,16 @@
 import { LitElement, css, html } from 'lit'
 import { customElement } from 'lit/decorators.js'
 
-export type GameMode = 'singleplayer' | 'multiplayer'
+// Singleplayer is split into three separate game types, chosen up front —
+// see docs/SCRUM/Feature.BibleSelector.md. Each is its own entry point
+// (rather than a single "setup" screen with a mode dropdown inside it) so
+// each one's book/chapter selection can persist independently — see
+// bg-app.ts's allRestriction/booksRestriction/chapterRestriction state.
+export type GameMode = 'singleplayer-all' | 'singleplayer-books' | 'singleplayer-chapters' | 'multiplayer'
 
 /**
- * The very first screen: choose Singleplayer or Multiplayer. Fires a
- * `mode-selected` CustomEvent<GameMode> once the player picks one.
+ * The very first screen: choose a game type. Fires a `mode-selected`
+ * CustomEvent<GameMode> once the player picks one.
  */
 @customElement('bg-mode-select')
 export class ModeSelect extends LitElement {
@@ -15,9 +20,26 @@ export class ModeSelect extends LitElement {
         <h1>bibleguessr</h1>
         <p class="tagline">Guess the book, chapter, and verse.</p>
 
-        <div class="modes">
-          <button type="button" @click=${() => this._select('singleplayer')}>Singleplayer</button>
-          <button type="button" @click=${() => this._select('multiplayer')}>Multiplayer</button>
+        <div class="group">
+          <h2>Singleplayer</h2>
+          <div class="modes">
+            <button type="button" @click=${() => this._select('singleplayer-all')}>
+              The Bible <span class="hint">quiz on any verse</span>
+            </button>
+            <button type="button" @click=${() => this._select('singleplayer-books')}>
+              Books <span class="hint">choose which books to use</span>
+            </button>
+            <button type="button" @click=${() => this._select('singleplayer-chapters')}>
+              Chapters <span class="hint">choose chapters in one book</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="group">
+          <h2>Multiplayer</h2>
+          <div class="modes">
+            <button type="button" class="secondary" @click=${() => this._select('multiplayer')}>Multiplayer</button>
+          </div>
         </div>
       </div>
     `
@@ -41,7 +63,7 @@ export class ModeSelect extends LitElement {
     .mode-select {
       display: flex;
       flex-direction: column;
-      gap: 1.5rem;
+      gap: 1.75rem;
       text-align: center;
     }
 
@@ -51,12 +73,34 @@ export class ModeSelect extends LitElement {
     }
 
     .tagline {
-      margin: 0;
+      margin: 0 0 0.5rem;
       color: #6b6375;
     }
 
     @media (prefers-color-scheme: dark) {
       .tagline {
+        color: #9ca3af;
+      }
+    }
+
+    .group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b6375;
+      text-align: left;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      h2 {
         color: #9ca3af;
       }
     }
@@ -68,6 +112,10 @@ export class ModeSelect extends LitElement {
     }
 
     button {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.15rem;
       padding: 0.9rem 1.25rem;
       border-radius: 8px;
       border: none;
@@ -75,10 +123,17 @@ export class ModeSelect extends LitElement {
       color: white;
       font-size: 1.1rem;
       font-weight: 600;
+      text-align: left;
       cursor: pointer;
     }
 
-    button:last-child {
+    .hint {
+      font-size: 0.8rem;
+      font-weight: 400;
+      opacity: 0.85;
+    }
+
+    button.secondary {
       background: transparent;
       color: #aa3bff;
       border: 1px solid #aa3bff;

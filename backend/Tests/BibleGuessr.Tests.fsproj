@@ -10,6 +10,7 @@
     <Compile Include="ScoringTests.fs" />
     <Compile Include="PlayRequestTests.fs" />
     <Compile Include="DisconnectCleanupTests.fs" />
+    <Compile Include="VerseRestrictionTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

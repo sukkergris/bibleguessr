@@ -1,4 +1,4 @@
-import type { Room, Verse, VerseSource } from './types'
+import type { Room, Verse, VerseRestriction, VerseSource } from './types'
 
 // Configure via a Vite env var (frontend/.env.local) if the backend isn't
 // running on the default dev port, e.g. VITE_API_BASE_URL=http://localhost:5080
@@ -59,8 +59,25 @@ async function postJson<T>(path: string): Promise<T> {
 export const api = {
   baseUrl: API_BASE_URL,
   getTranslations: () => getJson<string[]>('/api/translations'),
-  getRandomVerse: (translation?: string) =>
-    getJson<Verse>(`/api/verses/random${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
+  // `restriction` narrows the pool of candidate verses to specific
+  // books/chapters — see docs/SCRUM/Feature.BibleSelector.md. Encoded as
+  // repeated `book`/`bookChapter` query params (ASP.NET model-binds
+  // repeated keys natively), matching this file's existing
+  // one-param-per-filter convention rather than introducing a JSON body.
+  getRandomVerse: (translation?: string, restriction?: VerseRestriction) => {
+    const params = new URLSearchParams()
+    if (translation) params.append('translation', translation)
+
+    for (const book of restriction?.books ?? []) {
+      params.append('book', book)
+      for (const chapter of restriction?.chaptersByBook[book] ?? []) {
+        params.append('bookChapter', `${book}:${chapter}`)
+      }
+    }
+
+    const query = params.toString()
+    return getJson<Verse>(`/api/verses/random${query ? `?${query}` : ''}`)
+  },
   // Book spellings differ by translation (e.g. bibelen-dk's "1.Mosebog" vs.
   // the NWT sources' "1. Mosebog") — pass the current verse's translation so
   // the suggestion list only offers spellings that can actually match it.

@@ -25,5 +25,15 @@
       "webRoot": "${workspaceFolder}/frontend/src",
       "sourceMaps": true
     }
+  ],
+  "compounds": [
+    {
+      "name": "Debug BibleGuessr (API + Frontend)",
+      "configurations": [
+        "Debug API (BibleGuessr.Api)",
+        "Debug Frontend (Vite)"
+      ],
+      "stopAll": true
+    }
   ]
 }

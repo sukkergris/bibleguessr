@@ -17,3 +17,8 @@ Each feature should have its own file and be organized in folders.
 The consumer will use a VS Code extension to display the documentation.
 
 Keep the `README.md` minimal and intended for developers. Explain how to use `docs/web` in `README.md`.
+
+## Code architecture
+
+Always consider using DDD in some form, but do not follow it blindly or dogmatically.
+Always consider using TDD, but do not follow it dogmatically.

@@ -78,15 +78,39 @@ let main args =
         Func<Verse list, HttpRequest, Verse>(fun verses request ->
             let translation = request.Query["translation"]
 
-            let candidates =
+            let byTranslation =
                 if translation.Count = 0 then
                     verses
                 else
                     let t = translation.ToString()
                     verses |> List.filter (fun v -> v.Translation = t)
 
+            // Optional restriction to a subset of books/chapters — see
+            // docs/SCRUM/Feature.BibleSelector.md. Repeated `book` query
+            // params narrow to those books (level 2, "choose books");
+            // repeated `bookChapter` params, each formatted "Book:Chapter",
+            // narrow further to specific chapters within a book (level 3).
+            // No `book` params at all means "default ALL" — the existing,
+            // unrestricted behavior.
+            let books = request.Query["book"] |> Seq.filter (fun b -> not (String.IsNullOrEmpty b)) |> Set.ofSeq
+
+            let chaptersByBook =
+                request.Query["bookChapter"]
+                |> Seq.choose (fun entry ->
+                    match entry.Split(':', 2) with
+                    | [| book; chapterStr |] ->
+                        match Int32.TryParse(chapterStr) with
+                        | true, chapter -> Some(book, chapter)
+                        | false, _ -> None
+                    | _ -> None)
+                |> Seq.groupBy fst
+                |> Seq.map (fun (book, entries) -> book, entries |> Seq.map snd |> Set.ofSeq)
+                |> Map.ofSeq
+
+            let candidates = byTranslation |> List.filter (Verse.matchesRestriction books chaptersByBook)
+
             if candidates.IsEmpty then
-                failwith "No verses loaded for the requested translation"
+                failwith "No verses match the requested translation/book/chapter selection"
             else
                 candidates[Random.Shared.Next(candidates.Length)])
     )

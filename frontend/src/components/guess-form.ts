@@ -31,6 +31,16 @@ export class GuessForm extends LitElement {
   @property({ attribute: false })
   verseSource: VerseSource = api
 
+  // When set (Books-mode games — see bg-app.ts's _allowedBooksForGuessForm),
+  // the Book field becomes a closed <select> restricted to exactly this
+  // list instead of the usual free-text autocomplete over every book in
+  // the translation — a Books-mode player shouldn't be able to type or
+  // pick a book they explicitly excluded at setup. Undefined (the default,
+  // for "The Bible"/"Chapters" games and multiplayer) keeps today's
+  // free-text behavior, suggesting from the full book list.
+  @property({ attribute: false })
+  allowedBooks?: string[]
+
   @state()
   private book = ''
 
@@ -55,8 +65,10 @@ export class GuessForm extends LitElement {
   @state()
   private activeSuggestion = -1
 
-  @query('input[name="bg-book-guess-no-autofill"]')
-  private bookInput?: HTMLInputElement
+  // Matches whichever Book field is actually rendered — the free-text
+  // combobox input, or (Books-mode games) the <select> dropdown.
+  @query('input[name="bg-book-guess-no-autofill"], .combo-field select')
+  private bookField?: HTMLInputElement | HTMLSelectElement
 
   connectedCallback() {
     super.connectedCallback()
@@ -72,7 +84,7 @@ export class GuessForm extends LitElement {
     // loading the verse) to enabled — put focus straight on Book so the
     // player can start typing immediately, no click needed.
     if (changedProperties.has('disabled') && changedProperties.get('disabled') === true && !this.disabled) {
-      this.bookInput?.focus()
+      this.bookField?.focus()
     }
   }
 
@@ -144,30 +156,7 @@ export class GuessForm extends LitElement {
 
     return html`
       <form @submit=${this._onSubmit}>
-        <label class="combo-field">
-          Book
-          <div class="combobox">
-            <input
-              type="text"
-              name="bg-book-guess-no-autofill"
-              placeholder="e.g. Salme"
-              role="combobox"
-              aria-expanded=${showBookSuggestions}
-              aria-autocomplete="list"
-              autocomplete="off"
-              autocorrect="off"
-              spellcheck="false"
-              .value=${this.book}
-              @input=${this._onBookInput}
-              @focus=${() => (this.openField = 'book')}
-              @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'book')}
-              @blur=${this._onComboBlur}
-              ?disabled=${this.disabled}
-              required
-            />
-            ${showBookSuggestions ? this._renderSuggestions(this.bookSuggestions, (book) => this._selectBook(book)) : null}
-          </div>
-        </label>
+        ${this.allowedBooks ? this._renderBookDropdown(this.allowedBooks) : this._renderBookCombobox(showBookSuggestions)}
         <label class="combo-field">
           Chapter (optional)
           <div class="combobox">
@@ -216,6 +205,56 @@ export class GuessForm extends LitElement {
         </label>
         <button type="submit" ?disabled=${this.disabled}>Guess</button>
       </form>
+    `
+  }
+
+  // Books-mode games only — a closed dropdown of exactly the selected
+  // books, so it's impossible to submit anything but one of them (unlike
+  // the free-text combobox below, which accepts arbitrary typed text).
+  private _renderBookDropdown(allowedBooks: string[]) {
+    return html`
+      <label class="combo-field">
+        Book
+        <select
+          .value=${this.book}
+          @change=${(e: Event) => this._selectBook((e.target as HTMLSelectElement).value)}
+          @keydown=${this._onBookSelectKeydown}
+          ?disabled=${this.disabled}
+          required
+        >
+          <option value="" disabled ?selected=${!this.book}>Choose a book…</option>
+          ${allowedBooks.map((book) => html`<option value=${book}>${book}</option>`)}
+        </select>
+      </label>
+    `
+  }
+
+  private _renderBookCombobox(showBookSuggestions: boolean) {
+    return html`
+      <label class="combo-field">
+        Book
+        <div class="combobox">
+          <input
+            type="text"
+            name="bg-book-guess-no-autofill"
+            placeholder="e.g. Salme"
+            role="combobox"
+            aria-expanded=${showBookSuggestions}
+            aria-autocomplete="list"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+            .value=${this.book}
+            @input=${this._onBookInput}
+            @focus=${() => (this.openField = 'book')}
+            @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'book')}
+            @blur=${this._onComboBlur}
+            ?disabled=${this.disabled}
+            required
+          />
+          ${showBookSuggestions ? this._renderSuggestions(this.bookSuggestions, (book) => this._selectBook(book)) : null}
+        </div>
+      </label>
     `
   }
 
@@ -346,6 +385,23 @@ export class GuessForm extends LitElement {
     this.activeSuggestion = -1
   }
 
+  // Unlike a text <input>, a focused native <select> doesn't submit its
+  // form on Enter — it just confirms the dropdown's own selection. Submit
+  // explicitly so Enter behaves the same way here as it does in every
+  // other field in this form (and the rest of the app).
+  private _onBookSelectKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    // Stop this Enter from also bubbling up to bg-app.ts's global keydown
+    // listener, which advances to the next round on Enter whenever
+    // feedback is showing — without this, requestSubmit() below sets
+    // feedback synchronously and then the SAME keydown event, still
+    // bubbling, would immediately advance past it again before it's ever
+    // visible.
+    e.stopPropagation()
+    this.renderRoot.querySelector('form')?.requestSubmit()
+  }
+
   private _onSubmit(event: SubmitEvent) {
     event.preventDefault()
     if (!this.book.trim()) return
@@ -392,7 +448,8 @@ export class GuessForm extends LitElement {
       position: relative;
     }
 
-    input {
+    input,
+    select {
       padding: 0.5rem 0.65rem;
       border-radius: 8px;
       border: 1px solid #ccc;

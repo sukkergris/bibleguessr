@@ -1,15 +1,26 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, state } from 'lit/decorators.js'
+import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { createLocalVerseSource } from '../local-verses'
 import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from '../verse-cache'
-import type { VerseSource } from '../types'
+import type { VerseRestriction, VerseSource } from '../types'
+import type { ChapterSelection } from './chapter-selector'
+import './book-selector'
+import './chapter-selector'
 
 export interface GameOptions {
   translation: string
   verseSource: VerseSource
   roundCount: number
+  /** Which books/chapters to draw verses from — see
+   * docs/SCRUM/Feature.BibleSelector.md. Undefined means "default ALL". */
+  restriction?: VerseRestriction
 }
+
+/** Which of the three game types (see mode-select.ts) this setup screen is
+ * configuring — fixed for the lifetime of one screen visit, chosen before
+ * landing here rather than switched live within the screen. */
+export type SetupScope = 'all' | 'books' | 'chapters'
 
 const MIN_ROUNDS = 3
 const MAX_ROUNDS = 10
@@ -33,6 +44,17 @@ type FileState =
  */
 @customElement('bg-game-setup')
 export class GameSetup extends LitElement {
+  /** Which game type this screen is configuring — see mode-select.ts.
+   * Fixed for this screen visit; there's no in-screen way to switch it. */
+  @property({ attribute: false })
+  scope: SetupScope = 'all'
+
+  /** Restores a selection made on an earlier visit to this same scope —
+   * see bg-app.ts's per-scope restriction state. Ignored for scope 'all',
+   * which has nothing to select. */
+  @property({ attribute: false })
+  initialRestriction?: VerseRestriction
+
   @state()
   private mode: Mode = 'server'
 
@@ -56,6 +78,24 @@ export class GameSetup extends LitElement {
 
   @state()
   private dragOver = false
+
+  /** Undefined = no valid selection yet ('all' scope never needs one;
+   * 'books'/'chapters' do). Seeded from `initialRestriction` the first
+   * time a source becomes available, so returning to this scope restores
+   * whatever was picked on an earlier visit — see bg-app.ts. */
+  @state()
+  private restriction?: VerseRestriction
+
+  // Tracks what _currentSource/_currentTranslation resolved to as of the
+  // last render, so willUpdate can tell when the underlying source has
+  // actually changed (switched mode, translation, or file) and reset a
+  // book/chapter selection that no longer applies to a DIFFERENT source —
+  // <bg-book-selector>/<bg-chapter-selector> reset their own internal UI
+  // state the same way, keyed off the same change. Undefined means "no
+  // source resolved yet", which is also the state right after construction
+  // — the first source to resolve is seeded from initialRestriction rather
+  // than reset to undefined (see willUpdate).
+  private _lastSourceKey?: string
 
   connectedCallback() {
     super.connectedCallback()
@@ -111,6 +151,7 @@ export class GameSetup extends LitElement {
 
         <form @submit=${this._onSubmit}>
           ${this.mode === 'server' ? this._renderServerMode() : this._renderFileMode()}
+          ${this._renderScopeSelector()}
 
           <label>
             Number of verses
@@ -132,8 +173,96 @@ export class GameSetup extends LitElement {
     `
   }
 
+  willUpdate() {
+    const sourceKey = this._currentSource ? `${this.mode}:${this._currentTranslation ?? ''}` : undefined
+    if (sourceKey !== this._lastSourceKey) {
+      const isFirstSource = this._lastSourceKey === undefined
+      this._lastSourceKey = sourceKey
+      // The very first source to resolve restores whatever the player
+      // picked on an earlier visit to this scope; switching to a
+      // DIFFERENT source afterwards (changed translation/file) clears it,
+      // since a book/chapter selection only makes sense for the source it
+      // was made against.
+      this.restriction = isFirstSource ? this.initialRestriction : undefined
+    }
+  }
+
   private get _canStart(): boolean {
-    return this.mode === 'server' ? !!this.selectedTranslation : this.fileState.status === 'ready'
+    if (this.mode === 'server' ? !this.selectedTranslation : this.fileState.status !== 'ready') return false
+    // 'all' has nothing to select; 'books'/'chapters' need an actual
+    // selection before there's a valid game to start.
+    return this.scope === 'all' || !!this.restriction
+  }
+
+  // The VerseSource + translation the book/chapter selector should query
+  // right now — undefined until a translation/file is actually chosen, so
+  // <bg-book-selector> stays hidden until there's something to select from.
+  private get _currentSource(): VerseSource | undefined {
+    if (this.mode === 'server') return this.selectedTranslation ? api : undefined
+    return this.fileState.status === 'ready' ? this.fileState.verseSource : undefined
+  }
+
+  private get _currentTranslation(): string | undefined {
+    return this.mode === 'server'
+      ? this.selectedTranslation || undefined
+      : this.fileState.status === 'ready'
+        ? this.fileState.translation
+        : undefined
+  }
+
+  private _renderScopeSelector() {
+    if (this.scope === 'all') return null
+
+    const source = this._currentSource
+    if (!source) return null
+
+    if (this.scope === 'books') {
+      return html`
+        <div class="scope-selector-block">
+          <span class="scope-selector-label">Books</span>
+          <bg-book-selector
+            .verseSource=${source}
+            .translation=${this._currentTranslation}
+            .initialSelection=${this.restriction?.books}
+            @restriction-changed=${this._onRestrictionChanged}
+          ></bg-book-selector>
+        </div>
+      `
+    }
+
+    const initialChapterSelection: ChapterSelection | undefined = this.restriction?.books[0]
+      ? { book: this.restriction.books[0], chapters: this.restriction.chaptersByBook[this.restriction.books[0]] ?? [] }
+      : undefined
+
+    return html`
+      <div class="scope-selector-block">
+        <span class="scope-selector-label">Chapters</span>
+        <bg-chapter-selector
+          .verseSource=${source}
+          .translation=${this._currentTranslation}
+          .initialSelection=${initialChapterSelection}
+          @restriction-changed=${this._onRestrictionChanged}
+        ></bg-chapter-selector>
+      </div>
+    `
+  }
+
+  private _onRestrictionChanged(event: CustomEvent<VerseRestriction | undefined>) {
+    this.restriction = event.detail
+
+    // Re-dispatch as our own event (distinct from the child selector's,
+    // which doesn't cross this component's public API boundary otherwise)
+    // so the parent can track the in-progress selection live — not just
+    // once the player hits "Start game" — and persist it per scope across
+    // visits to this screen. See bg-app.ts's booksRestriction/
+    // chaptersRestriction.
+    this.dispatchEvent(
+      new CustomEvent<VerseRestriction | undefined>('scope-restriction-changed', {
+        detail: this.restriction,
+        bubbles: true,
+        composed: true,
+      }),
+    )
   }
 
   private _renderServerMode() {
@@ -318,11 +447,17 @@ export class GameSetup extends LitElement {
 
     const detail: GameOptions =
       this.mode === 'server'
-        ? { translation: this.selectedTranslation, verseSource: api, roundCount: this.roundCount }
+        ? {
+            translation: this.selectedTranslation,
+            verseSource: api,
+            roundCount: this.roundCount,
+            restriction: this.restriction,
+          }
         : {
             translation: (this.fileState as Extract<FileState, { status: 'ready' }>).translation,
             verseSource: (this.fileState as Extract<FileState, { status: 'ready' }>).verseSource,
             roundCount: this.roundCount,
+            restriction: this.restriction,
           }
 
     this.dispatchEvent(
@@ -408,6 +543,18 @@ export class GameSetup extends LitElement {
       gap: 0.4rem;
       font-size: 0.9rem;
       text-align: left;
+    }
+
+    .scope-selector-block {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+      text-align: left;
+    }
+
+    .scope-selector-label {
+      font-weight: 500;
     }
 
     select {
