@@ -1,5 +1,6 @@
 # Start a Game from Chat
 
+0. A challenger should have chosen the type of game before challengin
 1. A user shuold be able to accepet a challange
 2. A user should be able to deny a challange
 3. The challenger should be able to choose the sort of game played

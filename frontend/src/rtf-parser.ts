@@ -174,7 +174,15 @@ export async function parseRtfZip(
     )
   })
 
-  const bookFiles = Object.entries(entries)
+  // Sorted by filename before parsing — the export names each book file
+  // with a zero-padded book-order prefix (e.g. "nwt_01_Ge_D.rtf" for
+  // Genesis, "nwt_66_Re_D.rtf" for Revelation), which is what makes
+  // getBooksInBibleOrder's first-encounter ordering (see local-verses.ts,
+  // docs/SCRUM/Feature.BooksGameSorting.md) actually match Bible order —
+  // Object.entries()'s own key order otherwise reflects whatever order
+  // fflate's unzip happened to enumerate the archive in, which is not
+  // guaranteed to be Bible order at all.
+  const bookFiles = Object.entries(entries).sort(([a], [b]) => a.localeCompare(b))
   const decoder = new TextDecoder('utf-8')
   const verses: Verse[] = []
 

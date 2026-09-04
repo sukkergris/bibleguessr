@@ -36,6 +36,24 @@ export function createLocalVerseSource(verses: Verse[]): VerseSource {
 
     getBooks: () => Promise.resolve([...new Set(verses.map((v) => v.book))].sort()),
 
+    // First-encounter order rather than alphabetical — see
+    // docs/SCRUM/Feature.BooksGameSorting.md. Every parser (epub-parser.ts,
+    // rtf-parser.ts) appends verses strictly in the order it reads them, so
+    // for a complete single-file Bible export this order already matches
+    // the book's actual position in the Bible (Genesis..Revelation),
+    // without needing any separate canonical book list to sort against.
+    getBooksInBibleOrder: () => {
+      const seen = new Set<string>()
+      const order: string[] = []
+      for (const v of verses) {
+        if (!seen.has(v.book)) {
+          seen.add(v.book)
+          order.push(v.book)
+        }
+      }
+      return Promise.resolve(order)
+    },
+
     getChapters: (book: string) =>
       Promise.resolve(
         [...new Set(verses.filter((v) => v.book === book).map((v) => v.chapter))].sort((a, b) => a - b),

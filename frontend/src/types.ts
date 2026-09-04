@@ -89,6 +89,13 @@ export interface VerseSource {
   getTranslations(): Promise<string[]>
   getRandomVerse(translation?: string, restriction?: VerseRestriction): Promise<Verse>
   getBooks(translation?: string): Promise<string[]>
+  /** Same set of books as getBooks, but in the order they appear in the
+   * Bible (Genesis..Revelation) rather than alphabetically — see
+   * docs/SCRUM/Feature.BooksGameSorting.md. Used by the "Books" game
+   * type's selection grid; getBooks (alphabetical) stays as-is for the
+   * guess form's autocomplete, where alphabetical is what a player typing
+   * a book name actually wants. */
+  getBooksInBibleOrder(translation?: string): Promise<string[]>
   getChapters(book: string, translation?: string): Promise<number[]>
   getVerseNumbers(book: string, chapter: number, translation?: string): Promise<number[]>
 }

@@ -145,6 +145,30 @@ let main args =
     |> ignore
 
     app.MapGet(
+        "/api/books-in-bible-order",
+        Func<Verse list, HttpRequest, string list>(fun verses request ->
+            // Same book set as /api/books, but in the order they appear in
+            // the Bible (Genesis..Revelation) rather than alphabetically —
+            // see docs/SCRUM/Feature.BooksGameSorting.md. Every loader
+            // appends verses strictly in reading order, so first-occurrence
+            // order in the (unsorted) verse list already IS Bible order for
+            // a complete translation; List.distinct preserves that order
+            // (it keeps each element's first occurrence), it just must not
+            // be followed by List.sort the way /api/books is.
+            let translation = request.Query["translation"]
+
+            let relevantVerses =
+                if translation.Count = 0 then
+                    verses
+                else
+                    let t = translation.ToString()
+                    verses |> List.filter (fun v -> v.Translation = t)
+
+            relevantVerses |> List.map (fun v -> v.Book) |> List.distinct)
+    )
+    |> ignore
+
+    app.MapGet(
         "/api/chapters",
         Func<Verse list, HttpRequest, int list>(fun verses request ->
             // Chapter suggestions are scoped to one book (within a

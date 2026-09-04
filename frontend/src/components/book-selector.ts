@@ -15,6 +15,10 @@ import type { VerseRestriction, VerseSource } from '../types'
  * domain model, every parser, and every translation source), so there's no
  * canonical short label to derive one from.
  *
+ * Books are listed in Bible order (Genesis..Revelation), not alphabetically
+ * — see docs/SCRUM/Feature.BooksGameSorting.md and
+ * VerseSource.getBooksInBibleOrder.
+ *
  * Fires `restriction-changed` CustomEvent<VerseRestriction | undefined>
  * whenever the selection changes — undefined when nothing is checked, so
  * the parent knows there's not yet a valid selection to start a game with.
@@ -63,7 +67,7 @@ export class BookSelector extends LitElement {
 
     this._loading = true
     try {
-      this._books = await this.verseSource.getBooks(this.translation)
+      this._books = await this.verseSource.getBooksInBibleOrder(this.translation)
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to load the list of books.'
       this._books = []

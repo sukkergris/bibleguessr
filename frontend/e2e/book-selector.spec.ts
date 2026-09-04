@@ -24,6 +24,22 @@ test('"The Bible" plays from any book, no selector shown', async ({ page }) => {
   await expect(page.locator('.round')).toContainText('Verse 1')
 })
 
+test('"Books" grid lists books in Bible order, not alphabetical (Feature.BooksGameSorting.md)', async ({ page }) => {
+  await openMode(page, 'Books')
+  await page.waitForSelector('.book-name')
+
+  const bookNames = await page.locator('.book-name').allTextContents()
+
+  // Genesis..Deuteronomy (this translation's own spellings) come first —
+  // an alphabetical sort would never put these five consecutively at the
+  // start, since e.g. "1.Mosebog" and "5.Mosebog" don't alphabetize next
+  // to each other under any ordinary sort.
+  expect(bookNames.slice(0, 5)).toEqual(['1.Mosebog', '2.Mosebog', '3.Mosebog', '4.Mosebog', '5.Mosebog'])
+  // Revelation ("Aabenbaringen" in this translation) is last, matching its
+  // position at the end of the Bible.
+  expect(bookNames.at(-1)).toBe('Aabenbaringen')
+})
+
 test('"Books" restricts to only the checked books', async ({ page }) => {
   await openMode(page, 'Books')
 
@@ -73,6 +89,19 @@ test('"Books" mode guess form is a dropdown listing only the selected books', as
   await expect(page.locator('.feedback')).toBeVisible()
 })
 
+test('"Chapters" book dropdown lists books in Bible order, not alphabetical (Feature.BooksGameSorting.md)', async ({
+  page,
+}) => {
+  await openMode(page, 'Chapters')
+  await page.waitForSelector('select')
+
+  const optionTexts = await page.getByLabel('Book').locator('option').allTextContents()
+  const bookNames = optionTexts.filter((t) => t !== 'Choose a book…')
+
+  expect(bookNames.slice(0, 5)).toEqual(['1.Mosebog', '2.Mosebog', '3.Mosebog', '4.Mosebog', '5.Mosebog'])
+  expect(bookNames.at(-1)).toBe('Aabenbaringen')
+})
+
 test('"Chapters" restricts to a single book\'s checked chapters', async ({ page }) => {
   await openMode(page, 'Chapters')
 
@@ -105,15 +134,46 @@ test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text
   await expect(page.locator('.round')).toContainText('Verse 1')
 
   // The Book field shows the book, but isn't an <input> or <select> at
-  // all — there's nothing to click into or type over.
+  // all — there's nothing to click into or type over. (The Chapter field
+  // is a <select> in this mode too — see the dedicated dropdown test — so
+  // this only checks for a free-text book input specifically.)
   const guessForm = page.locator('bg-guess-form')
   await expect(guessForm.getByText('Daniel', { exact: true })).toBeVisible()
-  await expect(guessForm.locator('input[type="text"], select')).toHaveCount(0)
+  await expect(guessForm.locator('input[name="bg-book-guess-no-autofill"]')).toHaveCount(0)
 
   // A guess still submits successfully with the locked book, scored
   // correctly, without the player ever choosing a book themselves.
   await page.getByRole('button', { name: 'Guess' }).click()
   await expect(page.locator('.feedback')).toContainText('Daniel')
+})
+
+test('"Chapters" mode guess form is a dropdown listing only the selected chapters', async ({ page }) => {
+  await openMode(page, 'Chapters')
+
+  await page.getByLabel('Book').selectOption('Daniel')
+  // Pick two chapters at setup.
+  await page.locator('.chapter', { hasText: '1' }).first().locator('input[type="checkbox"]').check()
+  await page.locator('.chapter', { hasText: '2' }).first().locator('input[type="checkbox"]').check()
+  await expect(page.getByText('2 chapters of Daniel selected.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Start game' }).click()
+  await expect(page.locator('.round')).toContainText('Verse 1')
+
+  // The Chapter field is a real <select>, not a free-text input.
+  const chapterField = page.getByLabel('Chapter (optional)')
+  await expect(chapterField).toHaveJSProperty('tagName', 'SELECT')
+
+  // It only offers exactly the two selected chapters, plus "Any chapter"
+  // — not every chapter of the book.
+  const optionTexts = await chapterField.locator('option').allTextContents()
+  expect(optionTexts.sort()).toEqual(['Any chapter', '1', '2'].sort())
+
+  // A guess submits successfully by picking a chapter from the dropdown —
+  // the actual round's verse could be in either selected chapter, so this
+  // only checks that submitting produced feedback, not which chapter won.
+  await chapterField.selectOption('2')
+  await chapterField.press('Enter')
+  await expect(page.locator('.feedback')).toBeVisible()
 })
 
 test('"Books" selection persists after backing out to Home and returning', async ({ page }) => {

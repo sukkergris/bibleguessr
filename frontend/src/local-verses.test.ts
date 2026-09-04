@@ -46,6 +46,18 @@ describe('createLocalVerseSource', () => {
     expect(await source.getBooks()).toEqual(['Acts', 'Genesis', 'John'])
   })
 
+  it('returns distinct book names in Bible order, not alphabetical (see Feature.BooksGameSorting.md)', async () => {
+    const source = createLocalVerseSource([
+      makeVerse('John', 3, 16),
+      makeVerse('Genesis', 1, 1),
+      makeVerse('John', 3, 17), // duplicate book, should not appear twice or move the first occurrence
+      makeVerse('Acts', 1, 1),
+    ])
+    // First-encounter order — Genesis/John/Acts alphabetize very
+    // differently, so this only passes if order isn't sorted at all.
+    expect(await source.getBooksInBibleOrder()).toEqual(['John', 'Genesis', 'Acts'])
+  })
+
   it('returns distinct, numerically sorted chapters for a book', async () => {
     const source = createLocalVerseSource([
       makeVerse('John', 3, 16),

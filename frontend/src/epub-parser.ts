@@ -200,7 +200,13 @@ export async function parseEpub(
     )
   })
 
-  const chapterFiles = Object.entries(entries)
+  // Sorted by filename before parsing, for the same reason as
+  // rtf-parser.ts's bookFiles sort: JW Library EPUB exports name chapter
+  // files with an ordered numeric scheme, and it's that filename order
+  // (not fflate's own zip-enumeration order, which isn't guaranteed to be
+  // Bible order) that makes getBooksInBibleOrder's first-encounter
+  // ordering actually correct — see docs/SCRUM/Feature.BooksGameSorting.md.
+  const chapterFiles = Object.entries(entries).sort(([a], [b]) => a.localeCompare(b))
   const decoder = new TextDecoder('utf-8')
   const verses: Verse[] = []
 

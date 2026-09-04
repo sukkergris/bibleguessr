@@ -13,6 +13,10 @@ export interface ChapterSelection {
  * Pick one book, then a checkbox grid of just that book's chapters — the
  * "Chapters" game type, see docs/SCRUM/Feature.BibleSelector.md.
  *
+ * The book dropdown lists books in Bible order (Genesis..Revelation), not
+ * alphabetically — see docs/SCRUM/Feature.BooksGameSorting.md and
+ * VerseSource.getBooksInBibleOrder.
+ *
  * Fires `restriction-changed` CustomEvent<VerseRestriction | undefined>
  * whenever the selection changes — undefined until a book is chosen AND at
  * least one of its chapters is checked, so the parent knows there's not
@@ -67,7 +71,7 @@ export class ChapterSelector extends LitElement {
 
     this._loading = true
     try {
-      this._books = await this.verseSource.getBooks(this.translation)
+      this._books = await this.verseSource.getBooksInBibleOrder(this.translation)
       if (this.initialSelection && this._books.includes(this.initialSelection.book)) {
         this._selectBook(this.initialSelection.book, new Set(this.initialSelection.chapters))
       }

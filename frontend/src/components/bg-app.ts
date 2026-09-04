@@ -162,6 +162,15 @@ export class BgApp extends LitElement {
     return this.setupScope === 'chapters' ? this.restriction?.books[0] : undefined
   }
 
+  // In "Chapters" mode, the Chapter field should likewise be a closed
+  // dropdown of exactly the selected chapters — not a free-text combobox
+  // suggesting every chapter of the (locked) book, which would let a
+  // Chapters-mode player guess a chapter they explicitly excluded.
+  private get _allowedChaptersForGuessForm(): number[] | undefined {
+    const book = this._lockedBookForGuessForm
+    return book ? this.restriction?.chaptersByBook[book] : undefined
+  }
+
   private async _loadNextVerse() {
     this.error = undefined
     this.feedback = undefined
@@ -274,6 +283,7 @@ export class BgApp extends LitElement {
             .verseSource=${this.verseSource}
             .allowedBooks=${this._allowedBooksForGuessForm}
             .lockedBook=${this._lockedBookForGuessForm}
+            .allowedChapters=${this._allowedChaptersForGuessForm}
             @guess-submitted=${this._onGuessSubmitted}
           ></bg-guess-form>`}
     `

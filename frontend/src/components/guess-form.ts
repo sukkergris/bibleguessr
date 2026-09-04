@@ -49,6 +49,15 @@ export class GuessForm extends LitElement {
   @property({ type: String })
   lockedBook?: string
 
+  // When set (Chapters-mode games — see bg-app.ts's
+  // _allowedChaptersForGuessForm), the Chapter field becomes a closed
+  // <select> restricted to exactly this list instead of the usual
+  // free-text autocomplete over every chapter of the locked book — a
+  // Chapters-mode player shouldn't be able to type or pick a chapter they
+  // explicitly excluded at setup.
+  @property({ attribute: false })
+  allowedChapters?: number[]
+
   @state()
   private book = ''
 
@@ -197,29 +206,7 @@ export class GuessForm extends LitElement {
           : this.allowedBooks
             ? this._renderBookDropdown(this.allowedBooks)
             : this._renderBookCombobox(showBookSuggestions)}
-        <label class="combo-field">
-          Chapter (optional)
-          <div class="combobox">
-            <input
-              type="number"
-              name="bg-chapter-guess"
-              min="1"
-              role="combobox"
-              aria-expanded=${showChapterSuggestions}
-              aria-autocomplete="list"
-              autocomplete="off"
-              .value=${this.chapter}
-              @input=${this._onChapterInput}
-              @focus=${() => (this.openField = 'chapter')}
-              @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'chapter')}
-              @blur=${this._onComboBlur}
-              ?disabled=${this.disabled}
-            />
-            ${showChapterSuggestions
-              ? this._renderSuggestions(this.chapterSuggestions, (chapter) => this._selectChapter(chapter))
-              : null}
-          </div>
-        </label>
+        ${this.allowedChapters ? this._renderChapterDropdown(this.allowedChapters) : this._renderChapterCombobox(showChapterSuggestions)}
         <label class="combo-field">
           Verse (optional)
           <div class="combobox">
@@ -274,7 +261,7 @@ export class GuessForm extends LitElement {
         <select
           .value=${this.book}
           @change=${(e: Event) => this._selectBook((e.target as HTMLSelectElement).value)}
-          @keydown=${this._onBookSelectKeydown}
+          @keydown=${this._onSelectFieldKeydown}
           ?disabled=${this.disabled}
           required
         >
@@ -309,6 +296,56 @@ export class GuessForm extends LitElement {
             required
           />
           ${showBookSuggestions ? this._renderSuggestions(this.bookSuggestions, (book) => this._selectBook(book)) : null}
+        </div>
+      </label>
+    `
+  }
+
+  // Chapters-mode games only — a closed dropdown of exactly the selected
+  // chapters, so it's impossible to submit anything but one of them (or
+  // leave it blank, same as today's optional combobox — a Chapters-mode
+  // guess doesn't have to include a chapter any more than any other mode's
+  // does).
+  private _renderChapterDropdown(allowedChapters: number[]) {
+    return html`
+      <label class="combo-field">
+        Chapter (optional)
+        <select
+          .value=${this.chapter}
+          @change=${(e: Event) => this._selectChapter((e.target as HTMLSelectElement).value)}
+          @keydown=${this._onSelectFieldKeydown}
+          ?disabled=${this.disabled}
+        >
+          <option value="" ?selected=${!this.chapter}>Any chapter</option>
+          ${allowedChapters.map((chapter) => html`<option value=${chapter}>${chapter}</option>`)}
+        </select>
+      </label>
+    `
+  }
+
+  private _renderChapterCombobox(showChapterSuggestions: boolean) {
+    return html`
+      <label class="combo-field">
+        Chapter (optional)
+        <div class="combobox">
+          <input
+            type="number"
+            name="bg-chapter-guess"
+            min="1"
+            role="combobox"
+            aria-expanded=${showChapterSuggestions}
+            aria-autocomplete="list"
+            autocomplete="off"
+            .value=${this.chapter}
+            @input=${this._onChapterInput}
+            @focus=${() => (this.openField = 'chapter')}
+            @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'chapter')}
+            @blur=${this._onComboBlur}
+            ?disabled=${this.disabled}
+          />
+          ${showChapterSuggestions
+            ? this._renderSuggestions(this.chapterSuggestions, (chapter) => this._selectChapter(chapter))
+            : null}
         </div>
       </label>
     `
@@ -444,8 +481,9 @@ export class GuessForm extends LitElement {
   // Unlike a text <input>, a focused native <select> doesn't submit its
   // form on Enter — it just confirms the dropdown's own selection. Submit
   // explicitly so Enter behaves the same way here as it does in every
-  // other field in this form (and the rest of the app).
-  private _onBookSelectKeydown(e: KeyboardEvent) {
+  // other field in this form (and the rest of the app). Shared by both the
+  // Book and Chapter dropdowns (Books-mode / Chapters-mode games).
+  private _onSelectFieldKeydown(e: KeyboardEvent) {
     if (e.key !== 'Enter') return
     e.preventDefault()
     // Stop this Enter from also bubbling up to bg-app.ts's global keydown

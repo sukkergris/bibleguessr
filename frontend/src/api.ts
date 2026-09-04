@@ -83,6 +83,13 @@ export const api = {
   // the suggestion list only offers spellings that can actually match it.
   getBooks: (translation?: string) =>
     getJson<string[]>(`/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`),
+  // Same books, in Bible order rather than alphabetical — see
+  // docs/SCRUM/Feature.BooksGameSorting.md. Used by the "Books" game
+  // type's selection grid.
+  getBooksInBibleOrder: (translation?: string) =>
+    getJson<string[]>(
+      `/api/books-in-bible-order${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`,
+    ),
   // Chapter suggestions are scoped to the book the player already guessed.
   getChapters: (book: string, translation?: string) => {
     const params = new URLSearchParams({ book })
