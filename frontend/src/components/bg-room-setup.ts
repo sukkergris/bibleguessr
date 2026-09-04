@@ -7,6 +7,7 @@ import {
   denyPlayRequest,
   joinRoom,
   joinWorldChat,
+  leaveRoom,
   onChatHistory,
   onChatMessage,
   onConnectionStateChange,
@@ -166,6 +167,19 @@ export class RoomSetup extends LitElement {
   private _unsubscribeRoundStarted?: () => void
 
   disconnectedCallback() {
+    // This element is torn down wholesale (not via _onLeaveRoom's own
+    // button) whenever bg-app.ts's "← Home" button switches away from the
+    // 'room-setup' phase — a totally different removal path that used to
+    // skip telling the server entirely. Same fix, same reason as
+    // _onLeaveRoom: only actually call it if we were ever in a room in
+    // the first place (the 'choose' screen never joined anything, so
+    // there'd be nothing to leave).
+    if (this.screen.step === 'in-room') {
+      leaveRoom().catch((err) => {
+        console.error('[bg-room-setup] failed to notify the server of leaving the room', err)
+      })
+    }
+
     this._unsubscribePlayerJoined?.()
     this._unsubscribeChatMessage?.()
     this._unsubscribeChatHistory?.()
@@ -570,10 +584,18 @@ export class RoomSetup extends LitElement {
 
   // Leaves the current room/World chat back to the create-or-join screen.
   // The underlying hub connection stays up (it's a shared singleton the
-  // app may reuse elsewhere) — this only stops listening locally and
-  // resets this component's own state, it doesn't tell the server the
-  // player left.
+  // app may reuse elsewhere) — only leaveRoom() itself tells the server
+  // this player is gone (see its own doc comment for why that matters:
+  // without it, this player's name stayed unusable in this exact room
+  // for as long as the tab stayed open). Fire-and-forget, same as this
+  // file's other best-effort hub calls (e.g. sendChatMessage) — the local
+  // teardown below happens regardless of whether it succeeds, since the
+  // player is leaving either way.
   private _onLeaveRoom() {
+    leaveRoom().catch((err) => {
+      console.error('[bg-room-setup] failed to notify the server of leaving the room', err)
+    })
+
     this._unsubscribePlayerJoined?.()
     this._unsubscribeChatMessage?.()
     this._unsubscribeChatHistory?.()

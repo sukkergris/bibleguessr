@@ -709,6 +709,56 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                 | None -> ()
         }
 
+    /// The caller voluntarily leaves the room (clicking "← Home" or "Back
+    /// to chat selection") — see Room.leave's doc comment for why this
+    /// exists at all: the underlying SignalR connection is a page-lifetime
+    /// singleton that's never stopped on navigation, so without a real
+    /// "I'm leaving" signal to the server, a player who left via the UI
+    /// stayed fully "connected" server-side indefinitely — long enough to
+    /// make Room.prepareJoin correctly (but unhelpfully) reject their own
+    /// attempt to come back into the room under the same name. Removes
+    /// the caller immediately (no grace period, unlike a dropped
+    /// connection) and broadcasts PlayerLeft/GameOver(Forfeited) the same
+    /// way the other removal paths (stale-disconnect sweep, prepareJoin's
+    /// same-name replacement) do. A no-op if the caller isn't in a room
+    /// (nothing to leave) — mirrors WithdrawPlayRequest/ForfeitGame's
+    /// forgiving semantics; deliberately does NOT drop the connection
+    /// itself (RegisterConnection stays as-is), since the same connection
+    /// may go on to join a different room next.
+    member this.LeaveRoom() : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> ()
+            | Some(RoomCode roomCode, player) ->
+                // Captures the session being forfeited (if any) from
+                // INSIDE the atomic update, same as ForfeitGame above —
+                // Room.leave's own opponent-id result isn't enough on its
+                // own to broadcast a real GameOver with actual final
+                // scores, so the pre-removal session is captured here too.
+                let mutable forfeitedSession: GameSession option = None
+
+                rooms.Update(
+                    roomCode,
+                    fun room ->
+                        forfeitedSession <-
+                            room.ActiveGame
+                            |> Option.filter (fun s -> s.PlayerA = player.Id || s.PlayerB = player.Id)
+
+                        let updated, _ = Room.leave player.Id room
+                        updated
+                )
+                |> ignore
+
+                let (PlayerId playerGuid) = player.Id
+                do! this.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string playerGuid)
+
+                match forfeitedSession with
+                | Some session ->
+                    let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
+                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
+                | None -> ()
+        }
+
     /// Marks the disconnecting player as disconnected (still visible in the
     /// room, just flagged) rather than removing them immediately — a page
     /// refresh or brief network drop shouldn't make someone vanish from

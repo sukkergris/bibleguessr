@@ -174,15 +174,56 @@ let prepareJoin (name: string) (room: Room) : Result&lt;Room, unit&gt; =
         </p>
       </div>
 
+      <h2>Leaving a room voluntarily — <code>Room.leave</code> / <code>LeaveRoom</code></h2>
+      <div class="callout">
+        <span class="callout-title">A bug found after shipping: rejoining your OWN room, same tab, was broken</span>
+        <p>
+          Once this feature shipped, "That name is already taken" started firing against a player's <em>own</em>
+          still-live entry: click "← Home", come back into Multiplayer, try to rejoin the exact room you were just
+          in under your own name — rejected, even though nothing else was actually using that name. The cause: the
+          SignalR hub connection is a page-lifetime singleton (see
+          <a href="../multiplayer-rooms/index.html">Multiplayer rooms</a>) that's never stopped on navigation —
+          going Home only ever reset local UI state (<span class="file-ref">frontend/src/components/bg-app.ts</span>'s
+          <code>_onGoHome</code>, and <span class="file-ref">frontend/src/components/bg-room-setup.ts</span>'s
+          <code>_onLeaveRoom</code>) — so the old <code>Player</code> stayed fully <strong>connected</strong>
+          server-side for as long as the tab stayed open. <code>Room.prepareJoin</code> was working exactly as
+          designed; there was simply no hub method that ever told the server "I'm leaving" in the first place.
+        </p>
+      </div>
+      <p>
+        <code>Room.leave (playerId) (room)</code> — new in <span class="file-ref">backend/Domain/Game.fs</span>,
+        built on the same private <code>removePlayers</code> helper <code>prepareJoin</code> and
+        <code>removeStaleDisconnections</code> already share — removes a player <strong>immediately and
+        unconditionally</strong>, no grace period: a deliberate, in-the-moment departure isn't a dropped connection
+        that might recover, so there's no reason to leave a stale entry around the way a disconnect does. Drops
+        their pending play requests and ends their active game (freeing the opponent) the same way the other two
+        removal paths do, returning <code>(updatedRoom, forfeitedOpponent: PlayerId option)</code>.
+      </p>
+      <p>
+        <code>GameHub.LeaveRoom()</code> — new in <span class="file-ref">backend/Api/GameHub.fs</span> — calls it
+        for the caller, broadcasts <code>PlayerLeft</code>, and (mirroring <code>ForfeitGame</code>'s pattern
+        exactly) broadcasts <code>GameOver(Forfeited)</code> with real final scores if they were mid-game. A no-op
+        if the caller isn't in a room. Deliberately does <strong>not</strong> stop the underlying connection itself
+        — the same connection goes on to join whatever room the player picks next.
+      </p>
+
       <h2>Frontend</h2>
       <p>
-        No new frontend component was needed for this feature. The existing name input on the multiplayer
-        "choose" screen, and the existing join flow in <span class="file-ref">frontend/src/components/bg-room-setup.ts</span>,
-        already had everything required once the two backend-side fixes above were in place: the hub now actually
-        rejects a colliding name with a real message, that message now reaches the client
-        (<code>EnableDetailedErrors</code>), and the catch block now preserves it instead of overwriting it with a
-        generic fallback (the precedence fix). The rejected join simply surfaces as
-        <code>this.error</code>, rendered the same way any other join failure already was.
+        The multiplayer "choose" screen's join flow needed no changes once the two backend-side fixes below were in
+        place: the hub now actually rejects a colliding name with a real message, that message now reaches the
+        client (<code>EnableDetailedErrors</code>), and the catch block now preserves it instead of overwriting it
+        with a generic fallback (the precedence fix). The rejected join simply surfaces as <code>this.error</code>,
+        rendered the same way any other join failure already was.
+      </p>
+      <p>
+        <span class="file-ref">frontend/src/signalr-client.ts</span>'s new <code>leaveRoom()</code> wrapper is
+        called from both places a player actually leaves — <code>bg-room-setup.ts</code>'s
+        <code>_onLeaveRoom</code> ("Back to chat selection", within the same mounted component) and its
+        <code>disconnectedCallback</code> (fired when <code>bg-app.ts</code>'s "← Home" button unmounts
+        <code>&lt;bg-room-setup&gt;</code> wholesale — a genuinely different removal path from the button click,
+        which needed its own fix). Both are fire-and-forget, matching this file's other best-effort hub calls: the
+        local teardown happens either way, since the player is leaving regardless of whether the server call
+        succeeds.
       </p>
 
       <h2>Verify it</h2>
@@ -194,15 +235,19 @@ let prepareJoin (name: string) (room: Room) : Result&lt;Room, unit&gt; =
           player; succeeds and removes a disconnected player of the same name; also drops that stale player's
           disconnection bookkeeping; also drops their pending play requests; leaves other connected players and
           their own requests untouched when only replacing a stale one; and ends the stale player's active game,
-          freeing their opponent.
+          freeing their opponent. <span class="file-ref">backend/Tests/LeaveRoomTests.fs</span> — 8 scenarios
+          covering <code>Room.leave</code>: removes the player; no-op for a stranger; frees their name for an
+          immediate rejoin (no grace period); drops disconnection bookkeeping and pending requests; leaves others
+          untouched; ends an active game and reports the surviving opponent.
         </li>
         <li>
-          End-to-end: <span class="file-ref">frontend/e2e/unique-player-name.spec.ts</span> — two scenarios against
-          live dev servers: joining World chat with a name already in use by a connected player is rejected with a
-          visible "already taken" message (and the rejected player never actually enters the room, while the
-          original player is unaffected); and reconnecting under your own name (closing the old browser context so
-          the connection actually drops, then rejoining under the identical name in a fresh context) succeeds,
-          with no "already taken" message shown.
+          End-to-end: <span class="file-ref">frontend/e2e/unique-player-name.spec.ts</span> — joining World chat
+          with a name already in use by a connected player is rejected with a visible "already taken" message (and
+          the rejected player never actually enters the room, while the original player is unaffected); going Home
+          and back into Multiplayer under the SAME name in the SAME tab (no connection drop at all) succeeds — the
+          exact reported bug above, reproduced and fixed; and reconnecting under your own name after a real
+          connection drop (closing the old browser context, rejoining under the identical name in a fresh context)
+          succeeds, with no "already taken" message shown.
         </li>
         <li>See <a href="../testing/index.html">Testing</a> for how to run everything.</li>
       </ul>
@@ -211,8 +256,11 @@ let prepareJoin (name: string) (room: Room) : Result&lt;Room, unit&gt; =
         Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
         <span class="file-ref">backend/Api/GameHub.fs</span> ·
         <span class="file-ref">backend/Api/Program.fs</span> ·
+        <span class="file-ref">frontend/src/signalr-client.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-app.ts</span> ·
         <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> ·
         <span class="file-ref">backend/Tests/UniquePlayerNameTests.fs</span> ·
+        <span class="file-ref">backend/Tests/LeaveRoomTests.fs</span> ·
         <span class="file-ref">frontend/e2e/unique-player-name.spec.ts</span>
       </footer>
     </main>

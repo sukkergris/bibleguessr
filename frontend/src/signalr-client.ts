@@ -247,6 +247,22 @@ export async function forfeitGame(): Promise<void> {
   await hub.invoke('ForfeitGame')
 }
 
+/** Tells the server the caller is voluntarily leaving their current room
+ * — call this before tearing down the room-setup UI (going Home, "Back to
+ * chat selection"), not just resetting local state. Without it, the
+ * caller's Player stays fully "connected" server-side for as long as this
+ * page/tab stays open (the hub connection is a page-lifetime singleton —
+ * see getGameHubConnection — never stopped on navigation), which used to
+ * make rejoining the SAME room under the SAME name fail with "already
+ * taken" even though nothing was actually still using it. A no-op if the
+ * caller isn't currently in a room. Deliberately doesn't stop the
+ * underlying connection — the same connection may go on to join a
+ * different room right after. */
+export async function leaveRoom(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('LeaveRoom')
+}
+
 /** Subscribes to play requests sent/retargeted anywhere in the caller's
  * room — filter to `request.toPlayerId`/`request.fromPlayerId` matching
  * your own id, same pattern as filtering ChatMessageReceived by room

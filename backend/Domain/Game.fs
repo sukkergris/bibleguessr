@@ -560,3 +560,26 @@ module Room =
             let updated, _ = removePlayers (Set.singleton existing.Id) room
             Ok updated
         | Some _ -> Error ()
+
+    /// `playerId` VOLUNTARILY leaves the room — e.g. clicking "← Home" or
+    /// "Back to chat selection" — as opposed to their connection merely
+    /// dropping (see markDisconnected/removeStaleDisconnections).
+    /// Removes them immediately and unconditionally, no grace period:
+    /// this is a deliberate, in-the-moment departure, not a connection
+    /// that might recover, so there's no reason to leave a stale entry
+    /// around the way a dropped connection does. In particular, this is
+    /// what makes it possible to come back into the room under the same
+    /// name right away (see prepareJoin) rather than being told the name
+    /// is still taken — the underlying SignalR connection is a
+    /// page-lifetime singleton that's never stopped on navigation (see
+    /// frontend/src/signalr-client.ts), so without this, "leaving" only
+    /// ever tore down local UI state and the old Player stayed fully
+    /// connected server-side for as long as the tab stayed open. Returns
+    /// the updated room and the surviving opponent's PlayerId if `playerId`
+    /// was mid-game (None if not, or if they had no active game) — same
+    /// shape as removeStaleDisconnections, for the same reason (the caller
+    /// broadcasts PlayerLeft/GameOver(Forfeited) exactly the same way
+    /// either removal path does). A no-op (unchanged room, no opponent)
+    /// if `playerId` isn't actually in the room.
+    let leave (playerId: PlayerId) (room: Room) : Room * PlayerId option =
+        removePlayers (Set.singleton playerId) room

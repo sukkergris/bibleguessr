@@ -18,6 +18,7 @@
     <Compile Include="MultiplayerScoringByNumberTests.fs" />
     <Compile Include="BibelenDkLoaderTests.fs" />
     <Compile Include="UniquePlayerNameTests.fs" />
+    <Compile Include="LeaveRoomTests.fs" />
     <Compile Include="RoomStoreConcurrencyTests.fs" />
   </ItemGroup>
 

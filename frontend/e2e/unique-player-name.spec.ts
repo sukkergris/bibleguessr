@@ -8,6 +8,15 @@ import { test, expect, type Page } from '@playwright/test'
 //   name) — the domain-level guarantees are already fully covered by
 //   backend/Tests/UniquePlayerNameTests.fs; this only checks the wiring
 //   reaches the actual UI.
+// - clicking "← Home" and coming back into Multiplayer, in the SAME tab,
+//   under your own SAME name, must succeed right away — the underlying
+//   SignalR connection is a page-lifetime singleton that's never stopped
+//   on navigation (see signalr-client.ts), so without GameHub.LeaveRoom
+//   (see Room.leave's doc comment for the full story of the reported bug
+//   this fixes), the old Player stayed fully "connected" server-side and
+//   the exact same "already taken" rejection above fired against your OWN
+//   still-live entry — a real bug hit in practice, not just a theoretical
+//   edge case.
 
 async function joinWorldChat(page: Page, name: string) {
   await page.goto('/')
@@ -44,6 +53,22 @@ test('joining World chat with a name already in use is rejected with a clear mes
     await ctxA.close()
     await ctxB.close()
   }
+})
+
+test('going Home and back into Multiplayer under the same name in the same tab succeeds', async ({ page }) => {
+  const name = `Alice${Date.now().toString().slice(-6)}`
+
+  await joinWorldChat(page, name)
+  await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
+
+  // No connection drop at all here — same tab, same live SignalR
+  // connection throughout. Just navigating away via the app's own "Home"
+  // button, the way a player actually would.
+  await page.getByRole('button', { name: '← Home' }).click()
+
+  await joinWorldChat(page, name)
+  await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
+  await expect(page.getByText(/already taken/i)).not.toBeVisible()
 })
 
 test('reconnecting under your own name succeeds once your old connection drops', async ({ browser }) => {

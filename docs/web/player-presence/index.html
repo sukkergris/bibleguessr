@@ -145,6 +145,15 @@
           missing is resuming the <em>old</em> <code>PlayerId</code> itself — score, in-progress game state, and
           anything else keyed by the old id don't carry over to the new one.
         </p>
+        <p>
+          That handling only covers a genuinely <em>dropped</em> connection, though — <code>prepareJoin</code>
+          checks <code>DisconnectedPlayers</code>, and nothing marks you disconnected while your tab is still open.
+          A player who deliberately leaves (clicks "← Home") without their connection ever actually dropping needed
+          a separate fix: <a href="../unique-player-names/index.html">Unique player names</a>' <code>Room.leave</code>
+          / <code>GameHub.LeaveRoom</code> now removes a voluntary leaver immediately, unconditionally — see that
+          page's "Leaving a room voluntarily" section for the bug this closes (rejoining your own still-open room,
+          same tab, same name, used to be rejected as a duplicate).
+        </p>
       </div>
 
       <h2>Verify it</h2>
