@@ -29,7 +29,21 @@ let connectionPromise: Promise<signalR.HubConnection> | undefined
 export function getGameHubConnection(): Promise<signalR.HubConnection> {
   if (!connectionPromise) {
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${api.baseUrl}/hubs/game`)
+      .withUrl(`${api.baseUrl}/hubs/game`, {
+        // WebSockets only, deliberately — no fallback to ServerSentEvents
+        // or LongPolling. WebSockets has been supported in every browser
+        // that matters since ~2012 (a browser too old for it has other
+        // problems too), so requiring it outright is a reasonable modern
+        // baseline, not a compatibility risk. Forcing a single transport
+        // also lets skipNegotiation:true bypass the separate HTTP
+        // "negotiate" round-trip entirely (only legal when the transport
+        // is pinned like this) and go straight to the WebSocket handshake
+        // — one less HTTP request that could itself get stuck behind a
+        // proxy (this is what fixed local dev hanging behind a devcontainer
+        // port-forward).
+        transport: signalR.HttpTransportType.WebSockets,
+        skipNegotiation: true,
+      })
       .withAutomaticReconnect()
       .build()
 

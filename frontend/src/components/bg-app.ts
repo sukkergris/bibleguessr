@@ -158,18 +158,20 @@ export class BgApp extends LitElement {
   render() {
     return html`
       <bg-connection-status .trackSignalR=${this.phase === 'room-setup'}></bg-connection-status>
-      <bg-nerd-panel></bg-nerd-panel>
-      <main>
-        ${this.phase === 'mode-select'
-          ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
-          : this.phase === 'setup'
-            ? html`<bg-game-setup @game-started=${this._onGameStarted}></bg-game-setup>`
-            : this.phase === 'playing'
-              ? this._renderPlaying()
-              : this.phase === 'gameOver'
-                ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
-                : html`<bg-room-setup></bg-room-setup>`}
-      </main>
+      <div class="layout">
+        <main>
+          ${this.phase === 'mode-select'
+            ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
+            : this.phase === 'setup'
+              ? html`<bg-game-setup @game-started=${this._onGameStarted}></bg-game-setup>`
+              : this.phase === 'playing'
+                ? this._renderPlaying()
+                : this.phase === 'gameOver'
+                  ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
+                  : html`<bg-room-setup></bg-room-setup>`}
+        </main>
+        <bg-nerd-panel></bg-nerd-panel>
+      </div>
     `
   }
 
@@ -206,10 +208,24 @@ export class BgApp extends LitElement {
   static styles = css`
     :host {
       display: block;
+      font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* The nerd panel takes real layout space (a flex sibling) rather than
+       floating over the content, so opening it visibly narrows the main
+       column instead of covering part of it. */
+    .layout {
+      display: flex;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    main {
+      flex: 1;
+      min-width: 0;
       max-width: 640px;
       margin: 0 auto;
       padding: 2rem 1rem;
-      font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
     }
 
     header {

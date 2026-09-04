@@ -39,6 +39,12 @@ export class ConnectionStatus extends LitElement {
 
   private _unsubscribeConnectionState?: () => void
   private _recheckTimer?: ReturnType<typeof setInterval>
+  // Aborted on disconnect so an in-flight health check from a
+  // torn-down instance (e.g. a Vite HMR reload swapping this component)
+  // doesn't resolve/reject into a component that's no longer live — it
+  // otherwise showed up as a spurious "(canceled)" request with nothing
+  // wrong on the server side, purely a dev-mode artifact of teardown timing.
+  private _httpCheckAbort?: AbortController
 
   connectedCallback() {
     super.connectedCallback()
@@ -47,7 +53,13 @@ export class ConnectionStatus extends LitElement {
     if (this.trackSignalR) this._startTrackingSignalR()
   }
 
-  updated(changedProperties: Map<string, unknown>) {
+  // willUpdate (not updated!) runs before render, as part of the SAME
+  // update cycle — so setting `this.signalR` here folds into the update
+  // already in progress. Doing this in `updated()` instead mutates state
+  // AFTER the update completes, which schedules a whole new update as a
+  // side effect of the one that just finished (Lit warns about exactly
+  // this: https://lit.dev/msg/change-in-update).
+  willUpdate(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('trackSignalR') && this.trackSignalR && this.signalR === 'not-started') {
       this._startTrackingSignalR()
     }
@@ -69,18 +81,34 @@ export class ConnectionStatus extends LitElement {
   disconnectedCallback() {
     this._unsubscribeConnectionState?.()
     clearInterval(this._recheckTimer)
+    this._httpCheckAbort?.abort()
     super.disconnectedCallback()
   }
 
   private async _checkHttp() {
+    // Cancel any still-in-flight check from a previous call before starting
+    // a new one — RECHECK_INTERVAL_MS could otherwise overlap a slow
+    // request with a fresh one.
+    this._httpCheckAbort?.abort()
+    const controller = new AbortController()
+    this._httpCheckAbort = controller
+    const timeoutId = setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), 5000)
+
     const start = performance.now()
     try {
-      const response = await fetch(`${api.baseUrl}/api/health`, { signal: AbortSignal.timeout(5000) })
+      const response = await fetch(`${api.baseUrl}/api/health`, { signal: controller.signal })
       const latencyMs = Math.round(performance.now() - start)
       this.http = response.ok
         ? { status: 'ok', latencyMs }
         : { status: 'error', message: `Server responded ${response.status} ${response.statusText}` }
     } catch (err) {
+      // A deliberate abort from disconnectedCallback/a superseding check
+      // (not a timeout, not a real network failure) — the component may
+      // already be gone, and even if not, a fresher check's result (or
+      // none, if it's mid-flight) is what should be shown, not an error
+      // for a request we cancelled ourselves.
+      if (err instanceof DOMException && err.name === 'AbortError') return
+
       const message =
         err instanceof DOMException && err.name === 'TimeoutError'
           ? 'Timed out reaching the server'
@@ -88,6 +116,8 @@ export class ConnectionStatus extends LitElement {
             ? err.message
             : 'Could not reach the server'
       this.http = { status: 'error', message }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

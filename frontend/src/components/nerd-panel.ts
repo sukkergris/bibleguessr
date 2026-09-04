@@ -2,9 +2,15 @@ import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 
 /**
- * A slide-in debug drawer, toggled with Ctrl+Shift+N — the shell for
- * whatever "nerd stuff" ends up living here (connection diagnostics, an
- * event log, etc.). Empty for now; widgets get slotted in as they're built.
+ * A debug drawer along the right edge, toggled with Ctrl+Shift+N — the
+ * shell for whatever "nerd stuff" ends up living here (connection
+ * diagnostics, an event log, etc.). Empty for now; widgets get slotted in
+ * as they're built.
+ *
+ * Takes real layout space rather than floating over the page: bg-app.ts
+ * renders this as a flex sibling of <main>, so opening it narrows the main
+ * column instead of covering part of it — the width transition below is
+ * what makes that widen/narrow read as a slide rather than a jump cut.
  *
  * Note: Ctrl+Shift+N is "new incognito window" in some browsers (Chrome).
  * preventDefault() on the keydown stops the browser handling it *while
@@ -35,9 +41,18 @@ export class NerdPanel extends LitElement {
     }
   }
 
+  // Reflects `open` onto a host attribute so the :host([data-open]) width
+  // rule (see styles below) can react to it — plain CSS has no way to
+  // style a shadow host based on its own internal @state.
+  updated(changedProperties: Map<string, unknown>) {
+    if (changedProperties.has('open')) {
+      this.toggleAttribute('data-open', this.open)
+    }
+  }
+
   render() {
     return html`
-      <div class="panel ${this.open ? 'open' : ''}" aria-hidden=${!this.open}>
+      <div class="panel" aria-hidden=${!this.open}>
         <header>
           <h2>Nerd stuff</h2>
           <button type="button" class="close" @click=${() => (this.open = false)} aria-label="Close">✕</button>
@@ -51,29 +66,30 @@ export class NerdPanel extends LitElement {
   }
 
   static styles = css`
+    /* :host itself is the thing that widens/narrows — the flex sibling in
+       bg-app.ts's .layout — so main's width visibly changes as this opens
+       and closes, instead of this panel floating on top of it. */
     :host {
       display: block;
+      flex-shrink: 0;
+      width: 0;
+      overflow: hidden;
+      transition: width 0.2s ease;
+      align-self: stretch;
+    }
+
+    :host([data-open]) {
+      width: min(22rem, 90vw);
     }
 
     .panel {
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
       width: min(22rem, 90vw);
+      height: 100%;
       background: white;
       border-left: 1px solid #ddd;
-      box-shadow: -4px 0 16px rgba(0, 0, 0, 0.15);
-      transform: translateX(100%);
-      transition: transform 0.2s ease;
-      z-index: 2000;
       display: flex;
       flex-direction: column;
       font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-    }
-
-    .panel.open {
-      transform: translateX(0);
     }
 
     @media (prefers-color-scheme: dark) {
