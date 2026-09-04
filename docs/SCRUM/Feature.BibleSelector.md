@@ -1,6 +1,6 @@
 # Select a Bible
 
-When a Bible or translation has been selected, users should be able to select the specific books and chapters they want to quiz on.
+When a Bible or translation has been selected, and the user want to create a game, users should be able to select the specific books and chapters they want to quiz on.
 
 1. Default ALL
 2. Choose books
