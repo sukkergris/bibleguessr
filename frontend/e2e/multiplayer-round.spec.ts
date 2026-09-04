@@ -815,8 +815,14 @@ test('the blink stops when the game ends by forfeit mid-countdown', async ({ bro
     // player who will REMAIN — he's the one whose screen must recover).
     await expect(pageB.locator('body')).toHaveClass(/countdown-danger/, { timeout: 20_000 })
 
-    pageA.once('dialog', (dialog) => void dialog.accept())
+    // The custom in-app dialog replaced the native confirm() (see
+    // docs/SCRUM/Feature.Forfeit.md) — click through it rather than
+    // auto-accepting a browser dialog that no longer appears.
     await pageA.getByRole('button', { name: 'Forfeit' }).click()
+    await pageA
+      .getByRole('dialog', { name: 'Forfeit game?' })
+      .getByRole('button', { name: 'Forfeit', exact: true })
+      .click()
 
     // Bob reaches the results screen — and his screen must stop blinking.
     await expect(pageB.locator('bg-multiplayer-results')).toBeVisible()
@@ -909,8 +915,14 @@ test('the opponent still reaches results when a forfeit lands during a reveal ho
     await submitGuess(pageA, 'Genesis')
     await submitGuess(pageB, 'Genesis')
 
-    pageA.once('dialog', (dialog) => void dialog.accept())
+    // The custom in-app dialog replaced the native confirm() (see
+    // docs/SCRUM/Feature.Forfeit.md) — click through it rather than
+    // auto-accepting a browser dialog that no longer appears.
     await pageA.getByRole('button', { name: 'Forfeit' }).click()
+    await pageA
+      .getByRole('dialog', { name: 'Forfeit game?' })
+      .getByRole('button', { name: 'Forfeit', exact: true })
+      .click()
 
     await expect(pageB.locator('bg-multiplayer-results')).toBeVisible({ timeout: 10_000 })
   } finally {
@@ -942,8 +954,14 @@ test('the challenger reaches results when the accepting player forfeits', async 
 
     await expect(pageB.getByText('Round 1 /')).toBeVisible()
 
-    pageB.once('dialog', (dialog) => void dialog.accept())
+    // The custom in-app dialog replaced the native confirm() (see
+    // docs/SCRUM/Feature.Forfeit.md) — click through it rather than
+    // auto-accepting a browser dialog that no longer appears.
     await pageB.getByRole('button', { name: 'Forfeit' }).click()
+    await pageB
+      .getByRole('dialog', { name: 'Forfeit game?' })
+      .getByRole('button', { name: 'Forfeit', exact: true })
+      .click()
 
     await expect(pageA.locator('bg-multiplayer-results')).toBeVisible({ timeout: 10_000 })
   } finally {

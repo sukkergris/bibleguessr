@@ -235,6 +235,11 @@ export class MultiplayerGame extends LitElement {
   @state()
   private forfeiting = false;
 
+  @state()
+  private forfeitError?: string;
+
+  private forfeitTrigger?: HTMLButtonElement;
+
   private _unsubscribeRoundStarted?: () => void;
   private _unsubscribeRoundScored?: () => void;
   private _unsubscribeGameOver?: () => void;
@@ -916,18 +921,25 @@ export class MultiplayerGame extends LitElement {
           role="dialog"
           aria-modal="true"
           aria-labelledby="forfeit-title"
+          aria-describedby="forfeit-description"
           @click=${(event: Event) => event.stopPropagation()}
           @keydown=${this._onForfeitDialogKeydown}
         >
           <h2 id="forfeit-title">Forfeit game?</h2>
-          <p>
+          <p id="forfeit-description">
             Leave your game with ${this.opponentName}? This will end the game
             for you.
           </p>
+          ${this.forfeitError
+            ? html`
+                <p class="forfeit-error" role="alert">${this.forfeitError}</p>
+              `
+            : null}
           <div class="dialog-actions">
             <button
               type="button"
               class="secondary"
+              data-forfeit-cancel
               @click=${this._closeForfeitDialog}
               ?disabled=${this.forfeiting}
             >
@@ -947,12 +959,24 @@ export class MultiplayerGame extends LitElement {
     `;
   }
 
-  private _openForfeitDialog() {
+  private async _openForfeitDialog(event: Event) {
+    this.forfeitTrigger = event.currentTarget as HTMLButtonElement;
+    this.forfeitError = undefined;
     this.forfeitDialogOpen = true;
+    await this.updateComplete;
+    this.shadowRoot
+      ?.querySelector<HTMLButtonElement>('[data-forfeit-cancel]')
+      ?.focus();
   }
 
   private _closeForfeitDialog() {
-    if (!this.forfeiting) this.forfeitDialogOpen = false;
+    if (this.forfeiting) return;
+
+    const trigger = this.forfeitTrigger;
+    this.forfeitDialogOpen = false;
+    this.forfeitError = undefined;
+    this.forfeitTrigger = undefined;
+    if (trigger?.isConnected) trigger.focus();
   }
 
   private _onDialogBackdropClick(event: Event) {
@@ -963,6 +987,26 @@ export class MultiplayerGame extends LitElement {
     if (event.key === 'Escape') {
       event.preventDefault();
       this._closeForfeitDialog();
+      return;
+    }
+
+    if (event.key !== 'Tab') return;
+
+    const dialog = event.currentTarget as HTMLElement;
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const activeElement = (dialog.getRootNode() as ShadowRoot).activeElement;
+    if (event.shiftKey && activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   }
 
@@ -973,9 +1017,11 @@ export class MultiplayerGame extends LitElement {
   // separate local teardown racing the server round-trip.
   private _confirmForfeit() {
     this.forfeiting = true;
+    this.forfeitError = undefined;
     forfeitGame().catch((err) => {
       console.error('[bg-multiplayer-game] failed to forfeit game', err);
       this.forfeiting = false;
+      this.forfeitError = 'Forfeiting the game failed. Please try again.';
     });
   }
 
@@ -1107,6 +1153,11 @@ export class MultiplayerGame extends LitElement {
 
     .forfeit-dialog p {
       margin: 0.75rem 0 1rem;
+    }
+
+    .forfeit-error {
+      color: #b42318;
+      font-weight: 600;
     }
 
     .dialog-actions {

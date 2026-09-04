@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forfeit confirmation — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Forfeit confirmation</h1>
+      <p class="subtitle">
+        Leaving an active multiplayer game requires an explicit, accessible confirmation instead of the browser's
+        built-in prompt.
+      </p>
+
+      <h2>User flow</h2>
+      <ol class="flow">
+        <li>The player selects <strong>Forfeit</strong> below the active round.</li>
+        <li>An in-app dialog explains that forfeiting ends the current game and focuses <strong>Cancel</strong> by default.</li>
+        <li>The player can cancel, press Escape, click the backdrop, or explicitly confirm the forfeit.</li>
+        <li>While the request is in flight, both actions are disabled so the server receives at most one submission.</li>
+        <li>If the request fails, the dialog stays open and announces a retryable error.</li>
+      </ol>
+
+      <h2>Accessibility behavior</h2>
+      <p>
+        The dialog uses <code>role="dialog"</code>, <code>aria-modal="true"</code>, and labelled/described content for
+        screen readers. Cancel is the initial focus target because it is the safe default.
+      </p>
+      <p>
+        Tab and Shift+Tab cycle between enabled dialog actions. Escape and the two non-confirmation dismissal paths
+        return focus to the original Forfeit button, so keyboard users do not lose their place in the round view.
+        A failed request is exposed with <code>role="alert"</code> and leaves the confirmation action available for retry.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/src/components/multiplayer-game.ts</span> owns the dialog state, focus
+        lifecycle, keyboard handling, error display, and request submission. The existing
+        <code>forfeitGame()</code> SignalR call remains unchanged; successful completion is still delivered through
+        the server-authoritative <code>GameOver</code> event.
+      </p>
+      <p>
+        The behavior is covered by the forfeit scenario in
+        <span class="file-ref">frontend/e2e/multiplayer-round.spec.ts</span>, including focus placement, focus
+        wrapping, Escape, Cancel, backdrop dismissal, and the successful server round-trip.
+      </p>
+    </main>
+  </body>
+</html>
