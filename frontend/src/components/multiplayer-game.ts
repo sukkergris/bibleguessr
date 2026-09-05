@@ -16,6 +16,7 @@ import {
 } from '../signalr-client'
 import { loadEpilepsyStressModeEnabled } from '../flash-intensity-storage'
 import { isSameGame } from '../game-identity'
+import { FORFEIT_RESPONSE_TIMEOUT_MS, forfeitOutcomeAfter } from '../forfeit-state'
 import { computeRemainingSeconds, deadlineOf, parseTimeSpanMs } from '../timer'
 import type { GameOverReason, GameSession, GameType, Guess, Verse, VerseReference, VerseSource } from '../types'
 import type { MultiplayerGameOverDetail, MultiplayerRoundSummary } from './multiplayer-results'
@@ -37,6 +38,7 @@ const COUNTDOWN_TICK_MS = 250
  * technically correct but not long enough for a player to actually read
  * it. */
 const REVEAL_HOLD_MS = 1500
+
 
 /** How many seconds of "time is running out" the blink is meant to warn
  * about — the danger window's length (see _inFinalCountdown). */
@@ -241,6 +243,10 @@ export class MultiplayerGame extends LitElement {
 
   private forfeitTrigger?: HTMLButtonElement;
 
+  /** Pending "the server never answered our forfeit" timer — see
+   * _confirmForfeit. */
+  private _forfeitTimeout?: ReturnType<typeof setTimeout>;
+
   private _unsubscribeRoundStarted?: () => void;
   private _unsubscribeRoundScored?: () => void;
   private _unsubscribeGameOver?: () => void;
@@ -391,6 +397,7 @@ export class MultiplayerGame extends LitElement {
     if (this._tickHandle !== undefined) clearInterval(this._tickHandle);
     if (this._revealHoldTimeout !== undefined)
       clearTimeout(this._revealHoldTimeout);
+    this._clearForfeitTimeout();
     // If this element unmounts (forfeit, opponent leaves, game-over)
     // while the blink was active, tell bg-app.ts it's over — otherwise
     // the class/property would linger on document.body forever, since
@@ -1034,11 +1041,41 @@ export class MultiplayerGame extends LitElement {
   private _confirmForfeit() {
     this.forfeiting = true;
     this.forfeitError = undefined;
+
+    // Safety net: the dialog leaves "Forfeiting…" only when the server's
+    // GameOver actually arrives and tears this component down. If that
+    // never happens — a dropped connection, or a forfeit for a game the
+    // server no longer has (the opponent's disconnect already ended it,
+    // see GameHub.fs's ForfeitGame) — the player would otherwise sit on
+    // a dead dialog with both buttons disabled and no way out, which is
+    // exactly the trap in
+    // docs/SCRUM/BUGS/BUG.CanForfeitAGameWhereConnectionLost.md.
+    // Re-enabling the buttons and showing why is always better than
+    // hanging: the game is either already over (so leaving is safe) or
+    // still live (so they can retry).
+    this._clearForfeitTimeout();
+    this._forfeitTimeout = setTimeout(() => {
+      this._forfeitTimeout = undefined;
+      if (!this.forfeiting) return;
+      const outcome = forfeitOutcomeAfter(FORFEIT_RESPONSE_TIMEOUT_MS);
+      if (outcome.kind !== 'recovered') return;
+      this.forfeiting = false;
+      this.forfeitError = outcome.message;
+    }, FORFEIT_RESPONSE_TIMEOUT_MS);
+
     forfeitGame().catch((err) => {
       console.error('[bg-multiplayer-game] failed to forfeit game', err);
+      this._clearForfeitTimeout();
       this.forfeiting = false;
       this.forfeitError = 'Forfeiting the game failed. Please try again.';
     });
+  }
+
+  private _clearForfeitTimeout() {
+    if (this._forfeitTimeout !== undefined) {
+      clearTimeout(this._forfeitTimeout);
+      this._forfeitTimeout = undefined;
+    }
   }
 
   static styles = css`

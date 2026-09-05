@@ -718,7 +718,19 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                 | Some session ->
                     let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
                     do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
-                | None -> ()
+                | None ->
+                    // There was no game left to forfeit — the opponent's
+                    // disconnect/leave already ended it, and this call
+                    // raced that. The caller is sitting in a confirm
+                    // dialog waiting for an answer, so it MUST get one:
+                    // silently returning here left that dialog stuck on
+                    // "Forfeiting…" forever, with no way out (see
+                    // docs/SCRUM/BUGS/BUG.CanForfeitAGameWhereConnectionLost.md).
+                    // Not an error — the caller asked for the game to be
+                    // over and it is — so this reports the same outcome
+                    // the winning path would have, addressed to the
+                    // caller alone since nobody else is still in it.
+                    do! this.Clients.Caller.SendAsync("Error", "That game has already ended")
         }
 
     /// The caller voluntarily leaves the room (clicking "← Home" or "Back
