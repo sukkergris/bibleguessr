@@ -8,7 +8,7 @@
   <ItemGroup>
     <Compile Include="Verses.fs" />
     <Compile Include="Game.fs" />
-    <Compile Include="BugReport.fs" />
+    <Compile Include="BibleFileUploadReport.fs" />
     <Compile Include="AbuseReport.fs" />
     <Compile Include="GeneralBugReport.fs" />
   </ItemGroup>

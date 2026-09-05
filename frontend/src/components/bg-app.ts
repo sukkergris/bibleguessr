@@ -46,7 +46,7 @@ export class BgApp extends LitElement {
   private reportSending = false
 
   /** Whether the general bug-report panel is showing — see
-   * docs/SCRUM/TODO/Feature.BugReport.md. A separate flag from
+   * docs/SCRUM/DONE/Feature.BugReport.md. A separate flag from
    * reportingAbuse for the same reason: reporting can happen from any
    * screen, and the screen underneath must be remembered. */
   @state()
@@ -549,7 +549,7 @@ export class BgApp extends LitElement {
     }
 
     /* Mirrors the report button but on the RIGHT edge, per
-       docs/SCRUM/TODO/Feature.BugReport.md — clear of the left-hand
+       docs/SCRUM/DONE/Feature.BugReport.md — clear of the left-hand
        report control and of the nerd panel's own toggle. */
     .report-bug {
       position: fixed;

@@ -34,7 +34,7 @@ type SmtpSettings =
 /// Builds the report email's HTML body — a simple field/value table,
 /// mirroring the shape of the reference implementation this was adapted
 /// from (see the "Be inspired by" MailSender.cs shared in chat).
-let private buildBody (report: BugReport) : string =
+let private buildBody (report: BibleFileUploadReport) : string =
     let escape (s: string) = WebUtility.HtmlEncode(s)
     let submittedAt = report.SubmittedAt.ToString("u")
 
@@ -78,7 +78,7 @@ let private buildBody (report: BugReport) : string =
 /// purely a courtesy, would be a poor experience). Returns whether the
 /// send succeeded, so the endpoint can still tell the player if it didn't
 /// go through.
-let sendBugReport (settings: SmtpSettings) (logger: ILogger) (report: BugReport) : bool =
+let sendBibleFileUploadReport (settings: SmtpSettings) (logger: ILogger) (report: BibleFileUploadReport) : bool =
     use smtpClient =
         new SmtpClient(settings.Host, settings.Port, EnableSsl = settings.EnableSsl,
                         Credentials = NetworkCredential(settings.Username, settings.Password))
@@ -149,7 +149,7 @@ let private buildAbuseBody (report: AbuseReport) : string =
     """
 
 /// Sends an abuse report by email. Same never-throws contract as
-/// sendBugReport — the endpoint turns a false return into a retryable
+/// sendBibleFileUploadReport — the endpoint turns a false return into a retryable
 /// error for the reporter rather than a 500.
 ///
 /// The reporter's own address is NEVER used as the sender (see

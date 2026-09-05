@@ -11,7 +11,7 @@ type SubmitState =
   | { kind: 'failed'; message: string }
 
 /**
- * The "Report a bug" panel — see docs/SCRUM/TODO/Feature.BugReport.md.
+ * The "Report a bug" panel — see docs/SCRUM/DONE/Feature.BugReport.md.
  * Opened from the sticky bug button in bg-app.ts, shown in place of
  * whatever screen the player was on; Cancel returns them there untouched.
  *

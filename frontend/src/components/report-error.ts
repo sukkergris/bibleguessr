@@ -79,7 +79,7 @@ export class ReportError extends LitElement {
     this._failureMessage = undefined
 
     try {
-      await api.submitBugReport({ description, fileName: this.fileName, errorMessage: this.errorMessage })
+      await api.submitBibleFileUploadReport({ description, fileName: this.fileName, errorMessage: this.errorMessage })
       this._status = 'sent'
     } catch (err) {
       this._failureMessage = err instanceof Error ? err.message : 'Failed to send the report.'

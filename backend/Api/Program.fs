@@ -12,7 +12,7 @@ open System.Text.Json.Serialization
 /// POST /api/reports's request body — see docs/SCRUM/Feature.ErrorMessageBibleLoader.md.
 /// A plain DTO (nullable `string`, not `string option`) since it's bound
 /// directly from client JSON — the JsonFSharpConverter's option-unwrapping
-/// is for values already inside domain types like BugReport, not for
+/// is for values already inside domain types like BibleFileUploadReport, not for
 /// modeling "this JSON field may be null/absent" from an untrusted client.
 type ReportRequest =
     { Description: string
@@ -32,7 +32,7 @@ type AbuseReportRequest =
       ReplyTo: string }
 
 /// POST /api/bug-reports's request body — see
-/// docs/SCRUM/TODO/Feature.BugReport.md. Distinct from both
+/// docs/SCRUM/DONE/Feature.BugReport.md. Distinct from both
 /// ReportRequest (Bible-file upload failures, which capture the file name
 /// and loader error automatically) and AbuseReportRequest (another
 /// player's behaviour); the spec is explicit that a technical bug must
@@ -511,13 +511,13 @@ let main args =
                             detail = "Too many reports have been submitted today. Please try again tomorrow."
                         )
                     else
-                        let report: BugReport =
+                        let report: BibleFileUploadReport =
                             { Description = request.Description
                               FileName = request.FileName |> Option.ofObj
                               ErrorMessage = request.ErrorMessage
                               SubmittedAt = DateTimeOffset.UtcNow }
 
-                        if MailSender.sendBugReport smtp logger report then
+                        if MailSender.sendBibleFileUploadReport smtp logger report then
                             Results.Ok({| status = "sent" |})
                         else
                             // The mail relay failed, but this is never the
@@ -583,7 +583,7 @@ let main args =
     )
     |> ignore
 
-    // General bug reports — see docs/SCRUM/TODO/Feature.BugReport.md.
+    // General bug reports — see docs/SCRUM/DONE/Feature.BugReport.md.
     // Shares the report rate limiters with the other two endpoints: all
     // three protect the same single mail relay, so a caller must not be
     // able to dodge their budget by rotating between them.

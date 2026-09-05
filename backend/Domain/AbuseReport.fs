@@ -5,9 +5,9 @@ open System
 /// A player's report of abusive, harassing or otherwise unsafe behaviour by
 /// another player — see docs/SCRUM/Feature.ReportAbuse.md. Emailed to the
 /// application owner (see Api/MailSender.fs) rather than stored anywhere,
-/// same handling as BugReport.
+/// same handling as BibleFileUploadReport.
 ///
-/// Deliberately its own type rather than a reuse of BugReport: that one
+/// Deliberately its own type rather than a reuse of BibleFileUploadReport: that one
 /// describes a failed Bible-file upload and captures the file name and the
 /// error text automatically, none of which is meaningful here. The two
 /// contracts are kept separate so neither drifts to accommodate the other.

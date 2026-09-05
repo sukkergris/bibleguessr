@@ -12,7 +12,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5162
 //
 // `body`, when given, is sent as a JSON request body (Content-Type:
 // application/json) — the first use of this was /api/reports (see
-// submitBugReport below); every earlier POST here sent no body at all
+// submitBibleFileUploadReport below); every earlier POST here sent no body at all
 // (createRoom) or used query params (GET endpoints), so this is new.
 async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
   const url = `${API_BASE_URL}${path}`
@@ -152,7 +152,7 @@ export const api = {
   // total/day); a 429 there surfaces here as a thrown Error whose message
   // is the backend's rate-limit detail text (see request()'s
   // problem-details handling above).
-  submitBugReport: (report: {
+  submitBibleFileUploadReport: (report: {
     description: string;
     fileName?: string;
     errorMessage: string;
@@ -165,7 +165,7 @@ export const api = {
 
   /** Reports abusive or unsafe behaviour — see
    * docs/SCRUM/Feature.ReportAbuse.md. A dedicated endpoint rather than
-   * submitBugReport above, which is specifically for Bible-file upload
+   * submitBibleFileUploadReport above, which is specifically for Bible-file upload
    * failures. Rejects (throws) on validation, rate-limit and delivery
    * failures alike, carrying the server's own message so the form can show
    * it and let the reporter retry. */
@@ -180,9 +180,9 @@ export const api = {
       replyTo: report.replyTo ?? null,
     }),
 
-  /** Reports a technical problem — see docs/SCRUM/TODO/Feature.BugReport.md.
+  /** Reports a technical problem — see docs/SCRUM/DONE/Feature.BugReport.md.
    * A dedicated endpoint: a general bug is neither a Bible-file upload
-   * failure (submitBugReport) nor abuse (submitAbuseReport), and must not
+   * failure (submitBibleFileUploadReport) nor abuse (submitAbuseReport), and must not
    * be routed through either. */
   submitGeneralBugReport: (report: {
     description: string;
