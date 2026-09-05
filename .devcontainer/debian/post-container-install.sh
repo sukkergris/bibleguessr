@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Runs once per container creation (devcontainer.json postCreateCommand).
+#
+# Only things that cannot be baked into the image belong here: files in
+# $HOME, mounted volumes, and downloads too large for an image layer.
+# Anything installable as a root apt package belongs in Dockerfile.debian.
 set -u
 
 export NVM_DIR="$HOME/.nvm"
@@ -7,24 +12,25 @@ export NVM_DIR="$HOME/.nvm"
 
 SCRIPTS_DIR="/xyz/.devcontainer/scripts"
 
+# Docker creates fresh volumes owned by root, which leaves the tools that own
+# these directories unable to write to them. Must run before the steps below
+# that write into ~/.ssh and ~/.config/gh.
+sudo chown -R container-user:container-user \
+  "$HOME/.claude" \
+  "$HOME/.continue" \
+  "$HOME/.config/gh" \
+  "$HOME/.ssh" \
+  "$HOME/.sshtemplate" 2>/dev/null || true
+
 # VS Code's Dev Containers extension copies the host's ~/.gitconfig into the
 # container on (re)build. That gitconfig has no safe.directory entry for /xyz,
 # so Git refuses to operate on the repo ("detected dubious ownership") whenever
 # ownership/UID mapping looks even slightly off across the bind mount.
 git config --global --add safe.directory /xyz || true
 
-bash "${SCRIPTS_DIR}/copy-ssh-files.sh"
-
-
-SCRIPT="$SCRIPTS_DIR/remove-userkeychain.sh"
-if [[ ! -f "$SCRIPT" ]]; then
-  echo "ERROR: Script not found: $SCRIPT" >&2
-  exit 1
-fi
-
-"$SCRIPT" ~/.ssh/config
-
-bash "${SCRIPTS_DIR}/install-global-npm-tools.sh"
+bash "$SCRIPTS_DIR/copy-ssh-files.sh"
+bash "$SCRIPTS_DIR/remove-userkeychain.sh" "$HOME/.ssh/config"
+bash "$SCRIPTS_DIR/install-global-npm-tools.sh"
 
 # Download the Chromium browser binary for @playwright/cli / @playwright/mcp
 # (installed above). System-level runtime deps for it (libnspr4, libnss3,
@@ -38,38 +44,24 @@ fi
 
 claude --print "." > /dev/null 2>&1 || true
 
-# The `gh` binary itself is installed in Dockerfile.debian (a root-level apt
-# package, so it belongs in an image layer). The credentials it writes live
-# in ~/.config/gh, which devcontainer.json mounts as a volume so a login
-# survives a rebuild — a token must never be baked into an image, so
-# authenticating is a one-off manual step per machine.
-#
-# chown because Docker creates a fresh volume owned by root, which would
-# leave gh unable to write its own config. Same reason as the chown above,
-# but it must run for ~/.config/gh specifically.
-sudo chown -R container-user:container-user /home/container-user/.config/gh 2>/dev/null || true
-
-if command -v gh >/dev/null 2>&1; then
-  if ! gh auth status >/dev/null 2>&1; then
-    echo "NOTE: gh is installed but not authenticated."
-    echo "      Run 'gh auth login' to enable issues, pull requests and releases."
-    echo "      Git push/pull already works over SSH without this."
-  fi
-else
-  echo "WARNING: gh not found on PATH — expected it from Dockerfile.debian" >&2
+# gh itself comes from Dockerfile.debian and its credentials persist in the
+# ~/.config/gh volume, but a token must never be baked into an image — so
+# logging in stays a manual step, once per machine.
+if ! gh auth status >/dev/null 2>&1; then
+  echo "NOTE: gh is not authenticated. Run 'gh auth login' for issues, PRs and releases."
+  echo "      Git push/pull already works over SSH without it."
 fi
-
-# Fix permissions on mounted volumes since they are owned by root when created by the container, but we want them to be owned by the container user.
-sudo chown -R container-user:container-user /home/container-user/.claude \
-                                             /home/container-user/.sshtemplate \
-                                             /home/container-user/.ssh \
-                                             /home/container-user/.continue 2>/dev/null || true
 
 dotnet tool restore
 
-# Install Playwright's Chromium browser and its system dependencies.
-# The playwright CLI is a local dotnet tool (see .config/dotnet-tools.json), restored above,
-# so it must be invoked via "dotnet tool run" rather than looked up on PATH.
+# Chromium for the .NET Playwright tests. Kept in place ahead of those tests
+# landing: until /xyz/.config/dotnet-tools.json and the Playwright.Tests
+# project exist, `dotnet tool restore` finds no manifest and this step skips
+# with the warning below — expected, not a fault.
+#
+# The playwright CLI will be a local dotnet tool, so it must be invoked via
+# "dotnet tool run" rather than looked up on PATH. Unrelated to the
+# npm-installed `playwright-cli` used for the frontend e2e tests above.
 if dotnet tool run playwright -- --version &> /dev/null; then
   dotnet tool run playwright -- -p /xyz/tests/Playwright.Tests/Playwright.Tests.csproj install --with-deps chromium
 else
