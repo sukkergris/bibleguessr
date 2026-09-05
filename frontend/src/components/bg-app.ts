@@ -39,6 +39,11 @@ export class BgApp extends LitElement {
   @state()
   private reportingAbuse = false
 
+  /** Mirrors the report view's in-flight state so the toggle can be
+   * disabled while a report is being sent, rather than discarding it. */
+  @state()
+  private reportSending = false
+
   /** The report button, so focus can be returned to it when the report
    * view closes — see _onReportClosed. */
   private _reportTrigger?: HTMLButtonElement
@@ -304,7 +309,11 @@ export class BgApp extends LitElement {
       <div class="layout">
         <main>
           ${this.reportingAbuse
-            ? html`<bg-report-abuse @report-closed=${this._onReportClosed}></bg-report-abuse>`
+            ? html`<bg-report-abuse
+                id="report-abuse-view"
+                @report-closed=${this._onReportClosed}
+                @report-sending-changed=${this._onReportSendingChanged}
+              ></bg-report-abuse>`
             : this._renderCurrentPhase()}
         </main>
         <bg-nerd-panel></bg-nerd-panel>
@@ -312,9 +321,12 @@ export class BgApp extends LitElement {
       <button
         type="button"
         class="report-abuse"
-        title="Report abuse"
-        aria-label="Report abuse"
-        @click=${this._onOpenReport}
+        title=${this.reportingAbuse ? 'Close report abuse' : 'Report abuse'}
+        aria-label=${this.reportingAbuse ? 'Close report abuse' : 'Report abuse'}
+        aria-expanded=${this.reportingAbuse ? 'true' : 'false'}
+        aria-controls="report-abuse-view"
+        ?disabled=${this.reportSending}
+        @click=${this._onToggleReport}
       >
         <span aria-hidden="true">🛡️</span>
       </button>
@@ -343,7 +355,16 @@ export class BgApp extends LitElement {
     `
   }
 
-  private _onOpenReport(event: Event) {
+  /** One control, two actions — see
+   * docs/SCRUM/TODO/Feature.ToggleAbuseReport.md. Closing through the icon
+   * is deliberately the same path as the view's own Cancel, so unsent text
+   * is discarded identically and no report is submitted either way. */
+  private _onToggleReport(event: Event) {
+    if (this.reportingAbuse) {
+      this._onReportClosed()
+      return
+    }
+
     this._reportTrigger = event.currentTarget as HTMLButtonElement
     this.reportingAbuse = true
     // Focus the report view's heading region so keyboard and
@@ -354,8 +375,13 @@ export class BgApp extends LitElement {
     })
   }
 
+  private _onReportSendingChanged(event: CustomEvent<boolean>) {
+    this.reportSending = event.detail
+  }
+
   private _onReportClosed() {
     this.reportingAbuse = false
+    this.reportSending = false
     const trigger = this._reportTrigger
     this._reportTrigger = undefined
     this.updateComplete.then(() => {

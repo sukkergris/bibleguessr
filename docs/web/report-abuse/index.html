@@ -29,6 +29,18 @@
         <li><strong>Cancel</strong> returns to the previous screen without sending anything.</li>
       </ol>
 
+      <h2>Opening and closing</h2>
+      <p>
+        The sticky button is a toggle: it opens the report view when closed, and closes it when open. Closing through
+        the icon is the same path as <strong>Cancel</strong> — no report is submitted and unsent text is discarded.
+        Its accessible name and tooltip describe the action it will perform (<code>Report abuse</code> or
+        <code>Close report abuse</code>), and it exposes <code>aria-expanded</code>.
+      </p>
+      <p>
+        While a report is being sent the toggle is disabled, so it can never tear the view down mid-request or
+        produce a second submission. Focus moves into the view on open and returns to the toggle on close.
+      </p>
+
       <h2>What is and isn't sent</h2>
       <p>
         Only what the reporter types. Nothing is captured automatically, so a report can never carry uploaded verse

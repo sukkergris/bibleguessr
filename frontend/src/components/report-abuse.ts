@@ -46,6 +46,14 @@ export class ReportAbuse extends LitElement {
   @state()
   private showValidation = false
 
+  /** Whether a report is currently in flight. Read by the shell so its
+   * toggle can refuse to tear this view down mid-request — see
+   * docs/SCRUM/TODO/Feature.ToggleAbuseReport.md's "must never silently
+   * discard an in-flight report". */
+  get isSending(): boolean {
+    return this.submitState.kind === 'sending'
+  }
+
   private get _descriptionError(): string | undefined {
     if (!this.showValidation) return undefined
     return this.description.trim() === '' ? 'Please describe what happened.' : undefined
@@ -177,6 +185,19 @@ export class ReportAbuse extends LitElement {
               : 'Could not send your report. Please try again.',
         }
       })
+  }
+
+  /** Tells the shell whenever the in-flight state changes, so its toggle
+   * can disable itself while a report is being sent (see bg-app.ts). */
+  protected updated(changed: Map<string, unknown>) {
+    if (!changed.has('submitState')) return
+    this.dispatchEvent(
+      new CustomEvent<boolean>('report-sending-changed', {
+        detail: this.isSending,
+        bubbles: true,
+        composed: true,
+      }),
+    )
   }
 
   private _onClose() {
