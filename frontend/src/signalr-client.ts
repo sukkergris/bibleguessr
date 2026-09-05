@@ -68,7 +68,15 @@ export function getGameHubConnection(): Promise<signalR.HubConnection> {
  * `withAutomaticReconnect()` handles retrying — this just reports the
  * current state so the UI can show it (e.g. cross out the chat panel while
  * disconnected/reconnecting). */
-export type ConnectionState = 'connected' | 'disconnected'
+/** The realtime connection's state as SignalR reports it.
+ *
+ * `reconnecting` is deliberately distinct from `disconnected`: they mean
+ * different things to a player — one is "hold on", the other is "this is
+ * not working" — and collapsing them made the UI unable to say which
+ * (see docs/SCRUM/DONE/Bug.CantTrustConnectionStatusIconRightUpperCorner.md).
+ * Existing consumers that only care about "is it usable" can treat
+ * anything other than 'connected' as not usable. */
+export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
 
 /** Subscribes to connection up/down changes. Fires immediately with the
  * connection's current state, then again on every state change. Returns an
@@ -97,7 +105,7 @@ export function onConnectionStateChange(handler: (state: ConnectionState) => voi
       if (!cancelled) handler('disconnected')
     })
     hub.onreconnecting(() => {
-      if (!cancelled) handler('disconnected')
+      if (!cancelled) handler('reconnecting')
     })
     hub.onreconnected(() => {
       if (!cancelled) handler('connected')

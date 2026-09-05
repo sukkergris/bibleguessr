@@ -93,9 +93,18 @@ test('"Chapters" book dropdown lists books in Bible order, not alphabetical (Fea
   page,
 }) => {
   await openMode(page, 'Chapters')
-  await page.waitForSelector('select')
 
-  const optionTexts = await page.getByLabel('Book').locator('option').allTextContents()
+  // Waiting for the <select> to exist is not enough: its options arrive
+  // from an async book lookup, so under load this read an empty dropdown
+  // and failed on ordering that was never actually wrong. Wait for the
+  // options themselves.
+  const bookSelect = page.getByLabel('Book')
+  await expect(bookSelect.locator('option')).not.toHaveCount(0)
+  await expect
+    .poll(async () => (await bookSelect.locator('option').allTextContents()).length, { timeout: 10_000 })
+    .toBeGreaterThan(1)
+
+  const optionTexts = await bookSelect.locator('option').allTextContents()
   const bookNames = optionTexts.filter((t) => t !== 'Choose a book…')
 
   expect(bookNames.slice(0, 5)).toEqual(['1.Mosebog', '2.Mosebog', '3.Mosebog', '4.Mosebog', '5.Mosebog'])

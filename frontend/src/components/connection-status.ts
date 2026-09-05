@@ -5,7 +5,19 @@ import { getGameHubConnection, onConnectionStateChange, type ConnectionState } f
 
 type HttpCheck = { status: 'checking' } | { status: 'ok'; latencyMs: number } | { status: 'error'; message: string }
 
+/** How often to re-check HTTP health while everything looks fine. Long,
+ * because a healthy server does not need poking. */
 const RECHECK_INTERVAL_MS = 15_000
+
+/** How often to re-check once something looks wrong.
+ *
+ * A player who has just lost their connection is watching the indicator
+ * and wants to know when it comes back; waiting out the healthy interval
+ * made the indicator feel untrustworthy — see
+ * docs/SCRUM/DONE/Bug.CantTrustConnectionStatusIconRightUpperCorner.md.
+ * This only applies while unhealthy, so a working server is still polled
+ * at the slow rate. */
+const UNHEALTHY_RECHECK_INTERVAL_MS = 3_000
 
 /**
  * A small, always-visible diagnostic strip: is the backend reachable over
@@ -39,6 +51,7 @@ export class ConnectionStatus extends LitElement {
 
   private _unsubscribeConnectionState?: () => void
   private _recheckTimer?: ReturnType<typeof setInterval>
+  private _recheckIntervalMs?: number
   // Aborted on disconnect so an in-flight health check from a
   // torn-down instance (e.g. a Vite HMR reload swapping this component)
   // doesn't resolve/reject into a component that's no longer live — it
@@ -49,7 +62,15 @@ export class ConnectionStatus extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this._checkHttp()
-    this._recheckTimer = setInterval(() => void this._checkHttp(), RECHECK_INTERVAL_MS)
+    this._scheduleRecheck()
+    // The browser knows about its own connectivity long before a WebSocket
+    // notices — the socket can stay apparently open until keep-alive
+    // expires, which measured at ~15s. Treated strictly as a hint that
+    // something changed, prompting an immediate re-check rather than being
+    // reported as truth: navigator.onLine says nothing about whether THIS
+    // backend is reachable (see the bug report's note on it).
+    window.addEventListener('offline', this._onConnectivityHint)
+    window.addEventListener('online', this._onConnectivityHint)
     if (this.trackSignalR) this._startTrackingSignalR()
   }
 
@@ -78,11 +99,29 @@ export class ConnectionStatus extends LitElement {
     })
   }
 
+  private _onConnectivityHint = () => {
+    void this._checkHttp()
+  }
+
   disconnectedCallback() {
+    window.removeEventListener('offline', this._onConnectivityHint)
+    window.removeEventListener('online', this._onConnectivityHint)
     this._unsubscribeConnectionState?.()
     clearInterval(this._recheckTimer)
     this._httpCheckAbort?.abort()
     super.disconnectedCallback()
+  }
+
+  /** (Re)starts the health-check timer at the rate the current state
+   * warrants. Called after every check, so the rate follows the state
+   * rather than being fixed at construction. */
+  private _scheduleRecheck() {
+    const interval = this._isHealthy ? RECHECK_INTERVAL_MS : UNHEALTHY_RECHECK_INTERVAL_MS
+    if (this._recheckIntervalMs === interval && this._recheckTimer !== undefined) return
+
+    if (this._recheckTimer !== undefined) clearInterval(this._recheckTimer)
+    this._recheckIntervalMs = interval
+    this._recheckTimer = setInterval(() => void this._checkHttp(), interval)
   }
 
   private async _checkHttp() {
@@ -123,8 +162,34 @@ export class ConnectionStatus extends LitElement {
 
   // "not-started" (SignalR not yet needed — singleplayer/pre-multiplayer)
   // doesn't count as unhealthy; only an actual connection problem does.
+  /** Re-evaluates the poll rate after every state change, so losing the
+   * connection speeds polling up and regaining it slows it back down. */
+  protected updated() {
+    this._scheduleRecheck()
+  }
+
   private get _isHealthy(): boolean {
     return this.http.status === 'ok' && (this.signalR === 'connected' || this.signalR === 'not-started')
+  }
+
+  /** What the indicator actually says, in words.
+   *
+   * Realtime state is checked BEFORE HTTP: a reachable HTTP endpoint says
+   * nothing about whether messages are still arriving, so letting it win
+   * would let a healthy server mask a broken connection — the exact
+   * complaint in
+   * docs/SCRUM/DONE/Bug.CantTrustConnectionStatusIconRightUpperCorner.md.
+   *
+   * Reconnecting and disconnected are kept apart because they mean
+   * different things to a player: one is "hold on", the other is "this is
+   * not working". */
+  private get _statusText(): string {
+    if (this.signalR === 'reconnecting') return 'Reconnecting…'
+    if (this.signalR === 'disconnected') return 'Disconnected'
+    if (this.signalR === 'connecting') return 'Connecting…'
+    if (this.http.status === 'checking') return 'Checking…'
+    if (this.http.status !== 'ok') return 'Server unreachable'
+    return 'Connected'
   }
 
   render() {
@@ -133,8 +198,8 @@ export class ConnectionStatus extends LitElement {
         type="button"
         class="dot ${this._isHealthy ? 'ok' : 'bad'}"
         @click=${() => (this.expanded = !this.expanded)}
-        title="Connection status — click for details"
-        aria-label=${`Connection status: ${this._isHealthy ? 'connected' : 'problem detected'}. Show details.`}
+        title=${`Connection status: ${this._statusText} — click for details`}
+        aria-label=${`Connection status: ${this._statusText}. Show details.`}
         aria-expanded=${this.expanded ? 'true' : 'false'}
       ></button>
       ${this.expanded ? this._renderDetails() : null}

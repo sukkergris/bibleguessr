@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.5.0"
+let BackendVersion = "0.5.1"
 
 [<EntryPoint>]
 let main args =
@@ -194,18 +194,43 @@ let main args =
     // caller's own submissions; "report-global" caps the total across
     // every caller, so the mail relay/inbox can't be exhausted even by
     // many distinct IPs.
+    // Configurable rather than hardcoded, following the same convention as
+    // the presence and round-timeout settings. All three report endpoints
+    // share these limiters — they protect one mail relay, so a caller must
+    // not be able to dodge their budget by rotating between endpoints —
+    // which also means an end-to-end suite exercising every report flow
+    // can exhaust a production-sized daily budget in one run. Raising them
+    // in the development settings keeps the tests honest without weakening
+    // the deployed limits.
+    let perIpReportLimit =
+        builder.Configuration["Reports:PerIpDailyLimit"]
+        |> Option.ofObj
+        |> Option.map int
+        |> Option.defaultValue 5
+
+    let globalReportLimit =
+        builder.Configuration["Reports:GlobalDailyLimit"]
+        |> Option.ofObj
+        |> Option.map int
+        |> Option.defaultValue 100
+
     let perIpLimiter =
         PartitionedRateLimiter.Create<HttpContext, string>(fun context ->
             let ip = context.Connection.RemoteIpAddress |> Option.ofObj |> Option.map string |> Option.defaultValue "unknown"
 
             RateLimitPartition.GetFixedWindowLimiter(
                 ip,
-                fun _ -> FixedWindowRateLimiterOptions(PermitLimit = 5, Window = TimeSpan.FromDays 1.0, QueueLimit = 0)
+                fun _ ->
+                    FixedWindowRateLimiterOptions(
+                        PermitLimit = perIpReportLimit,
+                        Window = TimeSpan.FromDays 1.0,
+                        QueueLimit = 0
+                    )
             ))
 
     let globalLimiter =
         new FixedWindowRateLimiter(
-            FixedWindowRateLimiterOptions(PermitLimit = 100, Window = TimeSpan.FromDays 1.0, QueueLimit = 0)
+            FixedWindowRateLimiterOptions(PermitLimit = globalReportLimit, Window = TimeSpan.FromDays 1.0, QueueLimit = 0)
         )
 
     builder.Services.AddSingleton<PartitionedRateLimiter<HttpContext>>(perIpLimiter) |> ignore
