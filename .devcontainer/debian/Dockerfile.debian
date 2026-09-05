@@ -25,5 +25,23 @@ RUN apt-get update && apt-get install -y \
     libatspi2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# GitHub CLI, from GitHub's own apt repository rather than the Debian
+# archive — bookworm ships a much older `gh`, and this way it updates with
+# the rest of the system. Used for issues, pull requests and releases;
+# `git` alone covers commits, tags and pushes.
+#
+# Authentication is deliberately NOT baked in: run `gh auth login` once per
+# machine, which stores its token in ~/.config/gh/ (outside the repository).
+# Never add a token to this image or to a file inside the project.
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
 USER container-user
 RUN curl -fsSL https://claude.ai/install.sh | bash
