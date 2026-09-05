@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remembered setup choices — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Remembered setup choices</h1>
+      <p class="subtitle">
+        The round count and per-verse time limit are remembered per browser, so returning to setup does not mean
+        recreating the same preferences every time.
+      </p>
+
+      <h2>What is remembered</h2>
+      <p>
+        Only two numbers: the selected round count, and the selected time limit. They are preferences for
+        <em>creating</em> a game, stored locally under the application's <code>bibleguessr:</code> namespace with
+        versioned keys. Nothing is uploaded merely because it is remembered.
+      </p>
+      <p>
+        They are not the settings of a game already running. Once a game starts, its own session fixes those values,
+        so changing a preference afterwards cannot affect a game in progress — and a challenged player sees the values
+        carried by the request, never the challenger's storage.
+      </p>
+
+      <h2>Validation</h2>
+      <p>
+        Stored values are untrusted: they can be hand-edited, left over from an older version, or corrupt. Every read
+        is validated, and anything unusable is replaced by the default rather than allowed to break setup — round
+        count falls back to 5 outside 3–10, and the time limit falls back to unlimited outside 2–60 seconds.
+      </p>
+      <p>
+        Unlimited is written as <code>0</code> at the storage boundary and read back as the
+        <code>undefined</code>/<code>Unlimited</code> the UI and domain already use. A stored one-second round is
+        rejected rather than clamped: the slider's 1 notch is clamped up to 2 <em>before</em> saving, so such a value
+        should never exist, and trusting it would preserve the bug that wrote it.
+      </p>
+      <p>
+        Reads and writes tolerate storage being unavailable or denied, as in private browsing. Setup continues with
+        in-memory defaults and the controls still work; the choice simply is not remembered.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/src/game-preferences.ts</span> holds the keys, defaults, ranges and the pure
+        parsing functions. <span class="file-ref">frontend/src/components/game-setup.ts</span> and
+        <span class="file-ref">frontend/src/components/challenge-settings.ts</span> load on construction and save on
+        change, so a keyboard change persists exactly like a pointer one.
+      </p>
+      <p>
+        Validation is unit tested in <span class="file-ref">frontend/src/game-preferences.test.ts</span>; the round
+        trip through the real controls, the clamped one-second case, and recovery from corrupt storage are covered by
+        <span class="file-ref">frontend/e2e/game-preferences.spec.ts</span>.
+      </p>
+    </main>
+  </body>
+</html>

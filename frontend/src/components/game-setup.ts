@@ -4,6 +4,7 @@ import { api } from '../api'
 import { createLocalVerseSource } from '../local-verses'
 import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from '../verse-cache'
 import type { VerseRestriction, VerseSource } from '../types'
+import { loadRoundCount, saveRoundCount } from '../game-preferences'
 import type { ChapterSelection } from './chapter-selector'
 import './book-selector'
 import './chapter-selector'
@@ -25,7 +26,6 @@ export type SetupScope = 'all' | 'books' | 'chapters'
 
 const MIN_ROUNDS = 3
 const MAX_ROUNDS = 10
-const DEFAULT_ROUNDS = 5
 
 type Mode = 'server' | 'file'
 
@@ -66,7 +66,7 @@ export class GameSetup extends LitElement {
   private selectedTranslation = ''
 
   @state()
-  private roundCount = DEFAULT_ROUNDS
+  private roundCount = loadRoundCount()
 
   @state()
   private error?: string
@@ -186,7 +186,7 @@ export class GameSetup extends LitElement {
                 min=${MIN_ROUNDS}
                 max=${MAX_ROUNDS}
                 .value=${String(this.roundCount)}
-                @input=${(e: Event) => (this.roundCount = Number((e.target as HTMLInputElement).value))}
+                @input=${(e: Event) => this._onRoundCountInput(e)}
               />
               <span class="round-count-value">${this.roundCount}</span>
             </div>
@@ -320,6 +320,13 @@ export class GameSetup extends LitElement {
    * requirement in docs/SCRUM/TODO/Feature.Accessibility.md).
    *
    * Only rendered in file mode — there is nothing to announce otherwise. */
+  private _onRoundCountInput(e: Event) {
+    this.roundCount = Number((e.target as HTMLInputElement).value)
+    saveRoundCount(this.roundCount)
+    // Remembered per browser so returning to setup doesn't mean redoing
+    // the same choice — see game-preferences.ts.
+  }
+
   private _renderFileStatusAnnouncement() {
     if (this.mode !== 'file') return null
 

@@ -4,13 +4,18 @@ import {
   loadEpilepsyStressModeEnabled,
   saveEpilepsyStressModeEnabled,
 } from '../flash-intensity-storage';
+import {
+  loadRoundCount,
+  loadTimeLimitSeconds,
+  saveRoundCount,
+  saveTimeLimitSeconds,
+} from '../game-preferences';
 import type { GameTypeScope } from '../game-type'
 import type { VerseRestriction, VerseSource } from '../types'
 import './game-type-select'
 
 const MIN_ROUNDS = 3
 const MAX_ROUNDS = 10
-const DEFAULT_ROUNDS = 5
 
 // The time-limit slider's range, in seconds — 0 is the sentinel for "no
 // limit" (the slider's default position), matching
@@ -52,10 +57,10 @@ export class ChallengeSettingsSelect extends LitElement {
   private restriction?: VerseRestriction;
 
   @state()
-  private roundCount = DEFAULT_ROUNDS;
+  private roundCount = loadRoundCount();
 
   @state()
-  private timeLimitSeconds: number | undefined = undefined;
+  private timeLimitSeconds: number | undefined = loadTimeLimitSeconds();
 
   // Local-only, per-device/per-player preference — deliberately NOT part
   // of ChallengeSettings/_emitChange below, since it's never sent to the
@@ -137,6 +142,7 @@ export class ChallengeSettingsSelect extends LitElement {
 
   private _onRoundCountInput(e: Event) {
     this.roundCount = Number((e.target as HTMLInputElement).value);
+    saveRoundCount(this.roundCount);
     this._emitChange();
   }
 
@@ -153,6 +159,9 @@ export class ChallengeSettingsSelect extends LitElement {
     // .value=${String(this.timeLimitSeconds ?? 0)} binds the slider's
     // position back to this field, the thumb visually snaps to 2 too.
     this.timeLimitSeconds = value === 0 ? undefined : value === 1 ? 2 : value;
+    // Saved AFTER the clamp, so the unusable one-second position is never
+    // persisted — see game-preferences.ts.
+    saveTimeLimitSeconds(this.timeLimitSeconds);
     this._emitChange();
   }
 
