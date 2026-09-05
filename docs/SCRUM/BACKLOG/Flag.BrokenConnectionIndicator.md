@@ -45,9 +45,12 @@ broken — but it means the indicator means different things on different
 screens, which is exactly the kind of inconsistency that makes an
 indicator hard to trust.
 
-Either track it wherever a connection exists, or say plainly in the
-details panel that realtime is not applicable here rather than showing a
-row that reads "not started".
+The second half of this is done: the row is now greyed out and reads "not
+used on this screen" rather than rendering green (see
+`DONE/Task.GreyOutInactiveConnectionRow.md`). What remains is the
+underlying inconsistency — either track realtime wherever a connection
+exists, or accept that the dot means different things on different
+screens and make sure that is always obvious.
 
 ### 3. Reconsider the SignalR keep-alive settings
 

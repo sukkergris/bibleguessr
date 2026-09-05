@@ -206,6 +206,28 @@ export class ConnectionStatus extends LitElement {
     `
   }
 
+  /** Whether a realtime connection is even expected here. Outside the
+   * multiplayer room there is no hub, so the row describes nothing —
+   * which is different from describing something healthy. */
+  private get _realtimeApplies(): boolean {
+    return this.signalR !== 'not-started'
+  }
+
+  private get _realtimeTone(): string {
+    if (!this._realtimeApplies) return 'inactive'
+    if (this.signalR === 'connected') return 'ok'
+    if (this.signalR === 'connecting') return 'checking'
+    return 'bad'
+  }
+
+  private get _realtimeText(): string {
+    if (!this._realtimeApplies) return 'not used on this screen'
+    if (this.signalR === 'connecting') return 'connecting…'
+    if (this.signalR === 'connected') return 'connected'
+    if (this.signalR === 'reconnecting') return 'reconnecting…'
+    return 'disconnected'
+  }
+
   private _renderDetails() {
     return html`
       <div class="details">
@@ -219,15 +241,12 @@ export class ConnectionStatus extends LitElement {
         </div>
         <div class="row">
           <span class="label">Realtime (SignalR)</span>
-          <span class="value ${this.signalR === 'connected' || this.signalR === 'not-started' ? 'ok' : 'bad'}">
-            ${this.signalR === 'not-started'
-              ? 'not needed yet'
-              : this.signalR === 'connecting'
-                ? 'connecting…'
-                : this.signalR === 'connected'
-                  ? 'connected'
-                  : 'disconnected'}
-          </span>
+          <!-- Grey, not green, when there is no hub connection to report
+               on. Showing it as a passing check invited the reading that
+               something had been verified, when in fact the row simply
+               does not apply outside multiplayer — see
+               docs/SCRUM/BACKLOG/Flag.BrokenConnectionIndicator.md. -->
+          <span class="value ${this._realtimeTone}">${this._realtimeText}</span>
         </div>
         ${!this._isHealthy
           ? html`
@@ -316,7 +335,14 @@ export class ConnectionStatus extends LitElement {
     }
 
     .value.bad {
-      color: #dc2626;
+      color: var(--error);
+    }
+
+    /* Deliberately the muted token, not a status colour: this row is
+       reporting "no answer expected", which is neither good nor bad. */
+    .value.inactive {
+      color: var(--text-muted);
+      font-weight: 400;
     }
 
     .value.checking {

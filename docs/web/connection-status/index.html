@@ -80,9 +80,11 @@
       </p>
       <ul>
         <li>
-          <strong>SignalR is only tracked in the multiplayer room.</strong> Elsewhere the realtime row reads "not
-          started" and the dot reflects HTTP alone — correct, since no hub connection exists to be broken, but it
-          means the dot is a weaker signal outside multiplayer.
+          <strong>SignalR is only tracked in the multiplayer room.</strong> Elsewhere the realtime row is greyed out
+          and reads "not used on this screen", and the dot reflects HTTP alone — correct, since no hub connection
+          exists to be broken, but it means the dot is a weaker signal outside multiplayer. The row is deliberately
+          neither green nor red there: showing it as a passing check implied something had been verified when
+          nothing had been measured.
         </li>
         <li>
           <strong>A silent network failure is not detected instantly without an <code>offline</code> event.</strong>
