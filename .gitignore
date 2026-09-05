@@ -327,5 +327,7 @@ backup/habibi-vip-taxi/backup.env
 backup/habibi-vip-taxi/backup/*
 
 bibles/bibelen-dk/Bibelen Files/
-bibles/jw.org/
+bibles/jw.org/*
+!bibles/jw.org/README-BROTHER.md
+!bibles/jw.org/.gitkeep
 backend/test-results/.last-run.json

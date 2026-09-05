@@ -10,18 +10,35 @@ import { test, expect, type Page } from '@playwright/test'
 // (PlayerDisconnected fires right away — only the final removal waits out
 // the grace period).
 
-async function joinWorldChat(page: Page, name: string) {
+// The pre-join steps, stopping before the choice of which room to enter.
+// The server-translation dropdown auto-selects its first option once
+// loaded — wait for that (rather than a fixed timeout) before the name
+// field/Join button, which are disabled until a translation is chosen
+// (see docs/SCRUM/DONE/Feature.RequestToStartMPGame.md's
+// per-player-translation note: this happens before the name field).
+async function prepareToJoin(page: Page, name: string) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
-  // The server-translation dropdown auto-selects its first option once
-  // loaded — wait for that (rather than a fixed timeout) before the name
-  // field/Join button, which are disabled until a translation is chosen
-  // (see docs/SCRUM/Feature.RequestToStartMPGame.md's per-player-translation
-  // note: this happens before the name field, not after).
   await expect(page.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
   await page.getByPlaceholder('e.g. Alice').fill(name)
-  await page.getByRole('button', { name: 'Join World chat' }).click()
-  await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
+}
+
+// A private room, so another test's players cannot appear in the roster
+// this test asserts on — see
+// docs/SCRUM/DONE/Task.IsolateMultiplayerTestsFromEachOther.md.
+async function createRoom(page: Page, name: string): Promise<string> {
+  await prepareToJoin(page, name)
+  await page.getByRole('button', { name: 'Create a room' }).click()
+  const code = page.locator('bg-room-setup h1 .code')
+  await expect(code).toBeVisible()
+  return (await code.innerText()).trim()
+}
+
+async function joinRoom(page: Page, name: string, roomCode: string) {
+  await prepareToJoin(page, name)
+  await page.getByPlaceholder('Room code').fill(roomCode)
+  await page.getByRole('button', { name: 'Join', exact: true }).click()
+  await expect(page.locator('bg-room-setup h1 .code')).toHaveText(roomCode)
 }
 
 test('a dropped connection moves the player into the Offline section, not clickable', async ({ browser }) => {
@@ -35,8 +52,8 @@ test('a dropped connection moves the player into the Offline section, not clicka
     const aliceName = `Alice${suffix}`
     const bobName = `Bob${suffix}`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    const roomCode = await createRoom(pageA, aliceName)
+    await joinRoom(pageB, bobName, roomCode)
 
     const bobOnline = pageA.getByRole('listitem').filter({ hasText: bobName })
     await expect(bobOnline).toBeVisible()

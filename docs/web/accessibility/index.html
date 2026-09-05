@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Accessibility — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Reference</span>
+      <h1>Accessibility</h1>
+      <p class="subtitle">
+        What is enforced automatically, what was fixed, and what only a person can check.
+      </p>
+
+      <h2>Enforced on every test run</h2>
+      <p>
+        An audit walks the rendered page, including Lit shadow roots — a plain
+        <code>document.querySelectorAll</code> sees almost nothing here, so source-level attribute checks would be
+        misleading. It runs across the home, setup, game, report, bug, multiplayer pre-join and room screens, and
+        fails the suite if either rule breaks:
+      </p>
+      <ul>
+        <li>Every interactive control has an accessible name.</li>
+        <li>No form field depends on a placeholder for its name.</li>
+      </ul>
+      <p>
+        <code>title</code> is deliberately not accepted as a name: it is unreliable across screen readers and
+        invisible to touch users.
+      </p>
+
+      <h2>What it caught</h2>
+      <p>
+        Roster players were clickable list items — no tab stop, no interactive role — so a keyboard-only player could
+        chat but could not challenge anyone. They are real buttons now. The connection dot was named only by a
+        <code>title</code>; the chat and room-code fields only by their placeholders. The Bible-file picker was named
+        by the whole drop-zone sentence rather than by what it is.
+      </p>
+
+      <h2>What is announced</h2>
+      <p>
+        Round changes, guess feedback and score reach a screen reader through one live region, derived from a single
+        string so each change is announced exactly once and never twice by two regions. Verse-loading failures are
+        alerts rather than status updates, because they interrupt: the player cannot continue until the error is
+        dealt with. File selecting, parsing, ready and failed states are announced, without progress numbers that
+        would re-announce on every chapter.
+      </p>
+
+      <h2>Names, not identifiers</h2>
+      <p>
+        Cached Bible files are shown by filename with their extension, never by the cache fingerprint. That holds
+        through a named <code>fileNameFromFingerprint</code> beside the function that builds the fingerprint, rather
+        than an inline split that only worked by coincidence of field order.
+      </p>
+
+      <h2>What automation cannot settle</h2>
+      <p>
+        Contrast, whether announcements actually read well aloud, focus order judged as a whole, and behaviour at
+        200% zoom in a real browser all need a person. Those live in
+        <span class="file-ref">docs/SCRUM/TODO/Checklist.ManualAccessibilityPass.md</span>. Passing the automated
+        audit is not a claim of WCAG conformance.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/e2e/helpers/a11y.ts</span> holds the audit;
+        <span class="file-ref">frontend/e2e/accessibility.spec.ts</span> runs it per screen and covers keyboard
+        access, announcements, zoom and touch targets.
+      </p>
+    </main>
+  </body>
+</html>
