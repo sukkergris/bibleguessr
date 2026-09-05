@@ -39,11 +39,16 @@ fi
 claude --print "." > /dev/null 2>&1 || true
 
 # The `gh` binary itself is installed in Dockerfile.debian (a root-level apt
-# package, so it belongs in an image layer). Authentication deliberately is
-# not: a token must never be baked into an image, and ~/.config/gh is not a
-# mounted volume, so it does not survive a rebuild either. All this does is
-# say so out loud, rather than leaving you to discover it at the moment you
-# first try to open a pull request.
+# package, so it belongs in an image layer). The credentials it writes live
+# in ~/.config/gh, which devcontainer.json mounts as a volume so a login
+# survives a rebuild — a token must never be baked into an image, so
+# authenticating is a one-off manual step per machine.
+#
+# chown because Docker creates a fresh volume owned by root, which would
+# leave gh unable to write its own config. Same reason as the chown above,
+# but it must run for ~/.config/gh specifically.
+sudo chown -R container-user:container-user /home/container-user/.config/gh 2>/dev/null || true
+
 if command -v gh >/dev/null 2>&1; then
   if ! gh auth status >/dev/null 2>&1; then
     echo "NOTE: gh is installed but not authenticated."

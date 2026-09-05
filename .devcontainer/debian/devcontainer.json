@@ -15,7 +15,18 @@
     "source=bibleguessr-elm-devcontainer,target=/home/container-user/.elm,type=volume",
     "source=${localEnv:HOME}/.ssh,target=/home/container-user/.sshtemplate,type=bind,readonly,consistency=cached",
     "source=bibleguessr-claude-${localWorkspaceFolderBasename},target=/home/container-user/.claude,type=volume",
-    "source=bibleguessr-continue-${localWorkspaceFolderBasename},target=/home/container-user/.continue,type=volume"
+    "source=bibleguessr-continue-${localWorkspaceFolderBasename},target=/home/container-user/.continue,type=volume",
+    // GitHub CLI's credentials, so `gh auth login` survives a rebuild.
+    //
+    // Deliberately ~/.config/gh and not ~/.config: the dotfiles repo stows
+    // bash/, nvim/ and shell-common/ into ~/.config, and a volume over the
+    // whole directory would shadow them. Stow runs with --no-folding, so
+    // ~/.config stays a real directory that both can share.
+    //
+    // A volume rather than a bind mount to the host: the token stays inside
+    // Docker rather than being written into the host's home directory, and
+    // it is scoped to this project.
+    "source=bibleguessr-gh-${localWorkspaceFolderBasename},target=/home/container-user/.config/gh,type=volume"
   ],
   "forwardPorts": [5173, 5162],
   "portsAttributes": {
