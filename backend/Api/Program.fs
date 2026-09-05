@@ -31,8 +31,19 @@ type AbuseReportRequest =
       ReportedPlayer: string
       ReplyTo: string }
 
+/// POST /api/bug-reports's request body — see
+/// docs/SCRUM/TODO/Feature.BugReport.md. Distinct from both
+/// ReportRequest (Bible-file upload failures, which capture the file name
+/// and loader error automatically) and AbuseReportRequest (another
+/// player's behaviour); the spec is explicit that a technical bug must
+/// not be routed through the abuse flow.
+type GeneralBugReportRequest =
+    { Description: string
+      Context: string
+      ReplyTo: string }
+
 [<Literal>]
-let BackendVersion = "0.3.0"
+let BackendVersion = "0.4.0"
 
 [<EntryPoint>]
 let main args =
@@ -543,6 +554,52 @@ let main args =
                                 // reporter's fault. The detail deliberately
                                 // says nothing about the relay, recipient or
                                 // the underlying exception.
+                                Results.Problem(statusCode = 502, detail = "Failed to send the report. Please try again later."))
+    )
+    |> ignore
+
+    // General bug reports — see docs/SCRUM/TODO/Feature.BugReport.md.
+    // Shares the report rate limiters with the other two endpoints: all
+    // three protect the same single mail relay, so a caller must not be
+    // able to dodge their budget by rotating between them.
+    app.MapPost(
+        "/api/bug-reports",
+        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ILogger<obj>, GeneralBugReportRequest, IResult>
+            (fun httpContext perIpLimiter globalLimiter smtp logger request ->
+                use ipLease = perIpLimiter.AttemptAcquire(httpContext)
+
+                if not ipLease.IsAcquired then
+                    Results.Problem(statusCode = 429, detail = "Too many reports from this address today. Please try again tomorrow.")
+                else
+                    use globalLease = globalLimiter.AttemptAcquire(1)
+
+                    if not globalLease.IsAcquired then
+                        Results.Problem(
+                            statusCode = 429,
+                            detail = "Too many reports have been submitted today. Please try again tomorrow."
+                        )
+                    else
+                        let validated =
+                            GeneralBugReport.validate
+                                request.Description
+                                (request.Context |> Option.ofObj)
+                                (request.ReplyTo |> Option.ofObj)
+                                DateTimeOffset.UtcNow
+
+                        match validated with
+                        | Error DescriptionMissing ->
+                            Results.Problem(statusCode = 400, detail = "Please describe what happened.")
+                        | Error(FieldTooLong(field, maxLength)) ->
+                            Results.Problem(
+                                statusCode = 400,
+                                detail = $"That %s{field} is too long — please keep it under %d{maxLength} characters."
+                            )
+                        | Ok report ->
+                            if MailSender.sendGeneralBugReport smtp logger report then
+                                Results.Ok({| status = "sent" |})
+                            else
+                                // Deliberately says nothing about the relay,
+                                // recipient, or the underlying exception.
                                 Results.Problem(statusCode = 502, detail = "Failed to send the report. Please try again later."))
     )
     |> ignore

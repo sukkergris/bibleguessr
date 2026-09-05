@@ -179,4 +179,19 @@ export const api = {
       reportedPlayer: report.reportedPlayer ?? null,
       replyTo: report.replyTo ?? null,
     }),
+
+  /** Reports a technical problem — see docs/SCRUM/TODO/Feature.BugReport.md.
+   * A dedicated endpoint: a general bug is neither a Bible-file upload
+   * failure (submitBugReport) nor abuse (submitAbuseReport), and must not
+   * be routed through either. */
+  submitGeneralBugReport: (report: {
+    description: string;
+    context?: string;
+    replyTo?: string;
+  }) =>
+    postJson<{ status: string }>('/api/bug-reports', {
+      description: report.description,
+      context: report.context ?? null,
+      replyTo: report.replyTo ?? null,
+    }),
 } satisfies VerseSource & Record<string, unknown>;

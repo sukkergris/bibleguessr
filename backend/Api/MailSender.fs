@@ -194,3 +194,84 @@ let sendAbuseReport (settings: SmtpSettings) (logger: ILogger) (report: AbuseRep
     with ex ->
         logger.LogError(ex, "Failed to send abuse report email to {Recipient}", settings.To)
         false
+
+/// Builds the general bug-report email body. Its own function for the same
+/// reason as buildAbuseBody: a different report has different fields, and
+/// merging them would mean one body full of conditionals.
+///
+/// Every player-supplied value is escaped — untrusted input into an HTML
+/// email would otherwise let a reporter inject markup into the reviewer's
+/// inbox.
+let private buildGeneralBugBody (report: GeneralBugReport) : string =
+    let escape (s: string) = WebUtility.HtmlEncode(s)
+    let submittedAt = report.SubmittedAt.ToString("u")
+
+    let optionalRow (label: string) (value: string option) =
+        match value with
+        | Some v ->
+            $"""
+            <tr>
+                <td><strong>{escape label}</strong></td>
+                <td>{escape v}</td>
+            </tr>"""
+        | None -> ""
+
+    let contextRow = optionalRow "Context" report.Context
+    let replyToRow = optionalRow "Reporter's reply address" report.ReplyTo
+
+    $"""
+    <html>
+    <body>
+        <p>A player reported a technical problem.</p>
+        <h3>Report</h3>
+        <table border="1" cellpadding="5" style="border-collapse:collapse; width:100%%;">
+            <tr>
+                <td style="width:180px;"><strong>Submitted</strong></td>
+                <td>{submittedAt}</td>
+            </tr>{contextRow}{replyToRow}
+            <tr>
+                <td><strong>What happened</strong></td>
+                <td>{escape report.Description}</td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
+
+/// Sends a general bug report. Same never-throws contract as the others,
+/// and the same rule about the sender address: the reporter's own address
+/// goes on Reply-To, never on From, which stays the configured
+/// relay-authorised address.
+let sendGeneralBugReport (settings: SmtpSettings) (logger: ILogger) (report: GeneralBugReport) : bool =
+    use smtpClient =
+        new SmtpClient(settings.Host, settings.Port, EnableSsl = settings.EnableSsl,
+                        Credentials = NetworkCredential(settings.Username, settings.Password))
+
+    use message =
+        new MailMessage(
+            From = MailAddress(settings.From),
+            Subject = "BibleGuessr: Bug report",
+            IsBodyHtml = true,
+            BodyEncoding = Encoding.UTF8,
+            SubjectEncoding = Encoding.UTF8,
+            Body = buildGeneralBugBody report
+        )
+
+    message.To.Add(settings.To)
+
+    match report.ReplyTo with
+    | Some address ->
+        try
+            message.ReplyToList.Add(MailAddress(address))
+        with _ ->
+            logger.LogInformation("Bug report had an unusable reply address; sending without Reply-To")
+    | None -> ()
+
+    try
+        smtpClient.Send(message)
+        // No report content or contact details in the log.
+        logger.LogInformation("Bug report email sent to {Recipient}", settings.To)
+        true
+    with ex ->
+        logger.LogError(ex, "Failed to send bug report email to {Recipient}", settings.To)
+        false

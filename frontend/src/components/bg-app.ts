@@ -14,6 +14,7 @@ import './bg-room-setup'
 import './connection-status'
 import './nerd-panel'
 import './report-abuse'
+import './bug-report'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
@@ -43,6 +44,15 @@ export class BgApp extends LitElement {
    * disabled while a report is being sent, rather than discarding it. */
   @state()
   private reportSending = false
+
+  /** Whether the general bug-report panel is showing — see
+   * docs/SCRUM/TODO/Feature.BugReport.md. A separate flag from
+   * reportingAbuse for the same reason: reporting can happen from any
+   * screen, and the screen underneath must be remembered. */
+  @state()
+  private reportingBug = false
+
+  private _bugTrigger?: HTMLButtonElement
 
   /** The report button, so focus can be returned to it when the report
    * view closes — see _onReportClosed. */
@@ -314,7 +324,13 @@ export class BgApp extends LitElement {
                 @report-closed=${this._onReportClosed}
                 @report-sending-changed=${this._onReportSendingChanged}
               ></bg-report-abuse>`
-            : this._renderCurrentPhase()}
+            : this.reportingBug
+              ? html`<bg-bug-report
+                  id="bug-report-view"
+                  @report-closed=${this._onBugClosed}
+                  @report-sending-changed=${this._onReportSendingChanged}
+                ></bg-bug-report>`
+              : this._renderCurrentPhase()}
         </main>
         <bg-nerd-panel></bg-nerd-panel>
       </div>
@@ -330,7 +346,45 @@ export class BgApp extends LitElement {
       >
         <span aria-hidden="true">🛡️</span>
       </button>
+      <button
+        type="button"
+        class="report-bug"
+        title=${this.reportingBug ? 'Close bug report' : 'Report a bug'}
+        aria-label=${this.reportingBug ? 'Close bug report' : 'Report a bug'}
+        aria-expanded=${this.reportingBug ? 'true' : 'false'}
+        aria-controls="bug-report-view"
+        ?disabled=${this.reportSending}
+        @click=${this._onToggleBug}
+      >
+        <span aria-hidden="true">🐛</span>
+      </button>
     `
+  }
+
+  /** Same toggle contract as the abuse report's — see
+   * _onToggleReport. Closing through the icon is the panel's Cancel path,
+   * so nothing is submitted either way. */
+  private _onToggleBug(event: Event) {
+    if (this.reportingBug) {
+      this._onBugClosed()
+      return
+    }
+
+    this._bugTrigger = event.currentTarget as HTMLButtonElement
+    this.reportingBug = true
+    this.updateComplete.then(() => {
+      this.shadowRoot?.querySelector('bg-bug-report')?.shadowRoot?.querySelector<HTMLElement>('h1')?.focus()
+    })
+  }
+
+  private _onBugClosed() {
+    this.reportingBug = false
+    this.reportSending = false
+    const trigger = this._bugTrigger
+    this._bugTrigger = undefined
+    this.updateComplete.then(() => {
+      if (trigger?.isConnected) trigger.focus()
+    })
   }
 
   private _renderCurrentPhase() {
@@ -456,6 +510,40 @@ export class BgApp extends LitElement {
          without ever becoming invisible or unreachable. */
       opacity: 0.65;
       transition: opacity 0.15s ease;
+    }
+
+    /* Mirrors the report button but on the RIGHT edge, per
+       docs/SCRUM/TODO/Feature.BugReport.md — clear of the left-hand
+       report control and of the nerd panel's own toggle. */
+    .report-bug {
+      position: fixed;
+      right: calc(0.75rem + env(safe-area-inset-right, 0px));
+      bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+      z-index: 100;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 50%;
+      border: 1px solid rgba(128, 128, 128, 0.5);
+      background: rgba(20, 20, 24, 0.85);
+      color: inherit;
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.65;
+      transition: opacity 0.15s ease;
+    }
+
+    .report-bug:hover,
+    .report-bug:focus-visible {
+      opacity: 1;
+    }
+
+    .report-bug:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
     }
 
     .report-abuse:hover,

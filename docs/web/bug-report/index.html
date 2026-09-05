@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Report a bug — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Report a bug</h1>
+      <p class="subtitle">
+        An always-available way to report a technical problem, delivered to the application owner by email.
+      </p>
+
+      <h2>How it differs from the other two report flows</h2>
+      <p>
+        There are three, and they are deliberately kept apart. The Bible-file error reporter captures a filename and
+        loader error automatically for a failed upload. <a href="../report-abuse/index.html">Report abuse</a> is about
+        another player's behaviour. This one is for technical problems, and the spec is explicit that a bug must never
+        be routed through the abuse endpoint.
+      </p>
+      <p>
+        Nothing is captured automatically here — no Bible file, verse text, chat history or game transcript. A report
+        contains only what the player typed.
+      </p>
+
+      <h2>The panel</h2>
+      <p>
+        A bug button sits in the bottom-right corner, opposite the report-abuse control and clear of the nerd panel.
+        It is a toggle: it opens the panel when closed and closes it when open, with the same semantics as
+        <strong>Cancel</strong>, so nothing is submitted either way. Its accessible name and tooltip describe the
+        action it will perform, and it exposes <code>aria-expanded</code>.
+      </p>
+      <p>
+        While a report is in flight the toggle is disabled, so a submission can never be interrupted or duplicated.
+        Focus moves into the panel on open and returns to the button on close, and the screen underneath — game,
+        room, chat, setup or results — is left untouched.
+      </p>
+
+      <h2>Delivery and privacy</h2>
+      <p>
+        Reports go to <code>POST /api/bug-reports</code>, its own contract. Every field is treated as untrusted input
+        and HTML-encoded before it reaches the email body. The reporter's address is never the sender: the configured
+        relay-authorised <code>From</code> stays, and their address is attached as <code>Reply-To</code>, with an
+        unparseable one dropped rather than blocking delivery.
+      </p>
+      <p>
+        The endpoint shares the other report endpoints' per-IP and global rate limiters, since all three protect the
+        same mail relay and a caller must not be able to dodge their budget by rotating between them. Validation runs
+        before any mail is attempted, so malformed or oversized requests cost nothing and return <code>400</code>;
+        rate limits return <code>429</code>; an SMTP failure returns <code>502</code>, which the panel presents as
+        retryable. Delivery failures are logged without report content or contact details.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">backend/Domain/GeneralBugReport.fs</span> holds the type and a pure
+        <code>validate</code> that trims, rejects empty descriptions and enforces lengths;
+        <span class="file-ref">backend/Api/MailSender.fs</span> builds and sends the email;
+        <span class="file-ref">backend/Api/Program.fs</span> exposes the endpoint.
+        <span class="file-ref">frontend/src/components/bug-report.ts</span> owns the form and its submit-state model,
+        and <span class="file-ref">frontend/src/components/bg-app.ts</span> owns the sticky toggle.
+      </p>
+      <p>
+        Validation is covered by <span class="file-ref">backend/Tests/GeneralBugReportTests.fs</span>; the panel,
+        toggle, validation, duplicate-submit prevention, delivery failure, endpoint separation and state preservation
+        by <span class="file-ref">frontend/e2e/bug-report.spec.ts</span>.
+      </p>
+    </main>
+  </body>
+</html>
