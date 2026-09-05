@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GitHub MCP setup — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Guide</span>
+      <h1>GitHub MCP setup</h1>
+      <p class="subtitle">
+        How to connect a local coding agent to GitHub through MCP so it can read
+        repository data and issues without giving the agent direct access to
+        your token value.
+      </p>
+
+      <div class="callout limitation">
+        <span class="callout-title">Secret handling</span>
+        <p>
+          Never paste a personal access token into chat, source files, shell
+          history, docs, screenshots, or issue comments. Configure it only in
+          your local MCP or VS Code secret storage.
+        </p>
+      </div>
+
+      <h2>1. Create a fine-grained token</h2>
+      <ol class="flow">
+        <li>Open GitHub's fine-grained personal access token settings.</li>
+        <li>
+          Limit the token to the repositories the MCP server should access, such
+          as
+          <code>sukkergris/bibleguessr</code>
+          .
+        </li>
+        <li>
+          Grant the smallest permissions needed. For read-only issue and
+          repository inspection, use read permissions only. Add write
+          permissions only when the workflow truly needs to create or update
+          GitHub data.
+        </li>
+        <li>
+          Set an expiration date and rotate the token when it expires or if it
+          may have been exposed.
+        </li>
+      </ol>
+
+      <h2>2. Configure the GitHub MCP server</h2>
+      <p>
+        Add the GitHub MCP server to your local MCP configuration using the
+        token as a secret or environment value. The exact file and UI depend on
+        the MCP client you use, but the important rule is the same: the token
+        belongs in local secret configuration, not in this repository.
+      </p>
+      <pre><code>{
+  "servers": {
+    "github": {
+      "command": "github-mcp-server",
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "stored outside the repo"
+      }
+    }
+  }
+}</code></pre>
+      <p>
+        Treat the snippet as shape only. Do not commit a real token or a
+        machine-specific MCP config file unless the token value is omitted and
+        the file is intentionally safe to share.
+      </p>
+
+      <h2>3. Verify access</h2>
+      <p>
+        Ask the coding agent to perform a harmless read-only check through
+        GitHub MCP, such as fetching this repository's
+        <code>README.md</code>
+        or reading a known issue number. A successful read proves the MCP server
+        is configured for that operation; it does not reveal which token was
+        used or what the token value is.
+      </p>
+      <pre><code>Read README.md from sukkergris/bibleguessr using GitHub MCP.
+Read issue #1 from sukkergris/bibleguessr using GitHub MCP.</code></pre>
+
+      <h2>4. Keep the permissions narrow</h2>
+      <ul>
+        <li>Prefer repository-scoped tokens over account-wide tokens.</li>
+        <li>Prefer read-only permissions unless write access is required.</li>
+        <li>
+          Use separate tokens for local experiments, automation, and production
+          workflows.
+        </li>
+        <li>
+          Revoke unused tokens and rotate any token that may have been copied
+          into an unsafe place.
+        </li>
+        <li>
+          Review the MCP tools exposed to the agent; the available tools define
+          what the agent can do.
+        </li>
+      </ul>
+
+      <h2>What the agent can see</h2>
+      <p>
+        The agent can use only the GitHub MCP tools exposed by the current VS
+        Code session. It can see whether an MCP operation succeeds and can see
+        the data returned by that operation. It should not be able to see the
+        token value itself unless the environment is misconfigured to expose
+        secrets as normal files, logs, or chat text.
+      </p>
+
+      <h2>Troubleshooting</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Symptom</th>
+            <th>Check</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>MCP cannot read the repository.</td>
+            <td>
+              Confirm the token is scoped to the repository and has
+              metadata/content read access.
+            </td>
+          </tr>
+          <tr>
+            <td>MCP can read files but cannot read issues.</td>
+            <td>
+              Confirm the token has issue read permission and the issue belongs
+              to the configured repository.
+            </td>
+          </tr>
+          <tr>
+            <td>The agent cannot create or update GitHub data.</td>
+            <td>
+              Check whether write tools are exposed and whether the token has
+              the matching write permission.
+            </td>
+          </tr>
+          <tr>
+            <td>You are unsure how much access exists.</td>
+            <td>
+              List the exposed MCP tools and test only harmless read operations
+              before enabling write access.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </main>
+  </body>
+</html>
