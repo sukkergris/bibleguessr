@@ -19,8 +19,20 @@ type ReportRequest =
       FileName: string
       ErrorMessage: string }
 
+/// POST /api/abuse-reports's request body — see
+/// docs/SCRUM/Feature.ReportAbuse.md. Deliberately its own contract rather
+/// than a reuse of ReportRequest above: that one describes a failed Bible
+/// file upload, and the spec is explicit that abuse reports must not ride
+/// on it. Same plain-DTO convention (nullable `string`) for the same
+/// reason — these values arrive from an untrusted client, and are
+/// validated into a domain AbuseReport before anything else happens.
+type AbuseReportRequest =
+    { Description: string
+      ReportedPlayer: string
+      ReplyTo: string }
+
 [<Literal>]
-let BackendVersion = "0.2.1"
+let BackendVersion = "0.3.0"
 
 [<EntryPoint>]
 let main args =
@@ -478,6 +490,60 @@ let main args =
                             // depend on", closest standard status for an
                             // upstream SMTP failure.
                             Results.Problem(statusCode = 502, detail = "Failed to send the report. Please try again later."))
+    )
+    |> ignore
+
+    // Abuse reports — see docs/SCRUM/Feature.ReportAbuse.md. Deliberately
+    // a separate endpoint from /api/reports (which is for Bible-file
+    // upload failures), but sharing that endpoint's rate limiters: both
+    // caps exist to protect the same single mail relay, so one caller
+    // can't dodge their per-IP budget by alternating between the two
+    // endpoints, and the global cap covers the relay as a whole.
+    app.MapPost(
+        "/api/abuse-reports",
+        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ILogger<obj>, AbuseReportRequest, IResult>
+            (fun httpContext perIpLimiter globalLimiter smtp logger request ->
+                use ipLease = perIpLimiter.AttemptAcquire(httpContext)
+
+                if not ipLease.IsAcquired then
+                    Results.Problem(statusCode = 429, detail = "Too many reports from this address today. Please try again tomorrow.")
+                else
+                    use globalLease = globalLimiter.AttemptAcquire(1)
+
+                    if not globalLease.IsAcquired then
+                        Results.Problem(
+                            statusCode = 429,
+                            detail = "Too many reports have been submitted today. Please try again tomorrow."
+                        )
+                    else
+                        // Validation happens before any mail is attempted,
+                        // so a malformed or oversized request costs the
+                        // relay nothing.
+                        let validated =
+                            AbuseReport.validate
+                                request.Description
+                                (request.ReportedPlayer |> Option.ofObj)
+                                (request.ReplyTo |> Option.ofObj)
+                                DateTimeOffset.UtcNow
+
+                        match validated with
+                        | Error DescriptionMissing ->
+                            Results.Problem(statusCode = 400, detail = "Please describe what happened.")
+                        | Error(FieldTooLong(field, maxLength)) ->
+                            Results.Problem(
+                                statusCode = 400,
+                                detail = $"That %s{field} is too long — please keep it under %d{maxLength} characters."
+                            )
+                        | Ok report ->
+                            if MailSender.sendAbuseReport smtp logger report then
+                                Results.Ok({| status = "sent" |})
+                            else
+                                // Same reasoning as /api/reports: an SMTP
+                                // failure is an upstream problem, not the
+                                // reporter's fault. The detail deliberately
+                                // says nothing about the relay, recipient or
+                                // the underlying exception.
+                                Results.Problem(statusCode = 502, detail = "Failed to send the report. Please try again later."))
     )
     |> ignore
 

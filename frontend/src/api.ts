@@ -162,4 +162,21 @@ export const api = {
       fileName: report.fileName ?? null,
       errorMessage: report.errorMessage,
     }),
+
+  /** Reports abusive or unsafe behaviour — see
+   * docs/SCRUM/Feature.ReportAbuse.md. A dedicated endpoint rather than
+   * submitBugReport above, which is specifically for Bible-file upload
+   * failures. Rejects (throws) on validation, rate-limit and delivery
+   * failures alike, carrying the server's own message so the form can show
+   * it and let the reporter retry. */
+  submitAbuseReport: (report: {
+    description: string;
+    reportedPlayer?: string;
+    replyTo?: string;
+  }) =>
+    postJson<{ status: string }>('/api/abuse-reports', {
+      description: report.description,
+      reportedPlayer: report.reportedPlayer ?? null,
+      replyTo: report.replyTo ?? null,
+    }),
 } satisfies VerseSource & Record<string, unknown>;

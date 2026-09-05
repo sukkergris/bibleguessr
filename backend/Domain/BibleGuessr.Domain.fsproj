@@ -9,6 +9,7 @@
     <Compile Include="Verses.fs" />
     <Compile Include="Game.fs" />
     <Compile Include="BugReport.fs" />
+    <Compile Include="AbuseReport.fs" />
   </ItemGroup>
 
 </Project>

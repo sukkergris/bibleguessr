@@ -13,6 +13,7 @@ import type { GameMode } from './mode-select'
 import './bg-room-setup'
 import './connection-status'
 import './nerd-panel'
+import './report-abuse'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
@@ -28,6 +29,19 @@ const SETUP_SCOPE_BY_MODE: Record<Exclude<GameMode, 'multiplayer'>, SetupScope> 
 export class BgApp extends LitElement {
   @state()
   private phase: GamePhase = 'mode-select'
+
+  /** Whether the "Report abuse" view is showing — see
+   * docs/SCRUM/Feature.ReportAbuse.md. Deliberately a flag alongside
+   * `phase` rather than another GamePhase value: reporting can happen from
+   * ANY screen, and this way the screen underneath is remembered, so
+   * cancelling returns the player exactly where they were rather than to a
+   * default. */
+  @state()
+  private reportingAbuse = false
+
+  /** The report button, so focus can be returned to it when the report
+   * view closes — see _onReportClosed. */
+  private _reportTrigger?: HTMLButtonElement
 
   @state()
   private translation = ''
@@ -289,6 +303,26 @@ export class BgApp extends LitElement {
       <bg-connection-status .trackSignalR=${this.phase === 'room-setup'}></bg-connection-status>
       <div class="layout">
         <main>
+          ${this.reportingAbuse
+            ? html`<bg-report-abuse @report-closed=${this._onReportClosed}></bg-report-abuse>`
+            : this._renderCurrentPhase()}
+        </main>
+        <bg-nerd-panel></bg-nerd-panel>
+      </div>
+      <button
+        type="button"
+        class="report-abuse"
+        title="Report abuse"
+        aria-label="Report abuse"
+        @click=${this._onOpenReport}
+      >
+        <span aria-hidden="true">🛡️</span>
+      </button>
+    `
+  }
+
+  private _renderCurrentPhase() {
+    return html`
           ${this.phase !== 'mode-select'
             ? html`<button type="button" class="home" @click=${this._onGoHome}>← Home</button>`
             : null}
@@ -306,10 +340,27 @@ export class BgApp extends LitElement {
                 : this.phase === 'gameOver'
                   ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
                   : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
-        </main>
-        <bg-nerd-panel></bg-nerd-panel>
-      </div>
     `
+  }
+
+  private _onOpenReport(event: Event) {
+    this._reportTrigger = event.currentTarget as HTMLButtonElement
+    this.reportingAbuse = true
+    // Focus the report view's heading region so keyboard and
+    // screen-reader users land on the new view rather than staying on a
+    // button that is now behind it.
+    this.updateComplete.then(() => {
+      this.shadowRoot?.querySelector('bg-report-abuse')?.shadowRoot?.querySelector<HTMLElement>('h1')?.focus()
+    })
+  }
+
+  private _onReportClosed() {
+    this.reportingAbuse = false
+    const trigger = this._reportTrigger
+    this._reportTrigger = undefined
+    this.updateComplete.then(() => {
+      if (trigger?.isConnected) trigger.focus()
+    })
   }
 
   private _renderPlaying() {
@@ -349,6 +400,46 @@ export class BgApp extends LitElement {
     :host {
       display: block;
       font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Sticky "Report abuse" control — see
+       docs/SCRUM/Feature.ReportAbuse.md. Bottom-LEFT deliberately: the
+       nerd panel and the game's own controls live to the right, so this
+       corner is the one place it won't cover the countdown, chat or form
+       fields on any screen. env(safe-area-inset-*) keeps it clear of the
+       home indicator and rounded corners on mobile. A real <button> with
+       an aria-label, not a bare icon, so it has an accessible name. */
+    .report-abuse {
+      position: fixed;
+      left: calc(0.75rem + env(safe-area-inset-left, 0px));
+      bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+      z-index: 100;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 50%;
+      border: 1px solid rgba(128, 128, 128, 0.5);
+      background: rgba(20, 20, 24, 0.85);
+      color: inherit;
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* Dimmed until hovered/focused so it stays unobtrusive during play,
+         without ever becoming invisible or unreachable. */
+      opacity: 0.65;
+      transition: opacity 0.15s ease;
+    }
+
+    .report-abuse:hover,
+    .report-abuse:focus-visible {
+      opacity: 1;
+    }
+
+    .report-abuse:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
     }
 
     /* The nerd panel takes real layout space (a flex sibling) rather than

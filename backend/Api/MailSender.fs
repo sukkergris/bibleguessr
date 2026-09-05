@@ -102,3 +102,95 @@ let sendBugReport (settings: SmtpSettings) (logger: ILogger) (report: BugReport)
     with ex ->
         logger.LogError(ex, "Failed to send bug report email to {Recipient}", settings.To)
         false
+
+/// Builds the abuse-report email's HTML body. Same field/value table shape
+/// as buildBody above, but its own function: an abuse report has different
+/// fields, and merging the two would mean one body full of conditionals
+/// that half apply to each kind of report.
+///
+/// Every player-supplied value goes through `escape` — these fields are
+/// untrusted input (see docs/SCRUM/Feature.ReportAbuse.md), and this body
+/// is sent as HTML, so unescaped text would let a reporter inject markup
+/// into the reviewer's inbox.
+let private buildAbuseBody (report: AbuseReport) : string =
+    let escape (s: string) = WebUtility.HtmlEncode(s)
+    let submittedAt = report.SubmittedAt.ToString("u")
+
+    let optionalRow (label: string) (value: string option) =
+        match value with
+        | Some v ->
+            $"""
+            <tr>
+                <td><strong>{escape label}</strong></td>
+                <td>{escape v}</td>
+            </tr>"""
+        | None -> ""
+
+    let reportedPlayerRow = optionalRow "Reported player" report.ReportedPlayer
+    let replyToRow = optionalRow "Reporter's reply address" report.ReplyTo
+
+    $"""
+    <html>
+    <body>
+        <p>A player reported abusive or unsafe behaviour.</p>
+        <h3>Report</h3>
+        <table border="1" cellpadding="5" style="border-collapse:collapse; width:100%%;">
+            <tr>
+                <td style="width:180px;"><strong>Submitted</strong></td>
+                <td>{submittedAt}</td>
+            </tr>{reportedPlayerRow}{replyToRow}
+            <tr>
+                <td><strong>What happened</strong></td>
+                <td>{escape report.Description}</td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
+
+/// Sends an abuse report by email. Same never-throws contract as
+/// sendBugReport — the endpoint turns a false return into a retryable
+/// error for the reporter rather than a 500.
+///
+/// The reporter's own address is NEVER used as the sender (see
+/// docs/SCRUM/Feature.ReportAbuse.md): the From address stays the
+/// configured, relay-authorised one, and their address goes on Reply-To
+/// instead, which is what actually lets the owner answer them.
+let sendAbuseReport (settings: SmtpSettings) (logger: ILogger) (report: AbuseReport) : bool =
+    use smtpClient =
+        new SmtpClient(settings.Host, settings.Port, EnableSsl = settings.EnableSsl,
+                        Credentials = NetworkCredential(settings.Username, settings.Password))
+
+    use message =
+        new MailMessage(
+            From = MailAddress(settings.From),
+            Subject = "BibleGuessr: Abuse report",
+            IsBodyHtml = true,
+            BodyEncoding = Encoding.UTF8,
+            SubjectEncoding = Encoding.UTF8,
+            Body = buildAbuseBody report
+        )
+
+    message.To.Add(settings.To)
+
+    // Best-effort: a reporter can type anything into the optional reply
+    // field, so an unparseable address must not stop the report itself
+    // reaching the owner.
+    match report.ReplyTo with
+    | Some address ->
+        try
+            message.ReplyToList.Add(MailAddress(address))
+        with _ ->
+            logger.LogInformation("Abuse report had an unusable reply address; sending without Reply-To")
+    | None -> ()
+
+    try
+        smtpClient.Send(message)
+        // Deliberately logs no report content or contact details — see the
+        // spec's "log delivery failures for operators without logging
+        // report content" requirement.
+        logger.LogInformation("Abuse report email sent to {Recipient}", settings.To)
+        true
+    with ex ->
+        logger.LogError(ex, "Failed to send abuse report email to {Recipient}", settings.To)
+        false

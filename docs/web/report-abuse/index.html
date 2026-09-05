@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Report abuse — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Report abuse</h1>
+      <p class="subtitle">
+        A always-available way for a player to report abusive, harassing, or otherwise unsafe behavior, delivered to
+        the application owner by email.
+      </p>
+
+      <h2>User flow</h2>
+      <ol class="flow">
+        <li>A shield button sits in the bottom-left corner of every screen, labelled <strong>Report abuse</strong>.</li>
+        <li>Selecting it replaces the current view with the <strong>Report abuse</strong> form, remembering what was underneath.</li>
+        <li>
+          The reporter describes what happened (required) and may optionally name the reported player and give a
+          reply address.
+        </li>
+        <li>Sending disables both actions until the request settles, so at most one report is submitted.</li>
+        <li>Success shows a confirmation; failure keeps the form and its contents so the report can be retried.</li>
+        <li><strong>Cancel</strong> returns to the previous screen without sending anything.</li>
+      </ol>
+
+      <h2>What is and isn't sent</h2>
+      <p>
+        Only what the reporter types. Nothing is captured automatically, so a report can never carry uploaded verse
+        text, game state, or another player's data unless the reporter deliberately writes it. Reports are not
+        written to browser storage, the Bible cache, or the game session.
+      </p>
+      <p>
+        The form warns against including passwords, payment details, or other sensitive personal data, and the
+        optional reply address is used only to answer the report.
+      </p>
+
+      <h2>Delivery and abuse prevention</h2>
+      <p>
+        Reports go to <code>POST /api/abuse-reports</code> — deliberately separate from the Bible-file upload report
+        endpoint, so neither contract has to bend to accommodate the other. The endpoint reuses the existing SMTP
+        configuration and sends with the subject <code>BibleGuessr: Abuse report</code>.
+      </p>
+      <p>
+        Every field is treated as untrusted input and HTML-encoded before it goes into the email body. The reporter's
+        address is never used as the sender: the configured, relay-authorised <code>From</code> address is kept, and
+        their address is attached as <code>Reply-To</code> instead. An unparseable reply address is dropped rather
+        than blocking delivery of the report itself.
+      </p>
+      <p>
+        The endpoint shares the bug-report endpoint's two rate limiters — one per caller IP, one global — because
+        both protect the same single mail relay. Validation runs before any mail is attempted, so malformed or
+        oversized requests cost the relay nothing and return <code>400</code>; rate limits return <code>429</code>;
+        an SMTP failure returns <code>502</code>, which the form presents as retryable. Delivery failures are logged
+        without report content or contact details.
+      </p>
+
+      <h2>Accessibility behavior</h2>
+      <p>
+        The sticky control is a real <code>&lt;button&gt;</code> with an <code>aria-label</code>, so it has an
+        accessible name rather than relying on the icon. It is positioned clear of mobile safe-area insets and sits
+        in the one corner that does not overlap the countdown, chat, or form fields.
+      </p>
+      <p>
+        Every field has a persistent label and an associated hint or validation message. A rejected submission sets
+        <code>aria-invalid</code>, announces the problem with <code>role="alert"</code>, and moves focus to the field
+        at fault. Sending, success, and failure are announced through <code>role="status"</code>. Invalid state is
+        signalled by border weight as well as color. Opening the report moves focus into the view; cancelling returns
+        it to the report button.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">backend/Domain/AbuseReport.fs</span> holds the report type and a pure
+        <code>validate</code> function that trims input, rejects empty or whitespace-only descriptions, treats blank
+        optional fields as absent, and enforces maximum lengths. Rejections are a typed union so the API layer owns
+        the wording and status codes.
+      </p>
+      <p>
+        <span class="file-ref">backend/Api/MailSender.fs</span> builds and sends the email;
+        <span class="file-ref">backend/Api/Program.fs</span> exposes the endpoint.
+        <span class="file-ref">frontend/src/components/report-abuse.ts</span> owns the form, its explicit submit-state
+        model, and the duplicate-submit guard;
+        <span class="file-ref">frontend/src/components/bg-app.ts</span> owns the sticky button and the
+        return-to-previous-view behavior.
+      </p>
+      <p>
+        Validation, trimming, and the length limits are covered by
+        <span class="file-ref">backend/Tests/AbuseReportTests.fs</span>. Rendering, navigation, validation, keyboard
+        access, duplicate-submit prevention, successful delivery, delivery failure, and rate limiting are covered by
+        <span class="file-ref">frontend/e2e/report-abuse.spec.ts</span>.
+      </p>
+    </main>
+  </body>
+</html>
