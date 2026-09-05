@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keyboard shortcuts — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Keyboard shortcuts</h1>
+      <p class="subtitle">
+        The Nerd Panel documents the application's keyboard shortcuts, so they can be discovered without reading the
+        console or the source.
+      </p>
+
+      <h2>The guide</h2>
+      <p>
+        A <strong>Keyboard shortcuts</strong> section sits at the top of the Nerd Panel, above the version
+        diagnostics, so user-facing guidance and developer information stay distinguishable. Shortcut and action
+        pairs are a real definition list, so screen readers can navigate them as pairs rather than as loose text.
+      </p>
+      <p>
+        Only implemented shortcuts are listed. Today that is one:
+        <code>Ctrl</code> + <code>Shift</code> + <code>N</code>, which shows or hides the panel.
+      </p>
+
+      <h2>The browser caveat</h2>
+      <p>
+        Some browsers reserve that combination for a new private or incognito window and never pass it to the page.
+        The guide says so plainly rather than promising a shortcut that may not arrive, and points at the panel's
+        Close button as the reliable alternative. A shortcut is a convenience here, never the only way in or out.
+      </p>
+
+      <h2>Not while typing</h2>
+      <p>
+        The shortcut is ignored when the key event originates in an input, textarea, select, or content-editable
+        element, so it cannot interrupt a chat message or a name being entered. This is checked through the event's
+        composed path rather than <code>document.activeElement</code>, which only reports the shadow host when focus
+        is inside a component.
+      </p>
+      <p>
+        Toggling is idempotent: repeated activation only shows or hides the one panel, and never creates duplicates
+        or duplicate listeners.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/src/components/nerd-panel.ts</span> owns the shortcut handler, the typing
+        guard, and the guide. Coverage of the guide's content, the toggle, repeat activation, semantic structure,
+        keyboard close, and non-interference with typing is in
+        <span class="file-ref">frontend/e2e/nerd-panel-shortcuts.spec.ts</span>.
+      </p>
+    </main>
+  </body>
+</html>

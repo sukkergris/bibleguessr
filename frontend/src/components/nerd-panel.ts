@@ -49,11 +49,24 @@ export class NerdPanel extends LitElement {
   }
 
   private _onKeydown = (e: KeyboardEvent) => {
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') {
-      e.preventDefault();
-      this.open = !this.open;
-    }
+    if (!(e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n')) return;
+    // Never while the player is typing: a global chord that fires inside a
+    // text field interrupts ordinary input, which is exactly what
+    // docs/SCRUM/TODO/Feature.ShortcutDescriptions.md forbids. Checked
+    // through composedPath because focus is usually inside a component's
+    // shadow root, where document.activeElement only reports the host.
+    if (this._isTypingTarget(e)) return;
+    e.preventDefault();
+    this.open = !this.open;
   };
+
+  /** Whether this key event originated in something the player types into. */
+  private _isTypingTarget(e: KeyboardEvent): boolean {
+    const target = e.composedPath()[0];
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+  }
 
   private async _loadVersions() {
     try {
@@ -98,6 +111,27 @@ export class NerdPanel extends LitElement {
           </button>
         </header>
         <div class="content">
+          <section class="shortcuts" aria-labelledby="shortcuts-heading">
+            <h3 id="shortcuts-heading">Keyboard shortcuts</h3>
+            <dl>
+              <div>
+                <dt><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd></dt>
+                <dd>
+                  Show or hide this panel. Hold all three keys together.
+                  <p class="caveat">
+                    Some browsers reserve this combination for a new private or incognito window and never pass it to
+                    the page. Where that happens, use the panel's Close button — the shortcut is a convenience, not
+                    the only way in or out.
+                  </p>
+                </dd>
+              </div>
+            </dl>
+            <p class="note">
+              Shortcuts are ignored while you are typing in a text field, so they cannot interrupt a message or a
+              name you are entering.
+            </p>
+          </section>
+
           <section class="versions" aria-labelledby="versions-heading">
             <h3 id="versions-heading">Versions</h3>
             <dl>
@@ -126,6 +160,23 @@ export class NerdPanel extends LitElement {
   }
 
   static styles = css`
+    .shortcuts kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85em;
+      padding: 0.1rem 0.35rem;
+      border: 1px solid rgba(128, 128, 128, 0.6);
+      border-radius: 4px;
+      /* The border and monospace face carry the meaning; the guide still
+         reads correctly without any of this styling. */
+    }
+
+    .shortcuts .caveat,
+    .shortcuts .note {
+      margin: 0.35rem 0 0;
+      font-size: 0.85em;
+      opacity: 0.85;
+    }
+
     /* :host itself is the thing that widens/narrows — the flex sibling in
        bg-app.ts's .layout — so main's width visibly changes as this opens
        and closes, instead of this panel floating on top of it. */
