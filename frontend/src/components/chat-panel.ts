@@ -117,7 +117,9 @@ export class ChatPanel extends LitElement {
     const statusClass = isUncertain ? (isMe ? 'disconnected' : 'unknown') : 'connected';
     const statusLabel =
       statusClass === 'disconnected' ? 'Disconnected' : statusClass === 'unknown' ? 'Unknown' : 'Connected';
-    const dot = html` <span class="status-dot ${statusClass}" title=${statusLabel}></span> `;
+    const dot = html`
+      <span class="status-dot ${statusClass}" title=${statusLabel} aria-hidden="true"></span>
+    `;
 
     if (isMe) {
       return html`
@@ -141,8 +143,21 @@ export class ChatPanel extends LitElement {
       `;
     }
 
+    // A real <button>, not a clickable <li>: a list item with a click
+    // handler is invisible to the keyboard (no tab stop, no Enter/Space)
+    // and is not announced as interactive, so this used to leave
+    // keyboard-only players unable to challenge anyone at all. Native
+    // semantics give focusability, activation and the right role for
+    // free — see CLAUDE.md's "prefer native HTML semantics before adding
+    // ARIA". The button is styled to fill the row so the visible layout
+    // is unchanged.
     return html`
-      <li class="clickable" @click=${() => this._onPlayerSelected(player.id)}>${dot}${player.name}</li>
+      <li class="clickable">
+        <button type="button" @click=${() => this._onPlayerSelected(player.id)}>
+          ${dot}<span>${player.name}</span>
+          <span class="visually-hidden">— challenge to a game</span>
+        </button>
+      </li>
     `;
   }
 
@@ -256,12 +271,37 @@ export class ChatPanel extends LitElement {
       background: #9ca3af;
     }
 
+    /* The <li> hands its padding and layout to the inner button, so the
+       whole row is the click and focus target and the row looks exactly
+       as it did when the <li> itself was clickable. */
     .players ul li.clickable {
+      padding: 0;
+    }
+
+    .players ul li.clickable button {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.4rem 0.6rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-align: left;
       cursor: pointer;
     }
 
-    .players ul li.clickable:hover {
+    .players ul li.clickable button:hover {
       background: rgba(170, 59, 255, 0.18);
+    }
+
+    /* An explicit focus ring rather than relying on the default, which is
+       easy to lose against the row's tinted background. */
+    .players ul li.clickable button:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: -2px;
     }
 
     .section-label {

@@ -175,6 +175,7 @@ export class GameSetup extends LitElement {
 
         <form @submit=${this._onSubmit}>
           ${this.mode === 'server' ? this._renderServerMode() : this._renderFileMode()}
+          ${this._renderFileStatusAnnouncement()}
           ${this._renderScopeSelector()}
 
           <label>
@@ -307,6 +308,43 @@ export class GameSetup extends LitElement {
     `
   }
 
+  /** A single live region carrying the file's current state, so a
+   * screen-reader user is told what happened when a file is chosen,
+   * parsed, becomes ready, or fails. The visible markup below conveys
+   * the same thing to sighted users, but only visually.
+   *
+   * Deliberately one region derived from `fileState` rather than
+   * announcements scattered through the visible markup: that keeps each
+   * transition announced exactly once, and never mid-parse on every
+   * progress tick (see the "status announcements must not be duplicated"
+   * requirement in docs/SCRUM/TODO/Feature.Accessibility.md).
+   *
+   * Only rendered in file mode — there is nothing to announce otherwise. */
+  private _renderFileStatusAnnouncement() {
+    if (this.mode !== 'file') return null
+
+    const message = (() => {
+      switch (this.fileState.status) {
+        case 'idle':
+          return ''
+        case 'picking':
+          return 'Reading the selected file…'
+        case 'parsing':
+          // Deliberately no progress numbers: this would otherwise
+          // re-announce on every chapter parsed.
+          return `Parsing ${this.fileState.fileName}…`
+        case 'ready':
+          return `${this.fileState.fileName} is ready to play.`
+        case 'error':
+          return this.fileState.fileName
+            ? `${this.fileState.fileName} could not be used. ${this.fileState.message}`
+            : this.fileState.message
+      }
+    })()
+
+    return html`<p class="visually-hidden" role="status">${message}</p>`
+  }
+
   private _renderFileMode() {
     if (this.fileState.status === 'idle' && this.cachedFiles.length > 0) {
       return this._renderCachedList()
@@ -351,8 +389,14 @@ export class GameSetup extends LitElement {
         @dragleave=${() => (this.dragOver = false)}
         @drop=${this._onDrop}
       >
-        <input type="file" accept=".epub,.zip" @change=${this._onFileInputChange} />
-        <span>Drop a .epub or .zip (RTF export) Bible file here, or click to choose one</span>
+        <input
+          type="file"
+          accept=".epub,.zip"
+          aria-label="Choose a Bible file"
+          aria-describedby="file-picker-hint"
+          @change=${this._onFileInputChange}
+        />
+        <span id="file-picker-hint">Drop a .epub or .zip (RTF export) Bible file here, or click to choose one</span>
       </label>
     `
   }
@@ -506,6 +550,20 @@ export class GameSetup extends LitElement {
   }
 
   static styles = css`
+    /* Available to screen readers, invisible on screen — see
+       chat-panel.ts for the same pattern. */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     :host {
       display: block;
     }

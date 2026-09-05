@@ -3,38 +3,24 @@
 Make BibleGuessr usable with keyboard navigation, screen readers, zoom, high
 contrast, reduced motion, and other assistive technology.
 
-Note that accessibility is also a standing rule in `CLAUDE.md` — it applies to
-every feature as it is built, not only to the work listed here. This file
-covers the gap between that rule and the existing application, and should
-shrink to nothing rather than being deferred.
+Accessibility is also a standing rule in `CLAUDE.md` — it applies to every
+feature as it is built, not only to the work listed here. This file covers the
+gap between that rule and the existing application, and should shrink to
+nothing rather than being deferred.
 
-## Already enforced automatically
+## Already done
 
-These need no further work: an automated audit runs against the rendered
-application (including Lit shadow DOM) on every end-to-end test run, across the
-home, singleplayer setup, active game, report, multiplayer pre-join and
-multiplayer room screens — see `frontend/e2e/accessibility.spec.ts` and
-`frontend/e2e/helpers/a11y.ts`.
+Accessible names and placeholder-only labels are covered by an automated audit
+that runs on every end-to-end test run, so they cannot silently regress — see
+`DONE/Task.AccessibilityAudit.md`. Everything below is what that audit does not
+cover.
 
-- Every interactive control has an accessible name.
-- No form field depends on a placeholder for its name.
+Also done since: roster players can now be challenged by keyboard (see
+`DONE/BUG.RosterPlayersCannotBeChallengedByKeyboard.md`), the Bible-file picker
+has an explicit accessible label, and file selecting/parsing/ready/failed
+states are announced through a live region.
 
-Any new control that breaks either rule fails the test suite, so these cannot
-silently regress.
-
-Three real problems were found and fixed this way: the connection-status dot
-was an icon-only button named only by a `title` attribute (now has a
-status-aware name and exposes `aria-expanded`), and both the chat message field
-and the room-code field were named only by their placeholders, which disappear
-as soon as the field has content (both now have persistent labels).
-
-The audit deliberately checks only what a machine can judge reliably. It does
-not verify contrast, zoom, focus order, live-region behaviour or screen-reader
-output, and passing it is not a claim of WCAG conformance.
-
-## Remaining work
-
-### Keyboard and focus
+## Keyboard and focus
 
 - Every interactive control must be reachable in a logical order with Tab and
   operable with keyboard input.
@@ -44,16 +30,15 @@ output, and passing it is not a claim of WCAG conformance.
 - Focus must move predictably when a view, tab panel or game phase opens, and
   return to the triggering control when it closes.
 - Do not use click-only handlers for actions that should be buttons or links.
-  The multiplayer roster is the known offender: player rows are clickable
-  `<li>` elements rather than buttons, so they cannot be reached or activated
-  by keyboard at all.
+  The multiplayer roster was the known instance and is now fixed; other
+  surfaces have not been checked.
 - Keyboard operation must work for sliders, tabs, combobox suggestions, player
   actions, file controls and game submission.
 
 The forfeit dialog and the report-abuse flow already meet the focus-management
 requirements and are covered by their own tests; they do not need revisiting.
 
-### Semantics and screen readers
+## Semantics and screen readers
 
 - Use one meaningful page heading per view and a logical heading hierarchy.
 - Icon-only controls must expose their state with appropriate attributes such
@@ -67,13 +52,10 @@ requirements and are covered by their own tests; they do not need revisiting.
 - Lists, tab lists, comboboxes and buttons must use valid structure and state
   relationships; hidden items must not leave misleading empty containers.
 
-### File upload and file names
+## File upload and file names
 
-- The Bible-file picker must have an explicit accessible label, such as
-  `Choose a Bible file`, and must identify accepted file types without relying
-  only on placeholder text.
-- When a file is selected, announce its filename and current state using a
-  status region: selecting, parsing, ready, or failed.
+The picker's accessible label and the state announcements are done. The
+remaining items below are not.
 - The filename must be presented as the filename, including its extension; do
   not silently replace it with an opaque cache id or use it as the translation
   name.
@@ -89,7 +71,7 @@ requirements and are covered by their own tests; they do not need revisiting.
 - Choosing the same file again after clearing or an error must be possible
   without requiring a page reload.
 
-### Forms and validation
+## Forms and validation
 
 - Associate every validation message with the invalid control using
   `aria-describedby` or native form semantics, and expose invalid state with
@@ -101,7 +83,7 @@ requirements and are covered by their own tests; they do not need revisiting.
 
 The report-abuse form already meets these and is covered by its own tests.
 
-### Visual, motion, and responsive behavior
+## Visual, motion, and responsive behavior
 
 - Text and controls must remain usable at 200% zoom and on narrow screens
   without clipped labels, overlapping controls, or inaccessible horizontal
@@ -115,7 +97,7 @@ The report-abuse form already meets these and is covered by its own tests.
 - Sticky controls, banners and overlays must not cover the current focus target
   or essential content.
 
-### Feature-specific coverage still outstanding
+## Feature-specific coverage still outstanding
 
 - Ignore-player controls: labelled icon buttons, state exposure, keyboard
   unignore, and announcements independent of color. (Not yet built — see

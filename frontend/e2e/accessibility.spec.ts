@@ -67,3 +67,77 @@ test('the multiplayer room has no unnamed controls', async ({ page }) => {
 
   await expectNoFindings(page, 'multiplayer room')
 })
+
+// Regression test for a real blocker: roster player names were plain <li>
+// elements with a click handler, so they were absent from the tab order
+// entirely. A keyboard-only player could join a room and chat, but had no
+// way to challenge anyone — see
+// docs/SCRUM/BUGS/BUG.RosterPlayersCannotBeChallengedByKeyboard.md.
+test('a challengeable player can be reached and activated by keyboard', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}kb`
+    const bobName = `Bob${suffix}kb`
+
+    for (const [page, name] of [
+      [pageA, aliceName],
+      [pageB, bobName],
+    ] as const) {
+      await page.goto('/')
+      await page.getByRole('button', { name: 'Multiplayer' }).click()
+      await expect(page.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
+      await page.getByPlaceholder('e.g. Alice').fill(name)
+      await page.getByRole('button', { name: 'Join World chat' }).click()
+      await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
+    }
+
+    // Bob must be exposed as an interactive control, not a bare list item,
+    // and his name must be part of its accessible name so a screen-reader
+    // user knows who they are challenging.
+    const bobControl = pageA.getByRole('button', { name: new RegExp(bobName) })
+    await expect(bobControl).toBeVisible()
+
+    // Reachable by keyboard and activatable with Enter — no mouse.
+    await bobControl.focus()
+    await expect(bobControl).toBeFocused()
+    await pageA.keyboard.press('Enter')
+
+    await expect(
+      pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` }),
+    ).toBeVisible()
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
+  }
+})
+
+// The Bible-file picker's accessible name and its state announcements —
+// see the "File upload and file names" section of
+// docs/SCRUM/TODO/Feature.Accessibility.md. Both were confirmed missing:
+// the input was named only by the drop-zone's long instruction sentence,
+// and the setup screen had no live region at all, so a screen-reader user
+// was never told a file had been selected, parsed, or failed.
+test('the Bible-file picker has a clear accessible name and announces its state', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'The Bible' }).click()
+  await page.getByRole('tab', { name: 'My own Bible file' }).click()
+
+  // Named as the control it is, rather than by the surrounding
+  // instructions.
+  const picker = page.getByLabel('Choose a Bible file')
+  await expect(picker).toBeAttached()
+
+  // A live region exists to carry selecting/parsing/ready/failed states.
+  const status = page.locator('bg-game-setup [role="status"]')
+  await expect(status).toBeAttached()
+
+  // Selecting a real file announces the filename, in full and with its
+  // extension, once it is ready.
+  await picker.setInputFiles('e2e/fixtures/genesis1-full.zip')
+  await expect(status).toContainText('genesis1-full.zip', { timeout: 15_000 })
+})
