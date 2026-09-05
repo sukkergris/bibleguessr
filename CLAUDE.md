@@ -26,6 +26,10 @@ Prefer explicit state models, such as discriminated unions or state objects, whe
 Prefer configuration values over hardcoded values for system settings.
 Avoid inline magic numbers/strings even for internal-only values that don't warrant full configuration — give them a named binding (a `let` constant, a static field) instead.
 
+## Testing
+
+Before trusting a test that covers a bug fix, prove it actually catches the bug: with the fix removed (revert it, or temporarily break it), confirm the test fails — then restore the fix and confirm it passes. A test that passes against the broken code proves nothing, and is worse than no test because it looks like protection.
+
 ## Versioning
 
 When a feature is completed, increase the version number for each affected application. Update the frontend version when the feature changes the frontend, update the backend version when it changes the backend, and update both when it affects both applications.
