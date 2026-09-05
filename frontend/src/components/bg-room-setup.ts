@@ -29,6 +29,7 @@ import {
 } from '../signalr-client'
 import type { ChatMessage, GameSession, PlayRequest, Player } from '../types'
 import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-name-storage'
+import { gameEnded, gameStarted, playerLeft, type RosterBusyState } from '../roster-busy-state'
 import './chat-panel'
 import './play-requests'
 import './challenge-settings'
@@ -118,6 +119,17 @@ export class RoomSetup extends LitElement {
    * are mid-way through their NEXT game. */
   @state()
   private activeGameIds = new Set<string>()
+
+  private get _busyState(): RosterBusyState {
+    return { activeGameIds: this.activeGameIds, busyPlayerIds: this.busyPlayerIds }
+  }
+
+  /** Applies a new busy state, reassigning both fields so Lit re-renders.
+   * The decisions themselves live in roster-busy-state.ts. */
+  private _applyBusyState(next: RosterBusyState) {
+    if (next.activeGameIds !== this.activeGameIds) this.activeGameIds = new Set(next.activeGameIds)
+    if (next.busyPlayerIds !== this.busyPlayerIds) this.busyPlayerIds = new Set(next.busyPlayerIds)
+  }
 
   @state()
   private messages: ChatMessage[] = []
@@ -499,8 +511,7 @@ export class RoomSetup extends LitElement {
       // Busy-tracking first, and deliberately BEFORE the "is this my
       // game?" guard below — every game in the room marks its two
       // players busy for everyone else's roster, not just mine.
-      this.busyPlayerIds = new Set(this.busyPlayerIds).add(session.playerA).add(session.playerB)
-      this.activeGameIds = new Set(this.activeGameIds).add(session.gameId)
+      this._applyBusyState(gameStarted(this._busyState, session.gameId, session.playerA, session.playerB))
 
       const opponentId = this.activeGameOpponent?.id
       if (!opponentId) return
@@ -508,23 +519,9 @@ export class RoomSetup extends LitElement {
       if (pair.has(this.myPlayerId) && pair.has(opponentId)) this.initialSession = session
     })
     this._unsubscribeGameOverBusy = onGameOver((gameId, _scores, playerA, playerB) => {
-      // Whatever ended it (completed or forfeited), both players are
-      // available again — same room-wide scope as the RoundStarted side.
-      //
-      // Guarded by game id so a LATE event from a game these two already
-      // finished can't mark them free while they're mid-way through
-      // their next one — the roster would then offer a challenge the
-      // server is bound to reject (see
-      // docs/SCRUM/BUGS/BUG.StaleGameOverEndsTheWrongGame.md).
-      if (!this.activeGameIds.has(gameId)) return
-      const stillActive = new Set(this.activeGameIds)
-      stillActive.delete(gameId)
-      this.activeGameIds = stillActive
-
-      const stillBusy = new Set(this.busyPlayerIds)
-      stillBusy.delete(playerA)
-      stillBusy.delete(playerB)
-      this.busyPlayerIds = stillBusy
+      // Matched by game id, not merely by the player pair — see
+      // roster-busy-state.ts, where that rule lives and is tested.
+      this._applyBusyState(gameEnded(this._busyState, gameId, playerA, playerB))
     })
     this._unsubscribePlayRequestDenied = onPlayRequestDenied((fromPlayerId, toPlayerId) => {
       this._resolvePlayRequest(fromPlayerId, toPlayerId)
@@ -539,6 +536,7 @@ export class RoomSetup extends LitElement {
       this.disconnectedPlayerIds = new Set(this.disconnectedPlayerIds).add(playerId)
     })
     this._unsubscribePlayerLeft = onPlayerLeft((playerId) => {
+      this._applyBusyState(playerLeft(this._busyState, playerId))
       this.players = this.players.filter((p) => p.id !== playerId)
       this.playRequests = this.playRequests.filter((r) => r.fromPlayerId !== playerId)
       if (this.sentRequestToId === playerId) this.sentRequestToId = undefined
