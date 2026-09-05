@@ -1,5 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { GAME_TYPE_NAMES } from '../game-type'
 import type { GameTypeScope } from '../game-type'
 import type { VerseRestriction, VerseSource } from '../types'
 import './book-selector'
@@ -48,7 +49,7 @@ export class GameTypeSelect extends LitElement {
                 class=${this.scope === scope ? 'active' : ''}
                 @click=${() => this._onScopeSelected(scope)}
               >
-                ${scope === 'all' ? 'The Bible' : scope === 'books' ? 'Books' : 'Chapters'}
+                ${GAME_TYPE_NAMES[scope]}
               </button>
             `,
           )}

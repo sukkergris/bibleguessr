@@ -1,5 +1,6 @@
 import { bookAtNumber, bookNumberOf } from './book-numbers'
-import type { GameType, VerseRestriction, VerseSource } from './types'
+import { parseTimeSpanMs } from './timer'
+import type { GameType, TimeLimit, VerseRestriction, VerseSource } from './types'
 
 /** The 'all'/'books'/'chapters' scope a GameType represents — same
  * vocabulary as game-setup.ts's SetupScope, since a play request's
@@ -58,6 +59,19 @@ export async function gameTypeFromRestriction(
   return { Case: 'Chapters', Fields: [chaptersByBookNumber] }
 }
 
+/** The player-facing name of each game-type scope — the single source of
+ * truth for this vocabulary. <bg-game-type-select> renders these as its
+ * tab labels and describeGameType below uses them in play-request
+ * descriptions, so the challenged player sees the same words the
+ * challenger chose from. Previously the two were written out separately
+ * and had drifted: the selector said "The Bible" while a request for the
+ * same game said "All verses". */
+export const GAME_TYPE_NAMES: Record<GameTypeScope, string> = {
+  all: 'The Bible',
+  books: 'Books',
+  chapters: 'Chapters',
+}
+
 /** A short human-readable label for a GameType, e.g. to show the challenged
  * player what they're being invited to ("Genesis, Exodus" / "All verses").
  *
@@ -77,14 +91,17 @@ export async function describeGameType(
   verseSource: VerseSource,
   translation: string | undefined,
 ): Promise<string> {
-  if (gameType.Case === 'AllVerses') return 'All verses'
+  if (gameType.Case === 'AllVerses') return GAME_TYPE_NAMES.all
 
   const booksInBibleOrder = await verseSource.getBooksInBibleOrder(translation)
   const nameOf = (number: number) => bookAtNumber(booksInBibleOrder, number) ?? `Book ${number}`
 
+  // An empty selection is the same game as no restriction at all, so it
+  // reads as the unrestricted mode rather than an empty "Books: ".
   if (gameType.Case === 'Books') {
     const [bookNumbers] = gameType.Fields
-    return bookNumbers.length > 0 ? bookNumbers.map(nameOf).join(', ') : 'All verses'
+    if (bookNumbers.length === 0) return GAME_TYPE_NAMES.all
+    return `${GAME_TYPE_NAMES.books}: ${bookNumbers.map(nameOf).join(', ')}`
   }
 
   // gameType.Case === 'Chapters'
@@ -92,7 +109,8 @@ export async function describeGameType(
   const parts = Object.entries(chaptersByBookNumber).map(
     ([bookNumber, chapters]) => `${nameOf(Number(bookNumber))} ${[...chapters].sort((a, b) => a - b).join(', ')}`,
   )
-  return parts.length > 0 ? parts.join('; ') : 'All verses'
+  if (parts.length === 0) return GAME_TYPE_NAMES.all
+  return `${GAME_TYPE_NAMES.chapters}: ${parts.join('; ')}`
 }
 
 /** Which books a Books-scoped GameType restricts the guess form's Book
@@ -160,4 +178,29 @@ export async function bookNumberOfGuess(
 ): Promise<number | undefined> {
   const booksInBibleOrder = await verseSource.getBooksInBibleOrder(translation)
   return bookNumberOf(booksInBibleOrder, book)
+}
+
+/** Everything a challenged player is agreeing to, in one line: which
+ * verses, how many rounds, and how long they get per verse — see
+ * <bg-play-requests>, which shows this under "<name> wants to play".
+ *
+ * Deliberately separate from describeGameType (which answers only "which
+ * verses") because the round count and time limit live on the PlayRequest
+ * itself, not on the GameType — see types.ts's PlayRequest and
+ * docs/SCRUM/Feature.Time.md. */
+export async function describeChallenge(
+  gameType: GameType,
+  roundCount: number,
+  roundTimeLimit: TimeLimit,
+  verseSource: VerseSource,
+  translation: string | undefined,
+): Promise<string> {
+  const verses = await describeGameType(gameType, verseSource, translation)
+  const rounds = `${roundCount} ${roundCount === 1 ? 'round' : 'rounds'}`
+  const time =
+    roundTimeLimit.Case === 'Unlimited'
+      ? 'No time limit'
+      : `${Math.round(parseTimeSpanMs(roundTimeLimit.Fields[0]) / 1000)}s per verse`
+
+  return `${verses} · ${rounds} · ${time}`
 }

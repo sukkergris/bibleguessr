@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import { describeGameType } from '../game-type'
-import type { GameType, PlayRequest, VerseSource } from '../types'
+import { describeChallenge } from '../game-type'
+import type { PlayRequest, VerseSource } from '../types'
 
 /**
  * The list of play requests addressed to the viewing player, shown below
@@ -65,9 +65,17 @@ export class PlayRequests extends LitElement {
   }
 
   /** Cache key for one request's resolved description — see
-   * _descriptions on why the game type has to be part of it. */
-  private _descriptionKey(fromPlayerId: string, gameType: GameType): string {
-    return `${fromPlayerId}:${JSON.stringify(gameType)}`
+   * _descriptions on why more than the player id has to be part of it.
+   * Covers everything the description is derived from (game type, round
+   * count, time limit), so changing any of them re-resolves rather than
+   * reusing the previous request's text. */
+  private _descriptionKey(request: PlayRequest): string {
+    return [
+      request.fromPlayerId,
+      JSON.stringify(request.gameType),
+      request.roundCount,
+      JSON.stringify(request.roundTimeLimit),
+    ].join(':')
   }
 
   private _resolveDescriptions() {
@@ -75,14 +83,20 @@ export class PlayRequests extends LitElement {
     const verseSource = this.verseSource
 
     for (const request of this.requests) {
-      const key = this._descriptionKey(request.fromPlayerId, request.gameType)
+      const key = this._descriptionKey(request)
       if (this._descriptions.has(key)) continue
-      this._describeAndStore(key, request.gameType, verseSource)
+      this._describeAndStore(key, request, verseSource)
     }
   }
 
-  private _describeAndStore(key: string, gameType: GameType, verseSource: VerseSource) {
-    describeGameType(gameType, verseSource, this.translation).then((description) => {
+  private _describeAndStore(key: string, request: PlayRequest, verseSource: VerseSource) {
+    describeChallenge(
+      request.gameType,
+      request.roundCount,
+      request.roundTimeLimit,
+      verseSource,
+      this.translation,
+    ).then((description) => {
       const updated = new Map(this._descriptions)
       updated.set(key, description)
       this._descriptions = updated
@@ -114,7 +128,7 @@ export class PlayRequests extends LitElement {
                       <span>
                         <strong>${r.fromPlayerName}</strong> wants to play
                         <span class="game-type"
-                          >${this._descriptions.get(this._descriptionKey(r.fromPlayerId, r.gameType)) ?? '…'}</span
+                          >${this._descriptions.get(this._descriptionKey(r)) ?? '…'}</span
                         >
                       </span>
                       <span class="actions">

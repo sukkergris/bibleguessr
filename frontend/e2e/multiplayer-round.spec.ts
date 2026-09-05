@@ -839,8 +839,10 @@ test('the blink stops when the game ends by forfeit mid-countdown', async ({ bro
 // player therefore "stuck" — a later request from the SAME player with
 // a different game type kept showing the first one's description. In
 // practice that meant a Books/Chapters challenge kept displaying the
-// "All verses" text cached from an earlier all-verses request.
-test('a Books-scoped play request shows the actual books, not a stale "All verses"', async ({ browser }) => {
+// unrestricted-game text cached from an earlier unrestricted request.
+test('a Books-scoped play request shows the actual books, not a stale unrestricted description', async ({
+  browser,
+}) => {
   const ctxA = await browser.newContext()
   const ctxB = await browser.newContext()
   const pageA = await ctxA.newPage()
@@ -860,12 +862,16 @@ test('a Books-scoped play request shows the actual books, not a stale "All verse
     await bobInRoster.click()
 
     const firstRequest = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
-    await expect(firstRequest).toContainText('All verses')
+    // The challenged player sees everything they're agreeing to: which
+    // verses, how many rounds, and how long per verse.
+    await expect(firstRequest).toContainText('The Bible')
+    await expect(firstRequest).toContainText('rounds')
+    await expect(firstRequest).toContainText('No time limit')
     await firstRequest.getByRole('button', { name: 'Deny' }).click()
     await expect(firstRequest).toBeHidden()
 
     // Now Alice picks a specific book and challenges again. Bob must see
-    // THAT book, not the "All verses" cached from the denied request.
+    // THAT book, not the "The Bible" text cached from the denied request.
     await pageA.getByRole('tab', { name: 'Books', exact: true }).click()
     const firstBook = pageA.locator('bg-book-selector .book').first()
     await expect(firstBook).toBeVisible()
@@ -877,7 +883,8 @@ test('a Books-scoped play request shows the actual books, not a stale "All verse
     const secondRequest = pageB.getByRole('listitem').filter({ hasText: `${aliceName} wants to play` })
     await expect(secondRequest).toBeVisible()
     await expect(secondRequest).toContainText(chosenBook)
-    await expect(secondRequest).not.toContainText('All verses')
+    await expect(secondRequest).not.toContainText('The Bible')
+    await expect(secondRequest).toContainText('Books:')
   } finally {
     await ctxA.close()
     await ctxB.close()

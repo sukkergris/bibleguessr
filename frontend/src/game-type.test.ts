@@ -3,6 +3,7 @@ import {
   allowedBooksForGuessForm,
   allowedChaptersForGuessForm,
   bookNumberOfGuess,
+  describeChallenge,
   describeGameType,
   gameTypeFromRestriction,
   lockedBookForGuessForm,
@@ -86,30 +87,33 @@ describe('gameTypeFromRestriction', () => {
 })
 
 describe('describeGameType', () => {
-  it('describes AllVerses without needing the source', async () => {
+  // The label must use the same vocabulary the challenger picked from in
+  // <bg-game-type-select> ("The Bible" / "Books" / "Chapters"), so the
+  // challenged player recognises what they are being invited to.
+  it('describes AllVerses using the selector’s own name for it', async () => {
     const source = stubSource([])
-    expect(await describeGameType({ Case: 'AllVerses' }, source, undefined)).toBe('All verses')
+    expect(await describeGameType({ Case: 'AllVerses' }, source, undefined)).toBe('The Bible')
   })
 
   it('describes Books by resolving numbers to the VIEWER’S OWN spelling', async () => {
     const source = stubSource(GENESIS_TO_LEVITICUS)
     const gameType: GameType = { Case: 'Books', Fields: [[1, 3]] }
 
-    expect(await describeGameType(gameType, source, undefined)).toBe('Genesis, Leviticus')
+    expect(await describeGameType(gameType, source, undefined)).toBe('Books: Genesis, Leviticus')
   })
 
   it('describes Chapters with sorted chapter numbers per resolved book', async () => {
     const source = stubSource(GENESIS_TO_LEVITICUS)
     const gameType: GameType = { Case: 'Chapters', Fields: [{ 1: [3, 1, 2] }] }
 
-    expect(await describeGameType(gameType, source, undefined)).toBe('Genesis 1, 2, 3')
+    expect(await describeGameType(gameType, source, undefined)).toBe('Chapters: Genesis 1, 2, 3')
   })
 
   it('falls back to "Book N" for a number the viewer’s own source cannot resolve', async () => {
     const source = stubSource(['Genesis'])
     const gameType: GameType = { Case: 'Books', Fields: [[99]] }
 
-    expect(await describeGameType(gameType, source, undefined)).toBe('Book 99')
+    expect(await describeGameType(gameType, source, undefined)).toBe('Books: Book 99')
   })
 })
 
@@ -184,5 +188,48 @@ describe('bookNumberOfGuess', () => {
   it('returns undefined for a book the source does not recognize', async () => {
     const source = stubSource(GENESIS_TO_LEVITICUS)
     expect(await bookNumberOfGuess('Numbers', source, undefined)).toBeUndefined()
+  })
+})
+
+// The play request should tell the challenged player everything they are
+// agreeing to before they click Accept — not just which verses, but how
+// many rounds and how long they get per verse.
+describe('describeChallenge', () => {
+  const source = stubSource(GENESIS_TO_LEVITICUS)
+
+  it('combines the game type, round count and time per verse', async () => {
+    const description = await describeChallenge(
+      { Case: 'AllVerses' },
+      5,
+      { Case: 'LimitedTo', Fields: ['00:00:30'] },
+      source,
+      undefined,
+    )
+
+    expect(description).toBe('The Bible · 5 rounds · 30s per verse')
+  })
+
+  it('says when there is no time limit rather than omitting it', async () => {
+    const description = await describeChallenge({ Case: 'AllVerses' }, 3, { Case: 'Unlimited' }, source, undefined)
+
+    expect(description).toBe('The Bible · 3 rounds · No time limit')
+  })
+
+  it('keeps the book selection alongside the round and time details', async () => {
+    const description = await describeChallenge(
+      { Case: 'Books', Fields: [[1, 3]] },
+      10,
+      { Case: 'LimitedTo', Fields: ['00:01:00'] },
+      source,
+      undefined,
+    )
+
+    expect(description).toBe('Books: Genesis, Leviticus · 10 rounds · 60s per verse')
+  })
+
+  it('uses the singular for a one-round game', async () => {
+    const description = await describeChallenge({ Case: 'AllVerses' }, 1, { Case: 'Unlimited' }, source, undefined)
+
+    expect(description).toBe('The Bible · 1 round · No time limit')
   })
 })
