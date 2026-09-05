@@ -134,6 +134,8 @@ export class ConnectionStatus extends LitElement {
         class="dot ${this._isHealthy ? 'ok' : 'bad'}"
         @click=${() => (this.expanded = !this.expanded)}
         title="Connection status — click for details"
+        aria-label=${`Connection status: ${this._isHealthy ? 'connected' : 'problem detected'}. Show details.`}
+        aria-expanded=${this.expanded ? 'true' : 'false'}
       ></button>
       ${this.expanded ? this._renderDetails() : null}
     `

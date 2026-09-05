@@ -89,7 +89,9 @@ export class ChatPanel extends LitElement {
             )}
           </ul>
           <form class="chat-input" @submit=${this._onSubmit}>
+            <label class="visually-hidden" for="chat-message">Chat message</label>
             <input
+              id="chat-message"
               type="text"
               .value=${this._input}
               @input=${(e: Event) =>
@@ -186,6 +188,21 @@ export class ChatPanel extends LitElement {
   }
 
   static styles = css`
+    /* Available to screen readers, invisible on screen — a placeholder
+       disappears as soon as the field has content, so it can't serve as
+       the field's label (see docs/SCRUM/TODO/Feature.Accessibility.md). */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     :host {
       display: block;
     }

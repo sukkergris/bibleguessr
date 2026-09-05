@@ -263,7 +263,9 @@ export class RoomSetup extends LitElement {
         </button>
 
         <div class="join">
+          <label class="visually-hidden" for="room-code">Room code</label>
           <input
+            id="room-code"
             type="text"
             .value=${this.roomCodeInput}
             @input=${(e: Event) => (this.roomCodeInput = (e.target as HTMLInputElement).value)}
@@ -684,6 +686,19 @@ export class RoomSetup extends LitElement {
   }
 
   static styles = css`
+    /* See chat-panel.ts for why a placeholder can't serve as a label. */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     :host {
       display: block;
     }
