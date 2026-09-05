@@ -4,6 +4,30 @@ When a player uses **Play someone random**, the selected game settings can
 appear to be ignored when the player is matched with someone who was already
 waiting.
 
+## Resolution
+
+Fixed, and the diagnosis is worth recording because the technical concerns
+listed below turned out to be sound already.
+
+Verified against the running application: the settings are read live when
+matchmaking is requested, the queue stores the game type, round count and time
+limit together, and the created session uses all three unchanged and
+consistently for both players. Removing that in the server makes two tests
+fail, so the behaviour is genuinely covered rather than incidental.
+
+The actual defect was that the chosen policy — the waiting player's settings
+are authoritative — was documented only in `docs/web`, where developers read
+it, and never where the player makes the choice. A player who joined an
+existing game silently got a game they had not picked.
+
+The matchmaking control now states both halves before you commit: if someone
+is already waiting you join *their* game with *their* settings; otherwise you
+wait and the next player joins *yours*. The waiting state repeats that the
+game on offer uses your settings.
+
+No behaviour change — the policy was already deterministic and applied
+consistently. What changed is that it is now honest.
+
 ## Observed behavior
 
 The player chooses a round count, time limit, and verse restriction in the

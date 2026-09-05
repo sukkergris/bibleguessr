@@ -646,8 +646,11 @@ export class RoomSetup extends LitElement {
   private _renderMatchmaking() {
     if (this.waitingForMatch) {
       return html`
-        <div class="matchmaking" role="status">
-          <p>Waiting for another player to join…</p>
+        <div class="matchmaking">
+          <p role="status">Waiting for another player to join…</p>
+          <p class="matchmaking-hint">
+            The game will use your settings above — whoever joins you plays the game you chose.
+          </p>
           <button type="button" class="secondary" @click=${this._onCancelMatchmaking}>Stop waiting</button>
         </div>
       `
@@ -656,8 +659,14 @@ export class RoomSetup extends LitElement {
     return html`
       <div class="matchmaking">
         <button type="button" @click=${this._onFindMatch}>Play someone random</button>
+        <!-- States the policy where the choice is actually made. Burying
+             it in developer docs left the joining player silently playing
+             a game they did not pick — see
+             docs/SCRUM/BUGS/Bug.PlaySomeoneRandom.md. -->
         <p class="matchmaking-hint">
-          Starts a game with whoever is already waiting, or waits for the next player.
+          If someone is already waiting, you'll join their game and play with
+          <strong>their settings</strong>. Otherwise you'll wait, and the next player joins
+          <strong>your settings</strong> above.
         </p>
       </div>
     `
