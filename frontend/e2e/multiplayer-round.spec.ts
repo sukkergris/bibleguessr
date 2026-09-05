@@ -33,6 +33,83 @@ async function joinWorldChat(page: Page, name: string): Promise<string> {
   return translation
 }
 
+// Shared setup for the pre-join screen: pick a translation and enter a
+// name, stopping just before the caller chooses WHICH room to enter.
+// Returns the translation this page selected for itself (see
+// joinWorldChat's note on why callers sometimes need it).
+async function prepareToJoin(page: Page, name: string): Promise<string> {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Multiplayer' }).click()
+  // The server-translation dropdown auto-selects its first option once
+  // loaded — wait for that (rather than a fixed timeout) before the name
+  // field/Join button, which are disabled until a translation is chosen
+  // (see docs/SCRUM/Feature.RequestToStartMPGame.md's per-player-translation
+  // note: this happens before the name field, not after).
+  const translationField = page.getByRole('combobox', { name: 'Translation' })
+  await expect(translationField).not.toHaveValue('')
+  const translation = await translationField.inputValue()
+  await page.getByPlaceholder('e.g. Alice').fill(name)
+  return translation
+}
+
+/** Creates a private room for `hostPage` and returns its code, so extra
+ * players can be brought into the SAME room (see joinRoomByCode). */
+async function createPrivateRoom(hostPage: Page, hostName: string): Promise<{ roomCode: string; translation: string }> {
+  const translation = await prepareToJoin(hostPage, hostName)
+  await hostPage.getByRole('button', { name: 'Create a room' }).click()
+
+  const codeLocator = hostPage.locator('bg-room-setup h1 .code')
+  await expect(codeLocator).toBeVisible()
+  return { roomCode: (await codeLocator.innerText()).trim(), translation }
+}
+
+/** Brings another player into an existing private room by its code. */
+async function joinRoomByCode(page: Page, name: string, roomCode: string): Promise<string> {
+  const translation = await prepareToJoin(page, name)
+  await page.getByPlaceholder('Room code').fill(roomCode)
+  await page.getByRole('button', { name: 'Join', exact: true }).click()
+  await expect(page.locator('bg-room-setup h1 .code')).toHaveText(roomCode)
+  return translation
+}
+
+/** Puts two players alone together in a freshly created private room.
+ *
+ * Prefer this over joinWorldChat for anything that starts a game. Every
+ * test used to join the one shared World chat room, so tests ran into
+ * each other's players and leftover games — failures appeared and
+ * vanished between runs and looked like product bugs when they were not
+ * (see docs/SCRUM/Task.IsolateMultiplayerTestsFromEachOther.md). A room
+ * created per test can only ever contain that test's own two players.
+ *
+ * Returns each player's own chosen translation, in the order given. */
+async function joinPrivateRoom(
+  hostPage: Page,
+  hostName: string,
+  guestPage: Page,
+  guestName: string,
+): Promise<{ hostTranslation: string; guestTranslation: string }> {
+  const hostTranslation = await prepareToJoin(hostPage, hostName)
+  await hostPage.getByRole('button', { name: 'Create a room' }).click()
+
+  // The heading reads "Room <code>" once created — that code is what the
+  // guest needs to reach this same room.
+  const codeLocator = hostPage.locator('bg-room-setup h1 .code')
+  await expect(codeLocator).toBeVisible()
+  const roomCode = (await codeLocator.innerText()).trim()
+
+  const guestTranslation = await prepareToJoin(guestPage, guestName)
+  await guestPage.getByPlaceholder('Room code').fill(roomCode)
+  await guestPage.getByRole('button', { name: 'Join', exact: true }).click()
+  await expect(guestPage.locator('bg-room-setup h1 .code')).toHaveText(roomCode)
+
+  // Both players must see each other before a test starts driving the
+  // roster, otherwise a challenge can be sent before the target exists.
+  await expect(hostPage.getByRole('listitem').filter({ hasText: guestName })).toBeVisible()
+  await expect(guestPage.getByRole('listitem').filter({ hasText: hostName })).toBeVisible()
+
+  return { hostTranslation, guestTranslation }
+}
+
 // Joins World chat using an UPLOADED Bible file instead of the server
 // translation — fixtures/genesis1-full.zip spells its one book "Genesis",
 // a genuinely different spelling than the server's own bibelen-dk pool
@@ -44,7 +121,7 @@ async function joinWorldChat(page: Page, name: string): Promise<string> {
 // file has no book called that — only book-NUMBER-based resolution (see
 // book-numbers.ts) fixes it, since both sources put Genesis at position 1
 // regardless of spelling.
-async function joinWorldChatWithUploadedFile(page: Page, name: string) {
+async function joinRoomByCodeWithUploadedFile(page: Page, name: string, roomCode: string) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
   await page.getByRole('tab', { name: 'My own Bible file' }).click()
@@ -54,8 +131,9 @@ async function joinWorldChatWithUploadedFile(page: Page, name: string) {
   await expect(page.getByText(/^✓ Using/)).toBeVisible({ timeout: 10_000 })
 
   await page.getByPlaceholder('e.g. Alice').fill(name)
-  await page.getByRole('button', { name: 'Join World chat' }).click()
-  await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
+  await page.getByPlaceholder('Room code').fill(roomCode)
+  await page.getByRole('button', { name: 'Join', exact: true }).click()
+  await expect(page.locator('bg-room-setup h1 .code')).toHaveText(roomCode)
 }
 
 // Sets the challenge-settings round-count slider to `rounds` before
@@ -105,8 +183,7 @@ test('accepting a play request starts a synced round with the same verse for bot
     const aliceName = `Alice${suffix}r`
     const bobName = `Bob${suffix}r`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
     await expect(bobInRoster).toBeVisible()
@@ -169,8 +246,12 @@ test('each player resolves the round verse from their OWN chosen translation, no
     // will be equal in practice; the point of this test is that each
     // page's OWN selection (whatever it is) is what its own lookup calls
     // use later, not a shared/opponent's value.
-    const translationA = await joinWorldChat(pageA, aliceName)
-    const translationB = await joinWorldChat(pageB, bobName)
+    const { hostTranslation: translationA, guestTranslation: translationB } = await joinPrivateRoom(
+      pageA,
+      aliceName,
+      pageB,
+      bobName,
+    )
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
     await bobInRoster.click()
@@ -213,8 +294,7 @@ test('both players guessing auto-advances the round without either clicking anyt
     const aliceName = `Alice${suffix}a`
     const bobName = `Bob${suffix}a`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     await setRoundCount(pageA, 3)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
@@ -252,8 +332,7 @@ test('a full short game reaches the multiplayer results screen with matching fin
     const aliceName = `Alice${suffix}g`
     const bobName = `Bob${suffix}g`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     await setRoundCount(pageA, 3)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
@@ -294,7 +373,10 @@ test('a full short game reaches the multiplayer results screen with matching fin
 
     await pageA.getByRole('button', { name: 'Back to room' }).click()
     await expect(pageA.locator('bg-multiplayer-results')).not.toBeVisible()
-    await expect(pageA.getByRole('heading', { name: 'World chat' })).toBeVisible()
+    // Back in the room this game was played from — asserted via the room
+    // heading rather than a specific room name, since this test now runs
+    // in a private room rather than World chat.
+    await expect(pageA.locator('bg-room-setup h1 .code')).toBeVisible()
   } finally {
     await ctxA.close()
     await ctxB.close()
@@ -312,8 +394,7 @@ test('opponent tab closing mid-game shows a disconnected indicator', async ({ br
     const aliceName = `Alice${suffix}p`
     const bobName = `Bob${suffix}p`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
     await bobInRoster.click()
@@ -351,8 +432,7 @@ test('leaving mid-game via Forfeit uses the custom confirmation dialog', async (
     const aliceName = `Alice${suffix}f`;
     const bobName = `Bob${suffix}f`;
 
-    await joinWorldChat(pageA, aliceName);
-    await joinWorldChat(pageB, bobName);
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName);
 
     const bobInRoster = pageA
       .getByRole('listitem')
@@ -406,8 +486,7 @@ test('the remaining player still reaches the results screen when the opponent le
     const aliceName = `Alice${suffix}h`
     const bobName = `Bob${suffix}h`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
     await bobInRoster.click()
@@ -451,8 +530,9 @@ test('a player whose uploaded file spells a book differently than the server can
     // round onto exactly the book whose spelling differs between them —
     // genesis1-full.zip's full 31-verse chapter 1 means any verse the
     // server randomly picks there is guaranteed to exist in Bob's file too.
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChatWithUploadedFile(pageB, bobName)
+    const { roomCode } = await createPrivateRoom(pageA, aliceName)
+    await joinRoomByCodeWithUploadedFile(pageB, bobName, roomCode)
+    await expect(pageA.getByRole('listitem').filter({ hasText: bobName })).toBeVisible()
 
     await pageA.getByRole('tab', { name: 'Chapters' }).click()
     await pageA.getByLabel('Book').selectOption('1.Mosebog')
@@ -523,8 +603,7 @@ test('a player who never guesses sees "Choked!" for themself, and their opponent
     const aliceName = `Alice${suffix}c`
     const bobName = `Bob${suffix}c`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     await setRoundCount(pageA, 3)
     await setTimeLimit(pageA, 2)
 
@@ -573,8 +652,7 @@ test('the screen blinks in the final 7 seconds of a timed round, and stops once 
     const aliceName = `Alice${suffix}b`
     const bobName = `Bob${suffix}b`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     // 15s: the danger window is the final 7s, so this leaves ~8s of
     // "definitely not blinking yet" for the assertion below AND a full
     // 7s of blinking after. Earlier values (8s, then 12s) left too
@@ -625,8 +703,7 @@ test('a round at or below the blink threshold never triggers the blink', async (
     const aliceName = `Alice${suffix}n`
     const bobName = `Bob${suffix}n`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     // 2s is the slider's actual minimum reachable timed value (see
     // docs/SCRUM/Featire.ScoreDuringMultiplayerGame.md's slider clamp).
     // Any round at or below MIN_BLINKABLE_ROUND_SECONDS (7s — equal to
@@ -692,8 +769,7 @@ test('checking "Enter epilepsy-inducing stress mode" pushes the blink past the d
     const aliceName = `Alice${suffix}e`
     const bobName = `Bob${suffix}e`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
 
     // Only Alice opts in — Bob's own screen should stay at the safe cap
     // regardless, since this is a local, per-player preference (see
@@ -796,8 +872,7 @@ test('the blink stops when the game ends by forfeit mid-countdown', async ({ bro
     const aliceName = `Alice${suffix}fb`
     const bobName = `Bob${suffix}fb`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     // Comfortably above MIN_BLINKABLE_ROUND_SECONDS so the round DOES
     // blink, but long enough that the forfeit below lands while the
     // countdown is still running rather than after it has expired.
@@ -853,8 +928,7 @@ test('a Books-scoped play request shows the actual books, not a stale unrestrict
     const aliceName = `Alice${suffix}gt`
     const bobName = `Bob${suffix}gt`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
 
     // First: an all-verses request, which Bob denies. This is what
     // populates the stale cache entry under Alice's player id.
@@ -906,8 +980,7 @@ test('the opponent still reaches results when a forfeit lands during a reveal ho
     const aliceName = `Alice${suffix}fh`
     const bobName = `Bob${suffix}fh`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
     await setRoundCount(pageA, 5)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
@@ -951,8 +1024,7 @@ test('the challenger reaches results when the accepting player forfeits', async 
     const aliceName = `Alice${suffix}fa`
     const bobName = `Bob${suffix}fa`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
+    await joinPrivateRoom(pageA, aliceName, pageB, bobName)
 
     const bobInRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
     await bobInRoster.click()
@@ -998,9 +1070,11 @@ test('a player already in a game is shown as busy and cannot be challenged', asy
     const bobName = `Bob${suffix}bz`
     const carolName = `Carol${suffix}bz`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
-    await joinWorldChat(pageC, carolName)
+    const { roomCode } = await createPrivateRoom(pageA, aliceName)
+    await joinRoomByCode(pageB, bobName, roomCode)
+    await joinRoomByCode(pageC, carolName, roomCode)
+    await expect(pageC.getByRole('listitem').filter({ hasText: aliceName })).toBeVisible()
+    await expect(pageC.getByRole('listitem').filter({ hasText: bobName })).toBeVisible()
 
     // Alice and Bob start a game; Carol watches from the lobby.
     const bobInAlicesRoster = pageA.getByRole('listitem').filter({ hasText: bobName })
@@ -1022,5 +1096,44 @@ test('a player already in a game is shown as busy and cannot be challenged', asy
     await ctxA.close()
     await ctxB.close()
     await ctxC.close()
+  }
+})
+
+// Every other test in this file now uses a private room so it can't collide
+// with another test's players (see
+// docs/SCRUM/Task.IsolateMultiplayerTestsFromEachOther.md). World chat is
+// still the room real players land in by default, though, and it's the only
+// one where many players share a space — so this one test deliberately keeps
+// covering that path end to end. It is intentionally the ONLY World chat
+// test: more than one, and they would start interfering with each other
+// again, which is the whole problem the private rooms solve.
+test('two players can meet in World chat and start a game there', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const ctxB = await browser.newContext()
+  const pageA = await ctxA.newPage()
+  const pageB = await ctxB.newPage()
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const aliceName = `Alice${suffix}wc`
+    const bobName = `Bob${suffix}wc`
+
+    await joinWorldChat(pageA, aliceName)
+    await joinWorldChat(pageB, bobName)
+
+    // Filtered by these test-unique names rather than asserting on the
+    // whole roster: World chat may legitimately hold other players.
+    await pageA.getByRole('listitem').filter({ hasText: bobName }).click()
+    await pageB
+      .getByRole('listitem')
+      .filter({ hasText: `${aliceName} wants to play` })
+      .getByRole('button', { name: 'Accept' })
+      .click()
+
+    await expect(pageA.getByText('Round 1 /')).toBeVisible()
+    await expect(pageB.getByText('Round 1 /')).toBeVisible()
+  } finally {
+    await ctxA.close()
+    await ctxB.close()
   }
 })

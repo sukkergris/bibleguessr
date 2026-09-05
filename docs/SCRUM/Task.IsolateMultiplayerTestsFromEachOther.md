@@ -12,10 +12,25 @@ work were chased as regressions before the shared room turned out to be the
 cause. It also hides genuine bugs: a real defect and a room-sharing artifact
 produce the same symptom, so neither can be trusted without re-running.
 
-Note that the shared room is only half the problem. The underlying product
-defect it exposes is described in BUGS/BUG.StaleGameOverEndsTheWrongGame.md
-and should be fixed first — isolating the tests without fixing that would
-hide a real bug rather than solve it.
+Note that the shared room was only half the problem. The underlying product
+defect it exposed is described in DONE/BUG.StaleGameOverEndsTheWrongGame.md,
+and was deliberately fixed first — isolating the tests beforehand would have
+hidden that bug rather than solved it.
+
+## Resolution
+
+Done for the room-sharing half. Each test now creates its own room and
+brings its players into it by code, so no test can see another test's
+players or leftover games. One deliberate exception remains: a single test
+still uses World chat, because that is the room real players land in by
+default and it would otherwise have no coverage at all. It is filtered by
+its own player names so other occupants cannot affect it.
+
+The suite now runs in parallel, which was not previously possible: 19 tests
+in about 23 seconds with four workers, versus about 1.1 minutes serially,
+and repeated runs pass cleanly both serially and in parallel.
+
+The file split described below has NOT been done yet.
 
 ## Requirements
 
