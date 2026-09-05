@@ -358,6 +358,17 @@ module GameSession =
         | InProgress _, LimitedTo limit, Some startedAt -> now - startedAt >= limit
         | _ -> false
 
+/// One player waiting to be matched, with the settings they chose. The
+/// settings travel with the entry so a match starts the game the waiting
+/// player actually asked for, rather than whatever the joiner happened to
+/// have selected.
+type MatchmakingEntry =
+    { PlayerId: PlayerId
+      GameType: GameType
+      RoundCount: int
+      RoundTimeLimit: TimeLimit
+      WaitingSince: DateTimeOffset }
+
 type Room =
     { Code: RoomCode
       Players: Player list
@@ -386,7 +397,16 @@ type Room =
       /// GameSession. At most one at a time, and each player may be in at
       /// most one active game across the whole app (enforced at
       /// SendPlayRequest/AcceptPlayRequest — see GameHub.fs — not here). }
-      ActiveGame: GameSession option }
+      ActiveGame: GameSession option
+      /// Players waiting to be matched with whoever else is waiting — see
+      /// docs/SCRUM/TODO/Feature.StartMulitplayerGameWaitForRandomPlayer.md
+      /// and Feature.ConnectToRandomNextOpenGame.md, which are the two
+      /// halves of the same queue: one player waits, the next to arrive
+      /// is paired with them.
+      ///
+      /// Ordered oldest-first, so whoever has waited longest is matched
+      /// first rather than an arbitrary player being picked.
+      WaitingForMatch: MatchmakingEntry list }
 
 module Room =
     let maxRecentMessages = 20
@@ -406,7 +426,8 @@ module Room =
           RecentMessages = []
           PendingRequests = []
           DisconnectedPlayers = Map.empty
-          ActiveGame = None }
+          ActiveGame = None
+          WaitingForMatch = [] }
 
     /// Prepends a new message and trims back down to maxRecentMessages.
     let addMessage (message: ChatMessage) (room: Room) =
@@ -484,6 +505,41 @@ module Room =
         match room.ActiveGame with
         | Some session -> session.PlayerA = playerId || session.PlayerB = playerId
         | None -> false
+
+    /// Puts `entry`'s player in the waiting queue, or replaces their
+    /// existing entry if they were already waiting — a player can only ever
+    /// hold one place in the queue, so re-requesting with different settings
+    /// updates rather than duplicates.
+    ///
+    /// Refuses (returns the room unchanged) for a player already in a game:
+    /// they cannot be matched into a second one.
+    let joinMatchmaking (entry: MatchmakingEntry) (room: Room) =
+        if isInActiveGame entry.PlayerId room then
+            room
+        else
+            let withoutExisting = room.WaitingForMatch |> List.filter (fun e -> e.PlayerId <> entry.PlayerId)
+            { room with WaitingForMatch = withoutExisting @ [ entry ] }
+
+    /// Removes a player from the queue — cancelling, leaving, or being
+    /// matched. A no-op if they weren't waiting.
+    let leaveMatchmaking (playerId: PlayerId) (room: Room) =
+        { room with WaitingForMatch = room.WaitingForMatch |> List.filter (fun e -> e.PlayerId <> playerId) }
+
+    /// Whether `playerId` is currently waiting to be matched.
+    let isWaitingForMatch (playerId: PlayerId) (room: Room) =
+        room.WaitingForMatch |> List.exists (fun e -> e.PlayerId = playerId)
+
+    /// The longest-waiting player `joinerId` could be matched with, if any.
+    ///
+    /// Deliberately skips the joiner's own entry (a player must never be
+    /// matched with themselves), anyone who has since started a game, and
+    /// anyone no longer in the room — a queue entry outlives neither.
+    let findMatchFor (joinerId: PlayerId) (room: Room) =
+        room.WaitingForMatch
+        |> List.tryFind (fun e ->
+            e.PlayerId <> joinerId
+            && not (isInActiveGame e.PlayerId room)
+            && room.Players |> List.exists (fun p -> p.Id = e.PlayerId))
 
     /// Starts `session` as this room's ActiveGame. Only meaningful to call
     /// when room.ActiveGame is None (the hub is expected to have already
@@ -586,6 +642,14 @@ module Room =
             let updated =
                 { room with
                     Players = room.Players |> List.filter (fun p -> not (idsToRemove.Contains p.Id))
+                    // A queue entry must never outlive its player, or the
+                    // next joiner would be matched against nobody. Cleared
+                    // here rather than at each call site because this is
+                    // the single choke point every removal path goes
+                    // through — voluntary leave, the stale-disconnect
+                    // sweep, and same-name rejoin alike.
+                    WaitingForMatch =
+                        room.WaitingForMatch |> List.filter (fun e -> not (idsToRemove.Contains e.PlayerId))
                     DisconnectedPlayers = room.DisconnectedPlayers |> Map.filter (fun id _ -> not (idsToRemove.Contains id))
                     PendingRequests =
                         room.PendingRequests

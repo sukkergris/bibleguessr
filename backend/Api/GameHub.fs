@@ -159,6 +159,18 @@ let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
 [<Literal>]
 let PlayRequestAcceptedEvent = "PlayRequestAccepted"
 
+/// Sent to the caller when they join the matchmaking queue and nobody is
+/// waiting yet — see
+/// docs/SCRUM/TODO/Feature.StartMulitplayerGameWaitForRandomPlayer.md.
+/// The game itself starts later, via the usual RoundStarted, once someone
+/// else asks to be matched.
+[<Literal>]
+let WaitingForMatchEvent = "WaitingForMatch"
+
+/// Sent to the caller when they stop waiting without being matched.
+[<Literal>]
+let MatchmakingCancelledEvent = "MatchmakingCancelled"
+
 /// Sent to the room when the challenged player denies a play request —
 /// same payload shape as PlayRequestAccepted. Also sent from
 /// OnDisconnectedAsync (not just the explicit DenyPlayRequest hub method)
@@ -689,6 +701,101 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
     /// the opponent as the surviving player. A no-op (no error) if the
     /// caller doesn't have an active game — mirrors WithdrawPlayRequest's
     /// forgiving semantics.
+    /// Asks to be matched with any other waiting player — the single entry
+    /// point for both halves of matchmaking (see
+    /// docs/SCRUM/TODO/Feature.StartMulitplayerGameWaitForRandomPlayer.md
+    /// and Feature.ConnectToRandomNextOpenGame.md). If someone is already
+    /// waiting, a game starts immediately; otherwise the caller waits.
+    ///
+    /// Deliberately one method rather than "create a wait" and "join a
+    /// wait": whether you wait or are matched depends entirely on who else
+    /// happens to be in the queue at that instant, and splitting it would
+    /// make that a race the client has to resolve.
+    member this.FindMatch(gameType: GameType, roundCount: int, timeLimitSeconds: int option) : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, player) ->
+                let timeLimit =
+                    match timeLimitSeconds with
+                    | Some seconds when seconds > 0 -> LimitedTo(TimeSpan.FromSeconds(float seconds))
+                    | _ -> Unlimited
+
+                // Minted outside the retried Update closure, for the same
+                // reason as AcceptPlayRequest's.
+                let gameId = GameId(Guid.NewGuid())
+                let mutable started: GameSession option = None
+                let mutable waiting = false
+
+                rooms.Update(
+                    roomCode,
+                    fun room ->
+                        started <- None
+                        waiting <- false
+
+                        if Room.isInActiveGame player.Id room then
+                            room
+                        else
+                            match Room.findMatchFor player.Id room with
+                            | Some opponent ->
+                                // The waiting player's settings win: they
+                                // asked first, and the joiner opted into
+                                // "whatever is open" rather than a
+                                // particular game.
+                                match pickRandomVerse verses opponent.GameType with
+                                | None -> room
+                                | Some firstVerse ->
+                                    let session =
+                                        GameSession.start
+                                            gameId
+                                            opponent.PlayerId
+                                            player.Id
+                                            opponent.GameType
+                                            opponent.RoundCount
+                                            opponent.RoundTimeLimit
+                                            firstVerse
+                                            DateTimeOffset.UtcNow
+
+                                    started <- Some session
+
+                                    room
+                                    |> Room.leaveMatchmaking opponent.PlayerId
+                                    |> Room.leaveMatchmaking player.Id
+                                    |> Room.startGame session
+                            | None ->
+                                waiting <- true
+
+                                let entry =
+                                    { PlayerId = player.Id
+                                      GameType = gameType
+                                      RoundCount = roundCount
+                                      RoundTimeLimit = timeLimit
+                                      WaitingSince = DateTimeOffset.UtcNow }
+
+                                Room.joinMatchmaking entry room
+                )
+                |> ignore
+
+                match started with
+                | Some session -> do! this.Clients.Group(roomCode).SendAsync(RoundStartedEvent, session)
+                | None ->
+                    if waiting then
+                        do! this.Clients.Caller.SendAsync(WaitingForMatchEvent)
+                    else
+                        do! this.Clients.Caller.SendAsync("Error", "You already have a game in progress")
+        }
+
+    /// Stops waiting to be matched. A no-op if the caller wasn't waiting,
+    /// so a cancel racing a match can't fail loudly.
+    member this.CancelMatchmaking() : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | Some(RoomCode roomCode, player) ->
+                rooms.Update(roomCode, Room.leaveMatchmaking player.Id) |> ignore
+                do! this.Clients.Caller.SendAsync(MatchmakingCancelledEvent)
+        }
+
     member this.ForfeitGame() : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with

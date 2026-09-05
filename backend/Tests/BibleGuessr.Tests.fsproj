@@ -10,6 +10,7 @@
     <Compile Include="ScoringTests.fs" />
     <Compile Include="AbuseReportTests.fs" />
     <Compile Include="GeneralBugReportTests.fs" />
+    <Compile Include="MatchmakingTests.fs" />
     <Compile Include="PlayRequestTests.fs" />
     <Compile Include="GameSessionTests.fs" />
     <Compile Include="RoomActiveGameTests.fs" />

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Random matchmaking — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Random matchmaking</h1>
+      <p class="subtitle">
+        Play someone random: wait for the next available player, or be paired immediately with whoever is already
+        waiting.
+      </p>
+
+      <h2>One queue, not two features</h2>
+      <p>
+        Waiting for a random player and joining an open game are the two halves of a single queue, so they are one
+        hub method rather than two. Whether you wait or are matched depends entirely on who happens to be queued at
+        that instant — splitting it would turn that into a race the client has to resolve, and the client cannot know
+        the answer.
+      </p>
+      <p>
+        The queue is ordered oldest-first, so whoever has waited longest is matched first rather than an arbitrary
+        player being picked. It is room-scoped: a player waiting in one room is never matched with someone in another.
+      </p>
+
+      <h2>What cannot happen</h2>
+      <p>
+        A player is never matched with themselves, never matched into a second game while already in one, and never
+        matched with someone who has since left — a queue entry does not outlive its player. That last rule is
+        enforced in <code>removePlayers</code>, the single choke point every removal path goes through: voluntary
+        leave, the stale-disconnect sweep, and same-name rejoin alike.
+      </p>
+      <p>
+        A player holds at most one place in the queue, so asking again with different settings updates their entry
+        rather than queueing them twice.
+      </p>
+
+      <h2>Which settings the game uses</h2>
+      <p>
+        The waiting player's. They chose first, and the joiner opted into "whatever is open" rather than a particular
+        game, so the settings travel with the queue entry and the game that starts is the one the waiting player
+        actually asked for.
+      </p>
+
+      <h2>Starting the game</h2>
+      <p>
+        A match starts the game through the same <code>RoundStarted</code> broadcast as any other game — there is no
+        separate "matched" event, because that message already carries everything a client needs. A matched game has
+        no play request behind it, so the client resolves its opponent from the session itself; without that the game
+        screen would never mount for either player.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        The queue lives on the room as <code>WaitingForMatch</code>, with pure operations in
+        <span class="file-ref">backend/Domain/Game.fs</span> (<code>joinMatchmaking</code>,
+        <code>leaveMatchmaking</code>, <code>findMatchFor</code>) and the hub methods
+        <code>FindMatch</code>/<code>CancelMatchmaking</code> in
+        <span class="file-ref">backend/Api/GameHub.fs</span>.
+        <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> owns the button, the waiting state and
+        the cancel path.
+      </p>
+      <p>
+        Queue rules are unit tested in <span class="file-ref">backend/Tests/MatchmakingTests.fs</span>; waiting,
+        pairing and cancelling end to end in <span class="file-ref">frontend/e2e/matchmaking.spec.ts</span>, which
+        uses private rooms so a player left waiting by another test cannot match this one's first player instantly.
+      </p>
+    </main>
+  </body>
+</html>

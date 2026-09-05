@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.4.0"
+let BackendVersion = "0.5.0"
 
 [<EntryPoint>]
 let main args =

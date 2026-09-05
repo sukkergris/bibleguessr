@@ -11,6 +11,8 @@ export const HubEvents = {
   ChatMessageReceived: 'ChatMessageReceived',
   ChatHistory: 'ChatHistory',
   RoomPlayers: 'RoomPlayers',
+  WaitingForMatch: 'WaitingForMatch',
+  MatchmakingCancelled: 'MatchmakingCancelled',
   PlayRequestReceived: 'PlayRequestReceived',
   PlayRequestWithdrawn: 'PlayRequestWithdrawn',
   PlayRequestAccepted: 'PlayRequestAccepted',
@@ -458,5 +460,54 @@ export function onHubError(handler: (message: string) => void): () => void {
   return () => {
     cancelled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.Error, listener))
+  }
+}
+
+/** Asks to be matched with any other waiting player — see
+ * docs/SCRUM/DONE/Feature.StartMulitplayerGameWaitForRandomPlayer.md. If
+ * someone is already waiting a game starts at once (arriving as the usual
+ * RoundStarted); otherwise the caller is queued and gets WaitingForMatch. */
+export async function findMatch(
+  gameType: GameType,
+  roundCount: number,
+  timeLimitSeconds?: number,
+): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('FindMatch', gameType, roundCount, timeLimitSeconds ?? null)
+}
+
+/** Stops waiting to be matched. Safe to call when not waiting. */
+export async function cancelMatchmaking(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('CancelMatchmaking')
+}
+
+/** Subscribes to being queued for a match. Returns an unsubscribe function. */
+export function onWaitingForMatch(handler: () => void): () => void {
+  let cancelled = false
+  const listener = () => {
+    if (!cancelled) handler()
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.WaitingForMatch, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.WaitingForMatch, listener))
+  }
+}
+
+/** Subscribes to matchmaking being cancelled. Returns an unsubscribe function. */
+export function onMatchmakingCancelled(handler: () => void): () => void {
+  let cancelled = false
+  const listener = () => {
+    if (!cancelled) handler()
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(HubEvents.MatchmakingCancelled, listener))
+
+  return () => {
+    cancelled = true
+    void getGameHubConnection().then((hub) => hub.off(HubEvents.MatchmakingCancelled, listener))
   }
 }

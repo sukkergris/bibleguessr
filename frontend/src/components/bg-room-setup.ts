@@ -22,6 +22,10 @@ import {
   onPlayRequestWithdrawn,
   onRoomPlayers,
   onRoundStarted,
+  cancelMatchmaking,
+  findMatch,
+  onMatchmakingCancelled,
+  onWaitingForMatch,
   sendChatMessage,
   sendPlayRequest,
   withdrawPlayRequest,
@@ -120,6 +124,12 @@ export class RoomSetup extends LitElement {
   @state()
   private activeGameIds = new Set<string>()
 
+  /** Whether this player is queued for a random match. Server-driven: set
+   * by WaitingForMatch, cleared by the game starting or by cancelling, so
+   * the UI never claims to be waiting when the server disagrees. */
+  @state()
+  private waitingForMatch = false
+
   private get _busyState(): RosterBusyState {
     return { activeGameIds: this.activeGameIds, busyPlayerIds: this.busyPlayerIds }
   }
@@ -203,6 +213,8 @@ export class RoomSetup extends LitElement {
    * this one is room-wide busy-tracking (see busyPlayerIds), not this
    * player's own game ending. */
   private _unsubscribeGameOverBusy?: () => void
+  private _unsubscribeWaitingForMatch?: () => void
+  private _unsubscribeMatchmakingCancelled?: () => void
 
   disconnectedCallback() {
     // This element is torn down wholesale (not via _onLeaveRoom's own
@@ -232,6 +244,8 @@ export class RoomSetup extends LitElement {
     this._unsubscribePlayerLeft?.()
     this._unsubscribeRoundStarted?.()
     this._unsubscribeGameOverBusy?.()
+    this._unsubscribeWaitingForMatch?.()
+    this._unsubscribeMatchmakingCancelled?.()
     super.disconnectedCallback()
   }
 
@@ -342,6 +356,8 @@ export class RoomSetup extends LitElement {
                   .translation=${this.myTranslationChoice?.translation}
                   @challenge-settings-changed=${this._onChallengeSettingsChanged}
                 ></bg-challenge-settings>
+
+                ${this._renderMatchmaking()}
 
                 <bg-chat-panel
                   .players=${this.players}
@@ -513,10 +529,34 @@ export class RoomSetup extends LitElement {
       // players busy for everyone else's roster, not just mine.
       this._applyBusyState(gameStarted(this._busyState, session.gameId, session.playerA, session.playerB))
 
+      // Being in the game that just started is what ends the wait — the
+      // server never sends a separate "matched" event, since RoundStarted
+      // already says everything the client needs.
+      if (session.playerA === this.myPlayerId || session.playerB === this.myPlayerId) {
+        this.waitingForMatch = false
+
+        // A matched game has no play request behind it, so nothing else
+        // will set the opponent — and without it the game screen never
+        // mounts. Resolved from the session itself, which is the only
+        // place a matched player learns who they were paired with.
+        if (!this.activeGameOpponent) {
+          const opponentId = session.playerA === this.myPlayerId ? session.playerB : session.playerA
+          const opponent = this.players.find((p) => p.id === opponentId)
+          this.activeGameOpponent = { id: opponentId, name: opponent?.name ?? 'Your opponent' }
+          this.initialSession = session
+        }
+      }
+
       const opponentId = this.activeGameOpponent?.id
       if (!opponentId) return
       const pair = new Set([session.playerA, session.playerB])
       if (pair.has(this.myPlayerId) && pair.has(opponentId)) this.initialSession = session
+    })
+    this._unsubscribeWaitingForMatch = onWaitingForMatch(() => {
+      this.waitingForMatch = true
+    })
+    this._unsubscribeMatchmakingCancelled = onMatchmakingCancelled(() => {
+      this.waitingForMatch = false
     })
     this._unsubscribeGameOverBusy = onGameOver((gameId, _scores, playerA, playerB) => {
       // Matched by game id, not merely by the player pair — see
@@ -598,6 +638,49 @@ export class RoomSetup extends LitElement {
     })
   }
 
+  /** "Play someone random" — see
+   * docs/SCRUM/DONE/Feature.StartMulitplayerGameWaitForRandomPlayer.md and
+   * Feature.ConnectToRandomNextOpenGame.md, the two halves of one queue.
+   * The button both joins the queue and takes an open slot: which happens
+   * depends on who is already waiting, which only the server can know. */
+  private _renderMatchmaking() {
+    if (this.waitingForMatch) {
+      return html`
+        <div class="matchmaking" role="status">
+          <p>Waiting for another player to join…</p>
+          <button type="button" class="secondary" @click=${this._onCancelMatchmaking}>Stop waiting</button>
+        </div>
+      `
+    }
+
+    return html`
+      <div class="matchmaking">
+        <button type="button" @click=${this._onFindMatch}>Play someone random</button>
+        <p class="matchmaking-hint">
+          Starts a game with whoever is already waiting, or waits for the next player.
+        </p>
+      </div>
+    `
+  }
+
+  private _onFindMatch() {
+    const { scope, restriction, roundCount, timeLimitSeconds } = this.challengeSettings
+    const verseSource = this.myTranslationChoice?.verseSource
+    if (!verseSource) return
+
+    gameTypeFromRestriction(scope, verseSource, this.myTranslationChoice?.translation, restriction)
+      .then((gameType) => findMatch(gameType, roundCount, timeLimitSeconds))
+      .catch((err) => {
+        console.error('[bg-room-setup] failed to look for a match', err)
+      })
+  }
+
+  private _onCancelMatchmaking() {
+    cancelMatchmaking().catch((err) => {
+      console.error('[bg-room-setup] failed to stop waiting for a match', err)
+    })
+  }
+
   private _onChallengeSettingsChanged(event: CustomEvent<ChallengeSettings>) {
     this.challengeSettings = event.detail
   }
@@ -665,6 +748,8 @@ export class RoomSetup extends LitElement {
     this._unsubscribePlayerLeft?.()
     this._unsubscribeRoundStarted?.()
     this._unsubscribeGameOverBusy?.()
+    this._unsubscribeWaitingForMatch?.()
+    this._unsubscribeMatchmakingCancelled?.()
 
     this.players = []
     this.messages = []
@@ -678,12 +763,26 @@ export class RoomSetup extends LitElement {
     this.disconnectedPlayerIds = new Set()
     this.busyPlayerIds = new Set()
     this.activeGameIds = new Set()
+    this.waitingForMatch = false
     this.error = undefined
     this.connectionState = 'connected'
     this.screen = { step: 'choose' }
   }
 
   static styles = css`
+    .matchmaking {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      align-items: flex-start;
+    }
+
+    .matchmaking-hint {
+      margin: 0;
+      font-size: 0.85rem;
+      opacity: 0.75;
+    }
+
     /* See chat-panel.ts for why a placeholder can't serve as a label. */
     .visually-hidden {
       position: absolute;
