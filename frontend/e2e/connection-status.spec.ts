@@ -105,3 +105,21 @@ test('the realtime row reports a real connection inside multiplayer', async ({ p
   await expect.poll(async () => (await realtimeValue(page))?.className).toContain('ok')
   expect((await realtimeValue(page))?.text).toMatch(/connected/i)
 })
+
+// The panel used to open straight into two data rows with nothing saying
+// what they described — no visible heading, and no accessible name for a
+// screen-reader user landing in it.
+test('the details panel names itself', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('bg-connection-status').click()
+
+  const panel = page.locator('bg-connection-status .details')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('h2')).toHaveText('Connection status')
+
+  // The heading also names the group, so assistive technology announces
+  // what the rows belong to rather than reading them bare.
+  const labelledBy = await panel.getAttribute('aria-labelledby')
+  expect(labelledBy).toBeTruthy()
+  await expect(panel.locator(`#${labelledBy}`)).toHaveText('Connection status')
+})

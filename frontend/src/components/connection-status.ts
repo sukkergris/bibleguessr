@@ -230,7 +230,11 @@ export class ConnectionStatus extends LitElement {
 
   private _renderDetails() {
     return html`
-      <div class="details">
+      <div class="details" role="group" aria-labelledby="connection-status-heading">
+        <!-- Names the panel for screen readers as well as sighted users:
+             it previously opened straight into two data rows, so there
+             was nothing saying what they described. -->
+        <h2 id="connection-status-heading">Connection status</h2>
         <div class="row">
           <span class="label">Backend (${api.baseUrl})</span>
           ${this.http.status === 'checking'
@@ -323,6 +327,15 @@ export class ConnectionStatus extends LitElement {
       color: var(--text-muted);
     }
 
+
+    h2 {
+      margin: 0 0 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
 
     .value {
       font-weight: 600;
