@@ -249,7 +249,7 @@ let ``cancelPendingRequestsFor does not touch ActiveGame`` () =
             Players = [ disconnecting; opponent ] }
 
     let room = Room.sendPlayRequest request room
-    let room, _ = Room.acceptPlayRequest disconnecting.Id opponent.Id verse DateTimeOffset.UtcNow room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) disconnecting.Id opponent.Id verse DateTimeOffset.UtcNow room
 
     let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
 

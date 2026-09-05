@@ -5,6 +5,15 @@ open System
 type PlayerId = PlayerId of Guid
 type RoomCode = RoomCode of string
 
+/// Identifies one game instance. A game is NOT adequately identified by
+/// the pair of players in it: the same two people can finish a game and
+/// immediately start another, and a GameOver from the finished one still
+/// matches that pair — which used to tear the new game down mid-round
+/// (see docs/SCRUM/BUGS/BUG.StaleGameOverEndsTheWrongGame.md). Clients
+/// match on this instead, and ignore any game-scoped message whose id
+/// isn't the game they're currently playing.
+type GameId = GameId of Guid
+
 type Player =
     { Id: PlayerId
       Name: string
@@ -133,7 +142,11 @@ type PlayRequest =
 /// scored, or early via forfeit (Room.forfeitGame, or
 /// Room.removeStaleDisconnections when a participant goes stale).
 type GameSession =
-    { PlayerA: PlayerId
+    { /// This game instance's own identity — see GameId. Assigned once at
+      /// GameSession.start and never changed as the game advances, so
+      /// every round of one game shares it and no two games share one.
+      GameId: GameId
+      PlayerA: PlayerId
       PlayerB: PlayerId
       GameType: GameType
       RoundCount: int
@@ -236,7 +249,12 @@ module GameSession =
     /// an already-picked first verse (picking is impure — Random — and
     /// happens in the hub, mirroring /api/verses/random; see
     /// GameType.restrictionOf). Round 0, both scores zeroed, no guesses yet.
+    ///
+    /// `gameId` is passed in for the same reason `firstVerse` and
+    /// `startedAt` are: minting a Guid is impure, so it happens in the
+    /// hub and this stays a pure function of its arguments.
     let start
+        (gameId: GameId)
         (playerA: PlayerId)
         (playerB: PlayerId)
         (gameType: GameType)
@@ -245,7 +263,8 @@ module GameSession =
         (firstVerse: VerseReference)
         (startedAt: DateTimeOffset)
         : GameSession =
-        { PlayerA = playerA
+        { GameId = gameId
+          PlayerA = playerA
           PlayerB = playerB
           GameType = gameType
           RoundCount = roundCount
@@ -424,6 +443,7 @@ module Room =
     /// longer there (e.g. withdrawn or retargeted a moment earlier) — in
     /// which case the room is returned unchanged and no game starts.
     let acceptPlayRequest
+        (gameId: GameId)
         (fromPlayerId: PlayerId)
         (toPlayerId: PlayerId)
         (firstVerse: VerseReference)
@@ -436,7 +456,15 @@ module Room =
             let withoutRequest = removePlayRequest fromPlayerId toPlayerId room
 
             let session =
-                GameSession.start fromPlayerId toPlayerId request.GameType request.RoundCount request.RoundTimeLimit firstVerse startedAt
+                GameSession.start
+                    gameId
+                    fromPlayerId
+                    toPlayerId
+                    request.GameType
+                    request.RoundCount
+                    request.RoundTimeLimit
+                    firstVerse
+                    startedAt
 
             { withoutRequest with ActiveGame = Some session }, Some request
 

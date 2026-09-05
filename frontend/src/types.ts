@@ -113,6 +113,12 @@ export interface PlayRequest {
  * onRoomPlayers's full roster snapshot.
  */
 export interface GameSession {
+  /** This game instance's own identity — see backend/Domain/Game.fs's
+   * GameId. The player pair alone does NOT identify a game: the same two
+   * people can finish one and immediately start another, so clients match
+   * game-scoped messages on this and ignore any that belong to a
+   * different game (see BUGS/BUG.StaleGameOverEndsTheWrongGame.md). */
+  gameId: string
   playerA: string
   playerB: string
   gameType: GameType

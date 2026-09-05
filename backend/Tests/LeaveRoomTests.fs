@@ -136,7 +136,7 @@ let ``leave ends the leaver's active game, freeing their opponent`` () =
 
     let room = { Room.create (RoomCode "1234") with Players = [ alice; bob ] }
     let room = Room.sendPlayRequest request room
-    let room, _ = Room.acceptPlayRequest alice.Id bob.Id verse DateTimeOffset.UtcNow room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) alice.Id bob.Id verse DateTimeOffset.UtcNow room
 
     let updated, forfeitedOpponent = Room.leave alice.Id room
 

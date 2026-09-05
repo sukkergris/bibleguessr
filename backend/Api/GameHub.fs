@@ -311,7 +311,7 @@ let private resolveRound (group: IClientProxy) (verses: Verse list) (rooms: Room
         | NothingToResolve -> ()
         | GameCompleted scored ->
             do! group.SendAsync(RoundScoredEvent, scored)
-            do! group.SendAsync(GameOverEvent, scored.Scores, scored.PlayerA, scored.PlayerB, Completed)
+            do! group.SendAsync(GameOverEvent, scored.GameId, scored.Scores, scored.PlayerA, scored.PlayerB, Completed)
         | RoundAdvanced(scored, advanced) ->
             do! group.SendAsync(RoundScoredEvent, scored)
             do! group.SendAsync(RoundStartedEvent, advanced)
@@ -408,7 +408,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                         do!
                             this.Clients
                                 .Group(roomCode)
-                                .SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
+                                .SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
                     | None -> ()
                 | None -> ()
 
@@ -553,6 +553,12 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                 // can't be missed (see RoomStoreConcurrencyTests.fs).
                 let mutable outcome = Error "You haven't joined a room" // overwritten below on every real path
 
+                // Minted OUT here, not inside the Update closure below:
+                // that closure is retried on contention (see RoomStore),
+                // so generating the id inside would mint a different one
+                // per attempt. One accepted request = one game = one id.
+                let gameId = GameId(Guid.NewGuid())
+
                 let updatedRoom =
                     rooms.Update(
                         roomCode,
@@ -572,7 +578,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                                         room
                                     | Some firstVerse ->
                                         let updated, accepted =
-                                            Room.acceptPlayRequest fromId toPlayer.Id firstVerse DateTimeOffset.UtcNow room
+                                            Room.acceptPlayRequest gameId fromId toPlayer.Id firstVerse DateTimeOffset.UtcNow room
 
                                         outcome <- Ok accepted
                                         updated
@@ -711,7 +717,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                 match forfeitedSession with
                 | Some session ->
                     let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
-                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
+                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
                 | None -> ()
         }
 
@@ -761,7 +767,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                 match forfeitedSession with
                 | Some session ->
                     let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
-                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
+                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
                 | None -> ()
         }
 
@@ -894,7 +900,7 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, se
                                 do!
                                     hubContext.Clients
                                         .Group(roomCode)
-                                        .SendAsync(GameOverEvent, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
+                                        .SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
                             | None -> ()
                     with ex ->
                         eprintfn "[PlayerCleanupService] failed to sweep room %s: %O" roomCode ex

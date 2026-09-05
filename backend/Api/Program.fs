@@ -20,7 +20,7 @@ type ReportRequest =
       ErrorMessage: string }
 
 [<Literal>]
-let BackendVersion = "0.1.0"
+let BackendVersion = "0.2.0"
 
 [<EntryPoint>]
 let main args =

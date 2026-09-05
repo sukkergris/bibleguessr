@@ -25,7 +25,7 @@ let private makeGuess playerId book chapter verseNumber : Guess =
 let private startedAt = DateTimeOffset.UtcNow
 
 let private startSession playerA playerB roundCount timeLimit verse =
-    GameSession.start playerA playerB AllVerses roundCount timeLimit verse startedAt
+    GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses roundCount timeLimit verse startedAt
 
 [<Fact>]
 let ``start seeds both players' scores at zero`` () =
@@ -124,7 +124,7 @@ let ``scoreRound with LimitedTo awards decaying points via Scoring.pointsForGues
     let verse = makeVerse "John" 3 16
 
     let session =
-        GameSession.start playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 60.0)) verse startedAt
+        GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 60.0)) verse startedAt
         |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
 
     let scored = GameSession.scoreRound (startedAt.AddSeconds 30.0) session
@@ -247,14 +247,14 @@ let ``isRoundExpired is false for Unlimited regardless of elapsed time`` () =
 [<Fact>]
 let ``isRoundExpired is true once elapsed time reaches the LimitedTo duration`` () =
     let session =
-        GameSession.start (makePlayerId ()) (makePlayerId ()) AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
+        GameSession.start (GameId(Guid.NewGuid())) (makePlayerId ()) (makePlayerId ()) AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
 
     Assert.True(GameSession.isRoundExpired (startedAt.AddSeconds 30.0) session)
 
 [<Fact>]
 let ``isRoundExpired is false before the duration has elapsed`` () =
     let session =
-        GameSession.start (makePlayerId ()) (makePlayerId ()) AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
+        GameSession.start (GameId(Guid.NewGuid())) (makePlayerId ()) (makePlayerId ()) AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
 
     Assert.False(GameSession.isRoundExpired (startedAt.AddSeconds 10.0) session)
 
@@ -264,7 +264,23 @@ let ``isRoundExpired is false when the round is already Scored`` () =
     let playerB = makePlayerId ()
 
     let session =
-        GameSession.start playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
+        GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
         |> GameSession.scoreRound (startedAt.AddSeconds 30.0)
 
     Assert.False(GameSession.isRoundExpired (startedAt.AddSeconds 60.0) session)
+
+// A game must be identifiable in its own right, not just by the pair of
+// players in it. Without this, a GameOver from a finished game still
+// "matches" the same two players if they immediately start another one,
+// and tears the new game down mid-round — see
+// docs/SCRUM/BUGS/BUG.StaleGameOverEndsTheWrongGame.md.
+[<Fact>]
+let ``two games between the same players have different ids`` () =
+    let playerA = makePlayerId ()
+    let playerB = makePlayerId ()
+    let verse = makeVerse "John" 3 16
+
+    let first = startSession playerA playerB 5 Unlimited verse
+    let second = startSession playerA playerB 5 Unlimited verse
+
+    Assert.NotEqual(first.GameId, second.GameId)

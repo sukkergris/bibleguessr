@@ -146,7 +146,7 @@ let ``prepareJoin ends the stale player's active game, freeing their opponent`` 
             Players = [ stale; opponent ] }
 
     let room = Room.sendPlayRequest request room
-    let room, _ = Room.acceptPlayRequest stale.Id opponent.Id verse DateTimeOffset.UtcNow room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) stale.Id opponent.Id verse DateTimeOffset.UtcNow room
     let room = Room.markDisconnected stale.Id DateTimeOffset.UtcNow room
 
     match Room.prepareJoin "Alice" room with

@@ -15,6 +15,7 @@ import {
   submitGuess,
 } from '../signalr-client'
 import { loadEpilepsyStressModeEnabled } from '../flash-intensity-storage'
+import { isSameGame } from '../game-identity'
 import { computeRemainingSeconds, deadlineOf, parseTimeSpanMs } from '../timer'
 import type { GameOverReason, GameSession, GameType, Guess, Verse, VerseReference, VerseSource } from '../types'
 import type { MultiplayerGameOverDetail, MultiplayerRoundSummary } from './multiplayer-results'
@@ -312,8 +313,15 @@ export class MultiplayerGame extends LitElement {
       this._holdReveal();
     });
     this._unsubscribeGameOver = onGameOver(
-      (scores, playerA, playerB, reason) => {
-        if (!this._isMyGame(playerA, playerB)) return;
+      (gameId, scores, playerA, playerB, reason) => {
+        // Match on the game's OWN id, not on the player pair: the same
+        // two players can finish a game and immediately start another,
+        // and the finished game's event still names that pair — which
+        // used to tear the new game down mid-round (see
+        // docs/SCRUM/BUGS/BUG.StaleGameOverEndsTheWrongGame.md). An event
+        // for any other game, or one arriving before this client knows
+        // its own game id, is ignored outright.
+        if (!this._isMyGameInstance(gameId)) return;
         // A Forfeited end (opponent left/disconnected) cuts through
         // immediately, even mid-hold — the game is already over for a
         // reason unrelated to this round's own reveal, so continuing to
@@ -464,6 +472,14 @@ export class MultiplayerGame extends LitElement {
   private _isMyGame(playerA: string, playerB: string): boolean {
     const pair = new Set([playerA, playerB]);
     return pair.has(this.myPlayerId) && pair.has(this.opponentId);
+  }
+
+  /** Whether `gameId` is the game this component is actually playing —
+   * see game-identity.ts, where the rule and its rationale live (and
+   * where it's unit-tested). Replaces the weaker player-pair check
+   * (_isMyGame) for game-over specifically. */
+  private _isMyGameInstance(gameId: string): boolean {
+    return isSameGame(this.session?.gameId, gameId);
   }
 
   // Appends this round's outcome (my points / opponent's points) to the

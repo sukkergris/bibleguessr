@@ -111,6 +111,14 @@ export class RoomSetup extends LitElement {
   @state()
   private busyPlayerIds = new Set<string>()
 
+  /** Ids of the games currently running in this room (any game, not just
+   * mine) — the companion to busyPlayerIds, so a game-over can be matched
+   * to a game we actually saw start. Without it a late event from an
+   * already-finished game would clear its players' busy state while they
+   * are mid-way through their NEXT game. */
+  @state()
+  private activeGameIds = new Set<string>()
+
   @state()
   private messages: ChatMessage[] = []
 
@@ -490,15 +498,27 @@ export class RoomSetup extends LitElement {
       // game?" guard below — every game in the room marks its two
       // players busy for everyone else's roster, not just mine.
       this.busyPlayerIds = new Set(this.busyPlayerIds).add(session.playerA).add(session.playerB)
+      this.activeGameIds = new Set(this.activeGameIds).add(session.gameId)
 
       const opponentId = this.activeGameOpponent?.id
       if (!opponentId) return
       const pair = new Set([session.playerA, session.playerB])
       if (pair.has(this.myPlayerId) && pair.has(opponentId)) this.initialSession = session
     })
-    this._unsubscribeGameOverBusy = onGameOver((_scores, playerA, playerB) => {
+    this._unsubscribeGameOverBusy = onGameOver((gameId, _scores, playerA, playerB) => {
       // Whatever ended it (completed or forfeited), both players are
       // available again — same room-wide scope as the RoundStarted side.
+      //
+      // Guarded by game id so a LATE event from a game these two already
+      // finished can't mark them free while they're mid-way through
+      // their next one — the roster would then offer a challenge the
+      // server is bound to reject (see
+      // docs/SCRUM/BUGS/BUG.StaleGameOverEndsTheWrongGame.md).
+      if (!this.activeGameIds.has(gameId)) return
+      const stillActive = new Set(this.activeGameIds)
+      stillActive.delete(gameId)
+      this.activeGameIds = stillActive
+
       const stillBusy = new Set(this.busyPlayerIds)
       stillBusy.delete(playerA)
       stillBusy.delete(playerB)
@@ -657,6 +677,7 @@ export class RoomSetup extends LitElement {
     this.mpResults = undefined
     this.disconnectedPlayerIds = new Set()
     this.busyPlayerIds = new Set()
+    this.activeGameIds = new Set()
     this.error = undefined
     this.connectionState = 'connected'
     this.screen = { step: 'choose' }

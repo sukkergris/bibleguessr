@@ -97,7 +97,7 @@ let ``concurrent guesses from both players are never lost (the reported bug)`` (
     let playerB = PlayerId(Guid.NewGuid())
     let verse: VerseReference = { Book = "John"; BookNumber = 43; Chapter = 3; VerseNumber = 16 }
 
-    let session = GameSession.start playerA playerB AllVerses 5 Unlimited verse DateTimeOffset.UtcNow
+    let session = GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 Unlimited verse DateTimeOffset.UtcNow
 
     store.Update(code, fun room -> Room.startGame session room) |> ignore
 

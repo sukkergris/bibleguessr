@@ -21,6 +21,16 @@ This is very likely the cause of previously reported symptoms that could
 not be reproduced on demand — games appearing to "get stuck", and forfeit
 appearing not to work.
 
+## Resolution
+
+Fixed. Each game now carries its own identity, assigned when it starts and
+unchanged for its lifetime. The end-of-game signal carries that identity,
+and a client acts on it only when it matches the game it is currently
+playing — anything else is ignored, including a signal that arrives before
+a client knows which game it is in. The lobby's "already in a game"
+tracking is matched the same way, so a stale signal cannot mark players
+free while they are still playing.
+
 ## Requirements
 
 - A game-over signal must only ever end the game it actually belongs to.

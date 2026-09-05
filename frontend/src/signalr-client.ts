@@ -370,15 +370,35 @@ export function onRoundScored(handler: (session: GameSession) => void): () => vo
 
 /** Subscribes to a multiplayer game ending — either the final round
  * completed normally, or a player forfeited (left/disconnected past the
- * grace period, or explicitly forfeited). Payload is (scores, playerA,
- * playerB, reason) — scores is a full running total per player id, same
- * as GameSession's, not a delta. Returns an unsubscribe function. */
+ * grace period, or explicitly forfeited). Payload is (gameId, scores,
+ * playerA, playerB, reason) — scores is a full running total per player
+ * id, same as GameSession's, not a delta.
+ *
+ * `gameId` identifies WHICH game ended. Handlers must match on it and
+ * ignore anything that isn't the game they're currently playing: the
+ * player pair alone doesn't identify a game, so without this a finished
+ * game's event tears down the same pair's NEXT game mid-round (see
+ * docs/SCRUM/BUGS/BUG.StaleGameOverEndsTheWrongGame.md).
+ *
+ * Returns an unsubscribe function. */
 export function onGameOver(
-  handler: (scores: Record<string, number>, playerA: string, playerB: string, reason: GameOverReason) => void,
+  handler: (
+    gameId: string,
+    scores: Record<string, number>,
+    playerA: string,
+    playerB: string,
+    reason: GameOverReason,
+  ) => void,
 ): () => void {
   let cancelled = false
-  const listener = (scores: Record<string, number>, playerA: string, playerB: string, reason: GameOverReason) => {
-    if (!cancelled) handler(scores, playerA, playerB, reason)
+  const listener = (
+    gameId: string,
+    scores: Record<string, number>,
+    playerA: string,
+    playerB: string,
+    reason: GameOverReason,
+  ) => {
+    if (!cancelled) handler(gameId, scores, playerA, playerB, reason)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.GameOver, listener))

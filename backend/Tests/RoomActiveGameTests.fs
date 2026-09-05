@@ -29,7 +29,7 @@ let ``isInActiveGame is true for either player in the active session`` () =
     let playerA = makePlayerId ()
     let playerB = makePlayerId ()
     let room = Room.create (RoomCode "1234")
-    let room, _ = Room.acceptPlayRequest playerA playerB someVerse someTime (Room.sendPlayRequest (makeRequest playerA playerB) room)
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime (Room.sendPlayRequest (makeRequest playerA playerB) room)
 
     Assert.True(Room.isInActiveGame playerA room)
     Assert.True(Room.isInActiveGame playerB room)
@@ -40,7 +40,7 @@ let ``isInActiveGame is false for a player not in the active session`` () =
     let playerB = makePlayerId ()
     let stranger = makePlayerId ()
     let room = Room.create (RoomCode "1234")
-    let room, _ = Room.acceptPlayRequest playerA playerB someVerse someTime (Room.sendPlayRequest (makeRequest playerA playerB) room)
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime (Room.sendPlayRequest (makeRequest playerA playerB) room)
 
     Assert.False(Room.isInActiveGame stranger room)
 
@@ -57,7 +57,7 @@ let ``acceptPlayRequest starts a game and removes the request`` () =
     let room = Room.create (RoomCode "1234")
     let room = Room.sendPlayRequest (makeRequest playerA playerB) room
 
-    let updated, accepted = Room.acceptPlayRequest playerA playerB someVerse someTime room
+    let updated, accepted = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime room
 
     Assert.Empty(updated.PendingRequests)
     Assert.True(accepted.IsSome)
@@ -74,7 +74,7 @@ let ``acceptPlayRequest is a no-op when the request no longer exists`` () =
     let playerB = makePlayerId ()
     let room = Room.create (RoomCode "1234")
 
-    let updated, accepted = Room.acceptPlayRequest playerA playerB someVerse someTime room
+    let updated, accepted = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime room
 
     Assert.True(accepted.IsNone)
     Assert.True(updated.ActiveGame.IsNone)
@@ -93,7 +93,7 @@ let ``endGame clears ActiveGame`` () =
     let playerB = makePlayerId ()
     let room = Room.create (RoomCode "1234")
     let room = Room.sendPlayRequest (makeRequest playerA playerB) room
-    let room, _ = Room.acceptPlayRequest playerA playerB someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime room
 
     let updated = Room.endGame room
 
@@ -105,7 +105,7 @@ let ``forfeitGame ends the game when the leaving player is part of it`` () =
     let playerB = makePlayerId ()
     let room = Room.create (RoomCode "1234")
     let room = Room.sendPlayRequest (makeRequest playerA playerB) room
-    let room, _ = Room.acceptPlayRequest playerA playerB someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime room
 
     let updated = Room.forfeitGame playerA room
 
@@ -118,7 +118,7 @@ let ``forfeitGame is a no-op when the leaving player isn't in the active game`` 
     let stranger = makePlayerId ()
     let room = Room.create (RoomCode "1234")
     let room = Room.sendPlayRequest (makeRequest playerA playerB) room
-    let room, _ = Room.acceptPlayRequest playerA playerB someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA playerB someVerse someTime room
 
     let updated = Room.forfeitGame stranger room
 
@@ -135,7 +135,7 @@ let ``removeStaleDisconnections ends the ActiveGame when one participant is remo
             Players = [ playerA; playerB ] }
 
     let room = Room.sendPlayRequest (makeRequest playerA.Id playerB.Id) room
-    let room, _ = Room.acceptPlayRequest playerA.Id playerB.Id someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA.Id playerB.Id someVerse someTime room
     let room = Room.markDisconnected playerA.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
@@ -154,7 +154,7 @@ let ``removeStaleDisconnections returns the surviving opponent when one particip
             Players = [ playerA; playerB ] }
 
     let room = Room.sendPlayRequest (makeRequest playerA.Id playerB.Id) room
-    let room, _ = Room.acceptPlayRequest playerA.Id playerB.Id someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA.Id playerB.Id someVerse someTime room
     let room = Room.markDisconnected playerA.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
@@ -173,7 +173,7 @@ let ``removeStaleDisconnections returns no opponent when both participants are r
             Players = [ playerA; playerB ] }
 
     let room = Room.sendPlayRequest (makeRequest playerA.Id playerB.Id) room
-    let room, _ = Room.acceptPlayRequest playerA.Id playerB.Id someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA.Id playerB.Id someVerse someTime room
     let room = Room.markDisconnected playerA.Id disconnectedAt room
     let room = Room.markDisconnected playerB.Id disconnectedAt room
 
@@ -194,7 +194,7 @@ let ``removeStaleDisconnections leaves ActiveGame untouched when neither partici
             Players = [ playerA; playerB; bystander ] }
 
     let room = Room.sendPlayRequest (makeRequest playerA.Id playerB.Id) room
-    let room, _ = Room.acceptPlayRequest playerA.Id playerB.Id someVerse someTime room
+    let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) playerA.Id playerB.Id someVerse someTime room
     let room = Room.markDisconnected bystander.Id disconnectedAt room
 
     let cutoff = DateTimeOffset.UtcNow.AddMinutes(-5.0)
