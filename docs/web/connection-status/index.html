@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connection status — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Connection status</h1>
+      <p class="subtitle">
+        The dot in the upper-right corner, what it actually measures, and how quickly it can be trusted.
+      </p>
+
+      <h2>Two independent signals</h2>
+      <p>
+        The indicator combines two things that can disagree, and deliberately keeps them separate in the details
+        panel:
+      </p>
+      <ul>
+        <li>
+          <strong>Backend (HTTP)</strong> — a periodic <code>GET /api/health</code>, showing round-trip latency when
+          it succeeds.
+        </li>
+        <li>
+          <strong>Realtime (SignalR)</strong> — the hub connection's own state, reported through its
+          <code>onclose</code>, <code>onreconnecting</code> and <code>onreconnected</code> callbacks.
+        </li>
+      </ul>
+      <p>
+        Realtime state is checked <em>before</em> HTTP when deciding what the dot says. A reachable health endpoint
+        tells you nothing about whether messages are still arriving, so letting it win would let a healthy server mask
+        a broken connection — which was the original complaint.
+      </p>
+
+      <h2>What the dot says</h2>
+      <p>
+        The status is text, not colour alone. In priority order: <code>Reconnecting…</code>,
+        <code>Disconnected</code>, <code>Connecting…</code>, <code>Checking…</code>,
+        <code>Server unreachable</code>, <code>Connected</code>. It appears in the button's accessible name and its
+        tooltip, so it is available to a screen reader and to anyone who cannot distinguish the colours.
+      </p>
+      <p>
+        <code>Reconnecting…</code> is kept distinct from <code>Disconnected</code> because they mean different things
+        to a player: one is "hold on", the other is "this is not working".
+      </p>
+
+      <h2>How quickly it reacts</h2>
+      <p>
+        Three mechanisms, in descending order of how much they matter:
+      </p>
+      <ul>
+        <li>
+          <strong>The browser's <code>offline</code>/<code>online</code> events</strong> trigger an immediate
+          re-check. This is what makes the indicator feel responsive — measured at roughly a millisecond, against
+          15.2 seconds before it existed.
+        </li>
+        <li>
+          <strong>Adaptive polling</strong> — 15 seconds while healthy, 3 seconds while not. A working server does
+          not need poking, but someone who has just lost their connection is watching the dot and wants to know when
+          it returns.
+        </li>
+        <li>
+          <strong>SignalR callbacks</strong> fire as soon as the hub itself notices, which is prompt for a clean
+          close but not for a silent network failure.
+        </li>
+      </ul>
+      <p>
+        <code>navigator.onLine</code> is treated strictly as a hint that something changed, never as truth: it says
+        whether the machine has a network, not whether <em>this</em> backend is reachable. It prompts a real check
+        rather than being reported as a state.
+      </p>
+
+      <h2>Known limits</h2>
+      <p>
+        These are real and worth knowing before trusting the dot as a diagnosis:
+      </p>
+      <ul>
+        <li>
+          <strong>SignalR is only tracked in the multiplayer room.</strong> Elsewhere the realtime row reads "not
+          started" and the dot reflects HTTP alone — correct, since no hub connection exists to be broken, but it
+          means the dot is a weaker signal outside multiplayer.
+        </li>
+        <li>
+          <strong>A silent network failure is not detected instantly without an <code>offline</code> event.</strong>
+          A WebSocket can stay apparently open until keep-alive expires. If connectivity is lost in a way the browser
+          does not report — a server that stops responding while the network stays up — detection still falls back to
+          the polling interval.
+        </li>
+        <li>
+          <strong>Healthy polling is 15 seconds.</strong> A backend that fails without any browser-level signal can
+          appear healthy for up to that long.
+        </li>
+      </ul>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/src/components/connection-status.ts</span> owns the indicator, the adaptive
+        polling and the status text. <span class="file-ref">frontend/src/signalr-client.ts</span> reports the hub
+        state, including the <code>reconnecting</code> case.
+        <span class="file-ref">frontend/src/components/bg-app.ts</span> decides when realtime tracking is enabled.
+      </p>
+      <p>
+        Prompt reaction, accessible status text and recovery are covered by
+        <span class="file-ref">frontend/e2e/connection-status.spec.ts</span>, verified by removing both fixes and
+        confirming all three tests fail.
+      </p>
+    </main>
+  </body>
+</html>
