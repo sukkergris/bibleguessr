@@ -27,6 +27,11 @@ religious views — including none. Discussion of the text, of translations,
 and of their provenance is on topic and welcome. Proselytising at other
 contributors, or disparaging their beliefs or lack of them, is not.
 
+This is simply the wrong place for it. People came here to work on a
+guessing game, and an issue tracker is a poor setting for a conversation
+that deserves a better one. That is a point about the venue, not about the
+value of anyone's convictions.
+
 ## Unacceptable behaviour
 
 - Harassment, insults, or personal attacks, in public or in private.
@@ -42,7 +47,7 @@ code comments — and anywhere someone is representing the project.
 
 ## Reporting
 
-Report concerns privately to **sukkerfrit@gmail.com**. Reports will be
+Report concerns privately to **<sukkerfrit@gmail.com>**. Reports will be
 handled discreetly, and the reporter's identity will not be shared without
 their consent.
 
