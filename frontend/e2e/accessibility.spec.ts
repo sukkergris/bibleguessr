@@ -169,3 +169,47 @@ test('a verse-loading failure is announced, not only shown', async ({ page }) =>
   // player cannot continue until it is dealt with.
   await expect(page.locator('bg-app [role="alert"]')).toBeVisible({ timeout: 10_000 })
 })
+
+// Layout requirements from the "Visual, motion, and responsive behavior"
+// section. These check the mechanical parts — that nothing is clipped off
+// screen and that touch targets are large enough — not subjective ones
+// like contrast, which still needs the manual pass.
+test('core screens do not scroll horizontally at 200% zoom', async ({ page }) => {
+  // 200% zoom on a common laptop width, approximated by halving the
+  // viewport: the CSS pixel count the page sees is the same either way.
+  await page.setViewportSize({ width: 640, height: 400 })
+
+  for (const open of [
+    async () => {},
+    async () => await page.getByRole('button', { name: 'The Bible' }).click(),
+    async () => await page.getByRole('button', { name: 'Report abuse' }).click(),
+  ]) {
+    await page.goto('/')
+    await open()
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    )
+    expect(overflows, 'page scrolls horizontally').toBe(false)
+  }
+})
+
+test('the sticky report controls are large enough to tap and do not overlap', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 })
+  await page.goto('/')
+
+  const abuse = await page.getByRole('button', { name: 'Report abuse' }).boundingBox()
+  const bug = await page.getByRole('button', { name: 'Report a bug' }).boundingBox()
+  expect(abuse).not.toBeNull()
+  expect(bug).not.toBeNull()
+  if (!abuse || !bug) return
+
+  // Comfortably tappable without precision pointing.
+  for (const box of [abuse, bug]) {
+    expect(box.width).toBeGreaterThanOrEqual(40)
+    expect(box.height).toBeGreaterThanOrEqual(40)
+  }
+
+  // One is bottom-left and one bottom-right; they must not collide even
+  // on a narrow phone.
+  expect(abuse.x + abuse.width).toBeLessThan(bug.x)
+})
