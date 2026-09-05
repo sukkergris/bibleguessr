@@ -37,6 +37,18 @@ export function fingerprintFile(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`
 }
 
+/** The original filename, with its extension, from a cache fingerprint.
+ *
+ * A named function rather than an inline split at each call site: the
+ * filename must be presented to the player as a filename and never as an
+ * opaque cache id (see docs/SCRUM/TODO/Feature.Accessibility.md), and that
+ * only holds because fingerprintFile puts the name first. Naming it keeps
+ * the two definitions together, so changing the fingerprint's shape can't
+ * silently turn every filename in the UI into an id. */
+export function fileNameFromFingerprint(fingerprint: string): string {
+  return fingerprint.split(':')[0] ?? fingerprint
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1)

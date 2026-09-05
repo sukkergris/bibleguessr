@@ -2,7 +2,7 @@ import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { createLocalVerseSource } from '../local-verses'
-import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from '../verse-cache'
+import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible, fileNameFromFingerprint } from '../verse-cache'
 import type { VerseRestriction, VerseSource } from '../types'
 import { loadRoundCount, saveRoundCount } from '../game-preferences'
 import type { ChapterSelection } from './chapter-selector'
@@ -419,14 +419,14 @@ export class GameSetup extends LitElement {
                 <button type="button" class="cached-entry" @click=${() => this._useCached(cached)}>
                   <strong>${cached.translation}</strong>
                   <span class="cached-entry-detail"
-                    >${cached.fingerprint.split(':')[0]} · ${cached.verses.length} verses</span
+                    >${fileNameFromFingerprint(cached.fingerprint)} · ${cached.verses.length} verses</span
                   >
                 </button>
                 <button
                   type="button"
                   class="cached-remove"
                   title="Remove this cached file"
-                  aria-label="Remove ${cached.fingerprint.split(':')[0]} from cache"
+                  aria-label="Remove ${fileNameFromFingerprint(cached.fingerprint)} from cache"
                   @click=${() => this._removeCached(cached)}
                 >
                   ✕

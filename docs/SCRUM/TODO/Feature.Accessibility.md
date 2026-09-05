@@ -29,6 +29,11 @@ Also done since:
 - Every form built since (report abuse, bug report) carries labelled fields,
   `aria-invalid`, `aria-describedby` validation, and announced sending,
   success and failure states.
+- Cached-file names are presented as filenames, with their extension, rather
+  than as an opaque cache id — including in the remove control's accessible
+  label.
+- Core screens do not scroll horizontally at 200% zoom, and the sticky report
+  controls stay tappable and clear of each other on a narrow phone.
 
 ## Keyboard and focus
 
@@ -115,6 +120,22 @@ The report-abuse form already meets these and is covered by its own tests.
   states, and valid list structure.
 - Game rounds and results: announced phase changes, scores, feedback, timers,
   errors, and a usable path when verse text cannot be resolved.
+
+## What is left
+
+The automated work in this file is done. What remains cannot be settled by a
+machine and belongs to the manual pass:
+
+- Contrast in light and dark themes, and in high contrast mode.
+- Whether announcements actually read well in a real screen reader, rather
+  than merely existing.
+- Focus order across every view, judged as a whole rather than control by
+  control.
+- Connection-change announcements, which need a judgement about how much
+  interruption is appropriate before they are worth adding.
+
+See `Checklist.ManualAccessibilityPass.md`. Anything that pass turns up should
+become a bug in `BUGS/` rather than reopening this file.
 
 ## Acceptance criteria
 
