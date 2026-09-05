@@ -259,6 +259,27 @@
         </p>
       </div>
 
+      <h2>In-game status</h2>
+      <p>
+        A player who is in an active multiplayer game shows <code>(in a game)</code> beside their name and is not
+        offered as a challenge target. The status is text, not a color or icon alone, and is exposed to screen readers
+        like any other row content.
+      </p>
+      <p>
+        Both players are marked busy when a <code>RoundStarted</code> announces a game anywhere in the room — not only
+        for the viewer's own game — and freed when that game's <code>GameOver</code> arrives. The end event is matched
+        by <strong>game id</strong>, not by the pair of player ids: the same two people can finish one game and start
+        another immediately, so an event naming that pair is not enough to conclude they are free. A departing player's
+        status is cleared when they leave, since nothing else would.
+      </p>
+      <p>
+        Being in a game is not the same as being offline: a busy player who disconnects keeps the status rather than
+        silently becoming available, and chat stays usable throughout. The rules live in
+        <span class="file-ref">frontend/src/roster-busy-state.ts</span> as pure functions, unit tested in
+        <span class="file-ref">frontend/src/roster-busy-state.test.ts</span> — including the stale-event case, which
+        cannot be reproduced by driving a browser.
+      </p>
+
       <h2>Verify it</h2>
       <ul>
         <li>
