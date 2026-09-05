@@ -15,10 +15,20 @@ that runs on every end-to-end test run, so they cannot silently regress — see
 `DONE/Task.AccessibilityAudit.md`. Everything below is what that audit does not
 cover.
 
-Also done since: roster players can now be challenged by keyboard (see
-`DONE/BUG.RosterPlayersCannotBeChallengedByKeyboard.md`), the Bible-file picker
-has an explicit accessible label, and file selecting/parsing/ready/failed
-states are announced through a live region.
+Also done since:
+
+- Roster players can be challenged by keyboard (see
+  `DONE/BUG.RosterPlayersCannotBeChallengedByKeyboard.md`).
+- The Bible-file picker has an explicit accessible label, and file
+  selecting/parsing/ready/failed states are announced through a live region.
+- Round changes, guess feedback and the score are announced during a game, and
+  a verse-loading failure is announced as an alert rather than shown only
+  visually.
+- Decorative status dots are hidden from the accessibility tree, and heading
+  hierarchy on the main screens is sound.
+- Every form built since (report abuse, bug report) carries labelled fields,
+  `aria-invalid`, `aria-describedby` validation, and announced sending,
+  success and failure states.
 
 ## Keyboard and focus
 
@@ -43,19 +53,16 @@ requirements and are covered by their own tests; they do not need revisiting.
 - Use one meaningful page heading per view and a logical heading hierarchy.
 - Icon-only controls must expose their state with appropriate attributes such
   as `aria-pressed`, `aria-expanded` or `aria-selected`.
-- Use live regions sparingly and intentionally for errors, loading/progress,
-  connection changes, score/reveal updates, and successful or failed actions.
+- Connection changes are not yet announced; game progress, errors and the
+  report/bug forms are.
 - Status announcements must not be duplicated for every countdown tick.
-- Decorative icons, emoji and visual status dots must be hidden from the
-  accessibility tree or accompanied by equivalent text. The roster's
-  connection dots and the report button's shield emoji are known cases.
 - Lists, tab lists, comboboxes and buttons must use valid structure and state
   relationships; hidden items must not leave misleading empty containers.
 
 ## File upload and file names
 
 The picker's accessible label and the state announcements are done. The
-remaining items below are not.
+filename-presentation items below are not.
 - The filename must be presented as the filename, including its extension; do
   not silently replace it with an opaque cache id or use it as the translation
   name.

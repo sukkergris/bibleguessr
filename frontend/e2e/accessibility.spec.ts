@@ -141,3 +141,31 @@ test('the Bible-file picker has a clear accessible name and announces its state'
   await picker.setInputFiles('e2e/fixtures/genesis1-full.zip')
   await expect(status).toContainText('genesis1-full.zip', { timeout: 15_000 })
 })
+
+// Game progress and errors must reach a screen-reader user, not only a
+// sighted one — see the "Semantics and screen readers" and "Game rounds
+// and results" sections of docs/SCRUM/TODO/Feature.Accessibility.md.
+test('round changes and feedback are announced during a game', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'The Bible' }).click()
+  await page.getByRole('button', { name: 'Start game' }).click()
+  await expect(page.locator('.round')).toBeVisible()
+
+  // A live region carries which round is in play.
+  const status = page.locator('bg-app [role="status"]')
+  await expect(status.first()).toBeAttached()
+  await expect(status.first()).toContainText(/round 1/i)
+})
+
+test('a verse-loading failure is announced, not only shown', async ({ page }) => {
+  // Fail the verse request so the error path renders.
+  await page.route('**/api/verses/random*', (route) => route.fulfill({ status: 500, body: 'boom' }))
+
+  await page.goto('/')
+  await page.getByRole('button', { name: 'The Bible' }).click()
+  await page.getByRole('button', { name: 'Start game' }).click()
+
+  // role="alert" rather than role="status": an error interrupts, and the
+  // player cannot continue until it is dealt with.
+  await expect(page.locator('bg-app [role="alert"]')).toBeVisible({ timeout: 10_000 })
+})

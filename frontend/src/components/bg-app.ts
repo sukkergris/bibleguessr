@@ -443,6 +443,19 @@ export class BgApp extends LitElement {
     })
   }
 
+  /** What to announce about the game's current state. Deliberately one
+   * derived string rather than announcements scattered through the
+   * markup, so each change is announced exactly once and a round change
+   * cannot be announced twice by two regions. */
+  private _gameAnnouncement(): string {
+    const round = `Round ${this.roundIndex + 1} of ${this.roundCount}.`
+    if (!this.feedback) return round
+
+    const scored =
+      this.feedback.points > 0 ? `Correct, ${this.feedback.points} points.` : 'No points.'
+    return `${round} ${scored} It was ${this.feedback.verse.reference}. Score ${this.score}.`
+  }
+
   private _renderPlaying() {
     return html`
       <header>
@@ -450,7 +463,16 @@ export class BgApp extends LitElement {
         <p class="score">Score: ${this.score}</p>
       </header>
 
-      ${this.error ? html`<p class="error">${this.error}</p>` : null}
+      ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : null}
+
+      <!-- One live region for game progress. A screen-reader user
+           otherwise learns nothing about which round they are on or how
+           their guess scored, since both are conveyed visually only.
+           role="status" (polite) rather than alert: progress should not
+           interrupt what the player is doing. The error above is an
+           alert precisely because it does need to. -->
+
+      <p class="visually-hidden" role="status">${this._gameAnnouncement()}</p>
 
       <bg-verse-card .verse=${this.verse} .revealed=${!!this.feedback}></bg-verse-card>
 
@@ -477,6 +499,20 @@ export class BgApp extends LitElement {
   }
 
   static styles = css`
+    /* Available to screen readers, invisible on screen — see
+       chat-panel.ts for the same pattern. */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     :host {
       display: block;
       font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
