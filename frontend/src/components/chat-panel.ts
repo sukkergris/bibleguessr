@@ -268,7 +268,7 @@ export class ChatPanel extends LitElement {
     }
 
     .status-dot.unknown {
-      background: #9ca3af;
+      background: var(--text-muted);
     }
 
     /* The <li> hands its padding and layout to the inner button, so the
@@ -300,7 +300,7 @@ export class ChatPanel extends LitElement {
     /* An explicit focus ring rather than relying on the default, which is
        easy to lose against the row's tinted background. */
     .players ul li.clickable button:focus-visible {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--focus);
       outline-offset: -2px;
     }
 
@@ -363,8 +363,8 @@ export class ChatPanel extends LitElement {
       padding: 0.6rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 1rem;
       cursor: pointer;
     }

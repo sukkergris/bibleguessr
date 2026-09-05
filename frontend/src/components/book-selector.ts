@@ -136,14 +136,9 @@ export class BookSelector extends LitElement {
     .hint {
       margin: 0.5rem 0 0;
       font-size: 0.8rem;
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
-    @media (prefers-color-scheme: dark) {
-      .hint {
-        color: #9ca3af;
-      }
-    }
 
     .error {
       margin: 0;

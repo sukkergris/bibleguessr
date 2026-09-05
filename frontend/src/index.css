@@ -1,16 +1,85 @@
+/* Semantic theme tokens — see docs/SCRUM/TODO/Feature.EnableDarkmode.md.
+   Defined once here and inherited into every Lit shadow root, since CSS
+   custom properties cross shadow boundaries. That is what makes one theme
+   contract possible instead of each component carrying its own
+   prefers-color-scheme override.
+
+   Named for MEANING, not appearance: --surface rather than --white, so a
+   component asking for a surface gets the right one in either theme
+   without knowing which theme is active.
+
+   theme.ts sets data-theme on <html>. The media query below is only the
+   fallback for "system", which is why it is guarded against an explicit
+   choice — an explicit light choice must survive a dark OS. */
 :root {
-  color-scheme: light dark;
-  background-color: #ffffff;
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --surface: #f4f4f6;
+  --surface-raised: #ffffff;
+  --text: #1a1a1f;
+  --text-muted: #5a5a66;
+  --border: rgba(0, 0, 0, 0.18);
+  --accent: #7a2fd4;
+  --accent-text: #ffffff;
+  --link: #6b21c8;
+  --focus: #2563eb;
+  --success: #15803d;
+  --warning: #b45309;
+  --error: #b42318;
+  --disabled-text: #8a8a94;
+  --overlay: rgba(0, 0, 0, 0.45);
 }
 
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #16171d;
+  --surface: #1e1f27;
+  --surface-raised: #262832;
+  --text: #ececf1;
+  --text-muted: #a9a9b6;
+  --border: rgba(255, 255, 255, 0.22);
+  --accent: #aa3bff;
+  --accent-text: #ffffff;
+  --link: #c99bff;
+  --focus: #7aa7ff;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #ff8a80;
+  --disabled-text: #7c7c88;
+  --overlay: rgba(0, 0, 0, 0.65);
+}
+
+/* Only applies while no explicit choice has been made — theme.ts always
+   stamps data-theme, so this covers the first paint before it runs and
+   keeps the page from flashing the wrong theme. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    background-color: #16171d;
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg: #16171d;
+    --surface: #1e1f27;
+    --surface-raised: #262832;
+    --text: #ececf1;
+    --text-muted: #a9a9b6;
+    --border: rgba(255, 255, 255, 0.22);
+    --accent: #aa3bff;
+    --accent-text: #ffffff;
+    --link: #c99bff;
+    --focus: #7aa7ff;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --error: #ff8a80;
+    --disabled-text: #7c7c88;
+    --overlay: rgba(0, 0, 0, 0.65);
   }
 }
 
 body {
   margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
   display: flex;
   justify-content: center;
   align-items: center;

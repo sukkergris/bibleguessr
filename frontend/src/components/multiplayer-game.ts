@@ -1194,7 +1194,7 @@ export class MultiplayerGame extends LitElement {
       width: min(24rem, 100%);
       padding: 1.25rem;
       border-radius: 12px;
-      background: white;
+      background: var(--surface-raised);
       color: #201a24;
       box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.25);
     }
@@ -1228,16 +1228,10 @@ export class MultiplayerGame extends LitElement {
       border: 1px solid #b42318;
       border-radius: 8px;
       background: #b42318;
-      color: white;
+      color: var(--accent-text);
       cursor: pointer;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .forfeit-dialog {
-        background: #1f1b24;
-        color: #f5f3f7;
-      }
-    }
   `;
 }
 

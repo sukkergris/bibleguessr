@@ -303,8 +303,8 @@ export class ReportAbuse extends LitElement {
       padding: 0.5rem 1rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 0.95rem;
       cursor: pointer;
     }
@@ -321,7 +321,7 @@ export class ReportAbuse extends LitElement {
     }
 
     button:focus-visible {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
   `

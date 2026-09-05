@@ -568,7 +568,7 @@ export class GuessForm extends LitElement {
       margin: 0;
       padding: 0.25rem;
       list-style: none;
-      background: white;
+      background: var(--surface-raised);
       border: 1px solid #ccc;
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
@@ -585,16 +585,16 @@ export class GuessForm extends LitElement {
 
     .suggestions li.active,
     .suggestions li:hover {
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
     }
 
     button {
       padding: 0.6rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 1rem;
       cursor: pointer;
     }

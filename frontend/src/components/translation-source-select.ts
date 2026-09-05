@@ -374,7 +374,7 @@ export class TranslationSourceSelect extends LitElement {
       border-radius: 999px;
       border: 1px solid #ccc;
       background: transparent;
-      color: #2b2630;
+      color: var(--surface-raised);
       font-size: 0.85rem;
       line-height: 1.3;
       text-align: center;
@@ -382,16 +382,11 @@ export class TranslationSourceSelect extends LitElement {
       cursor: pointer;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .mode-switch button {
-        color: #e5e1ea;
-      }
-    }
 
     .mode-switch button.active {
-      background: #aa3bff;
-      border-color: #aa3bff;
-      color: white;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-text);
     }
 
     label {
@@ -413,16 +408,16 @@ export class TranslationSourceSelect extends LitElement {
       padding: 0.6rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 0.9rem;
       cursor: pointer;
     }
 
     button.secondary {
       background: transparent;
-      color: #aa3bff;
-      border: 1px solid #aa3bff;
+      color: var(--accent);
+      border: 1px solid var(--accent);
     }
 
     .error {
@@ -446,12 +441,12 @@ export class TranslationSourceSelect extends LitElement {
       border-radius: 12px;
       cursor: pointer;
       font-size: 0.9rem;
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
     .dropzone.dragover {
-      border-color: #aa3bff;
-      color: #aa3bff;
+      border-color: var(--accent);
+      color: var(--accent);
     }
 
     .dropzone input[type='file'] {
@@ -465,7 +460,7 @@ export class TranslationSourceSelect extends LitElement {
     .progress-label {
       margin: 0;
       font-size: 0.8rem;
-      color: #6b6375;
+      color: var(--text-muted);
       text-align: center;
     }
 
@@ -478,15 +473,10 @@ export class TranslationSourceSelect extends LitElement {
     .cached-list-label {
       margin: 0;
       font-size: 0.85rem;
-      color: #6b6375;
+      color: var(--text-muted);
       text-align: left;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .cached-list-label {
-        color: #9ca3af;
-      }
-    }
 
     .cached-list ul {
       list-style: none;
@@ -514,20 +504,15 @@ export class TranslationSourceSelect extends LitElement {
       border-radius: 10px;
       border: 1px solid #ccc;
       background: transparent;
-      color: #2b2630;
+      color: var(--surface-raised);
       font-size: 0.9rem;
       text-align: left;
       cursor: pointer;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .cached-entry {
-        color: #e5e1ea;
-      }
-    }
 
     .cached-entry:hover {
-      border-color: #aa3bff;
+      border-color: var(--accent);
     }
 
     .cached-entry strong {
@@ -536,14 +521,9 @@ export class TranslationSourceSelect extends LitElement {
 
     .cached-entry-detail {
       font-size: 0.8rem;
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
-    @media (prefers-color-scheme: dark) {
-      .cached-entry-detail {
-        color: #9ca3af;
-      }
-    }
 
     .cached-remove {
       flex: 0 0 auto;

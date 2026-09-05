@@ -221,8 +221,8 @@ export class PlayRequests extends LitElement {
       padding: 0.3rem 0.75rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 0.85rem;
       cursor: pointer;
     }

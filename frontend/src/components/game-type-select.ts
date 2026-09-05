@@ -130,21 +130,16 @@ export class GameTypeSelect extends LitElement {
       border-radius: 999px;
       border: 1px solid #ccc;
       background: transparent;
-      color: #2b2630;
+      color: var(--surface-raised);
       font-size: 0.85rem;
       cursor: pointer;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .scopes button {
-        color: #e5e1ea;
-      }
-    }
 
     .scopes button.active {
-      background: #aa3bff;
-      border-color: #aa3bff;
-      color: white;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-text);
     }
 
     .selector {

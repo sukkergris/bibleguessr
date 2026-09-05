@@ -260,7 +260,7 @@ export class ConnectionStatus extends LitElement {
     }
 
     .dot.ok {
-      background: #16a34a;
+      background: var(--success);
     }
 
     .dot.bad {
@@ -285,18 +285,12 @@ export class ConnectionStatus extends LitElement {
       width: 18rem;
       padding: 0.75rem;
       border-radius: 8px;
-      background: white;
+      background: var(--surface-raised);
       border: 1px solid #ddd;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
       font-size: 0.8rem;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .details {
-        background: #1f1b24;
-        border-color: #3a3440;
-      }
-    }
 
     .row {
       display: flex;
@@ -307,14 +301,9 @@ export class ConnectionStatus extends LitElement {
     }
 
     .label {
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
-    @media (prefers-color-scheme: dark) {
-      .label {
-        color: #9ca3af;
-      }
-    }
 
     .value {
       font-weight: 600;
@@ -323,7 +312,7 @@ export class ConnectionStatus extends LitElement {
     }
 
     .value.ok {
-      color: #16a34a;
+      color: var(--success);
     }
 
     .value.bad {
@@ -331,23 +320,17 @@ export class ConnectionStatus extends LitElement {
     }
 
     .value.checking {
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
     .hint {
       margin: 0.5rem 0 0;
       padding-top: 0.5rem;
       border-top: 1px solid #eee;
-      color: #6b6375;
+      color: var(--text-muted);
       line-height: 1.4;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .hint {
-        border-top-color: #3a3440;
-        color: #9ca3af;
-      }
-    }
 
     .hint code {
       background: rgba(170, 59, 255, 0.12);

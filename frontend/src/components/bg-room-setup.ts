@@ -846,7 +846,7 @@ export class RoomSetup extends LitElement {
 
     .code {
       font-family: monospace;
-      color: #aa3bff;
+      color: var(--accent);
     }
 
     label {
@@ -876,8 +876,8 @@ export class RoomSetup extends LitElement {
       padding: 0.6rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 1rem;
       cursor: pointer;
     }
@@ -889,8 +889,8 @@ export class RoomSetup extends LitElement {
 
     button.secondary {
       background: transparent;
-      color: #aa3bff;
-      border: 1px solid #aa3bff;
+      color: var(--accent);
+      border: 1px solid var(--accent);
     }
 
     .error {

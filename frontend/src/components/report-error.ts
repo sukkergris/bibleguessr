@@ -96,7 +96,7 @@ export class ReportError extends LitElement {
       background: none;
       border: none;
       padding: 0;
-      color: #aa3bff;
+      color: var(--accent);
       font-size: 0.85rem;
       cursor: pointer;
       text-decoration: underline;
@@ -105,7 +105,7 @@ export class ReportError extends LitElement {
     .sent {
       margin: 0;
       font-size: 0.85rem;
-      color: #16a34a;
+      color: var(--success);
     }
 
     .report {
@@ -150,8 +150,8 @@ export class ReportError extends LitElement {
       padding: 0.45rem 1rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 0.85rem;
       cursor: pointer;
     }
@@ -163,8 +163,8 @@ export class ReportError extends LitElement {
 
     button.secondary {
       background: transparent;
-      color: #aa3bff;
-      border: 1px solid #aa3bff;
+      color: var(--accent);
+      border: 1px solid var(--accent);
     }
   `
 }

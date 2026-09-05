@@ -1,5 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
+import './theme-select'
 import { api } from '../api';
 
 /**
@@ -111,6 +112,11 @@ export class NerdPanel extends LitElement {
           </button>
         </header>
         <div class="content">
+          <section class="theme" aria-labelledby="theme-heading">
+            <h3 id="theme-heading">Appearance</h3>
+            <bg-theme-select></bg-theme-select>
+          </section>
+
           <section class="shortcuts" aria-labelledby="shortcuts-heading">
             <h3 id="shortcuts-heading">Keyboard shortcuts</h3>
             <dl>
@@ -196,19 +202,13 @@ export class NerdPanel extends LitElement {
     .panel {
       width: min(22rem, 90vw);
       height: 100%;
-      background: white;
+      background: var(--surface-raised);
       border-left: 1px solid #ddd;
       display: flex;
       flex-direction: column;
       font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .panel {
-        background: #1f1b24;
-        border-left-color: #3a3440;
-      }
-    }
 
     header {
       display: flex;
@@ -218,11 +218,6 @@ export class NerdPanel extends LitElement {
       border-bottom: 1px solid #eee;
     }
 
-    @media (prefers-color-scheme: dark) {
-      header {
-        border-bottom-color: #3a3440;
-      }
-    }
 
     h2 {
       font-size: 1rem;
@@ -267,7 +262,7 @@ export class NerdPanel extends LitElement {
     }
 
     dt {
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
     dd {
@@ -276,24 +271,11 @@ export class NerdPanel extends LitElement {
     }
 
     .error {
-      color: #b42318;
+      color: var(--error);
       font-size: 0.8rem;
       margin: 0.7rem 0 0;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .versions {
-        border-color: #3a3440;
-      }
-
-      dt {
-        color: #9ca3af;
-      }
-
-      .error {
-        color: #fca5a5;
-      }
-    }
   `;
 }
 

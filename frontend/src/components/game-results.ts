@@ -114,14 +114,9 @@ export class GameResults extends LitElement {
     .max {
       font-size: 1.25rem;
       font-weight: 400;
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
-    @media (prefers-color-scheme: dark) {
-      .max {
-        color: #9ca3af;
-      }
-    }
 
     .rounds {
       list-style: none;
@@ -145,15 +140,10 @@ export class GameResults extends LitElement {
 
     .round-num {
       font-weight: 600;
-      color: #6b6375;
+      color: var(--text-muted);
       min-width: 1.75rem;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .round-num {
-        color: #9ca3af;
-      }
-    }
 
     .reference {
       flex: 1;
@@ -180,12 +170,12 @@ export class GameResults extends LitElement {
 
     .copy {
       background: rgba(170, 59, 255, 0.12);
-      color: #aa3bff;
+      color: var(--accent);
     }
 
     .again {
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
     }
   `
 }

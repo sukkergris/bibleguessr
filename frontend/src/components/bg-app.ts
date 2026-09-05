@@ -578,7 +578,7 @@ export class BgApp extends LitElement {
     }
 
     .report-bug:focus-visible {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
 
@@ -588,7 +588,7 @@ export class BgApp extends LitElement {
     }
 
     .report-abuse:focus-visible {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
 
@@ -616,16 +616,11 @@ export class BgApp extends LitElement {
       border-radius: 8px;
       border: 1px solid #ccc;
       background: transparent;
-      color: #6b6375;
+      color: var(--text-muted);
       font-size: 0.85rem;
       cursor: pointer;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .home {
-        color: #9ca3af;
-      }
-    }
 
     header {
       display: flex;
@@ -657,7 +652,7 @@ export class BgApp extends LitElement {
 
     .feedback.correct {
       background: rgba(34, 197, 94, 0.15);
-      color: #16a34a;
+      color: var(--success);
     }
 
     .feedback.incorrect {
@@ -670,8 +665,8 @@ export class BgApp extends LitElement {
       padding: 0.6rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 1rem;
       cursor: pointer;
     }

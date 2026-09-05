@@ -267,7 +267,7 @@ export class ChallengeSettingsSelect extends LitElement {
       position: absolute;
       inset: 0;
       border-radius: 999px;
-      background: #9ca3af;
+      background: var(--text-muted);
       transition: background-color 0.2s ease;
     }
 
@@ -278,7 +278,7 @@ export class ChallengeSettingsSelect extends LitElement {
       width: 1.2rem;
       height: 1.2rem;
       border-radius: 50%;
-      background: #fff;
+      background: var(--accent-text);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
       transition: transform 0.2s ease;
     }
@@ -292,7 +292,7 @@ export class ChallengeSettingsSelect extends LitElement {
     }
 
     .toggle-switch input:focus-visible + .toggle-track {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
 
@@ -313,7 +313,7 @@ export class ChallengeSettingsSelect extends LitElement {
       border: 2px dashed #f97316;
       background: linear-gradient(90deg, #f97316, #dc2626, #db2777, #f97316);
       background-size: 300% 100%;
-      color: #fff;
+      color: var(--accent-text);
       font-weight: 700;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
       animation:

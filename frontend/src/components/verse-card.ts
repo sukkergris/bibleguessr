@@ -32,20 +32,12 @@ export class VerseCard extends LitElement {
   static styles = css`
     :host {
       display: block;
-      --card-bg: #fff;
+      --card-bg: var(--surface-raised);
       --card-text: #1a1a1a;
       --card-border: #e5e4e7;
-      --card-muted: #6b6375;
+      --card-muted: var(--text-muted);
     }
 
-    @media (prefers-color-scheme: dark) {
-      :host {
-        --card-bg: #1f2028;
-        --card-text: #f3f4f6;
-        --card-border: #2e303a;
-        --card-muted: #9ca3af;
-      }
-    }
 
     blockquote {
       margin: 0;

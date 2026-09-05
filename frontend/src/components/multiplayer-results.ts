@@ -174,8 +174,8 @@ export class MultiplayerResults extends LitElement {
       padding: 0.6rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 1rem;
       cursor: pointer;
     }

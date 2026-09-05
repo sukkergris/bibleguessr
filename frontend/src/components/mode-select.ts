@@ -74,14 +74,9 @@ export class ModeSelect extends LitElement {
 
     .tagline {
       margin: 0 0 0.5rem;
-      color: #6b6375;
+      color: var(--text-muted);
     }
 
-    @media (prefers-color-scheme: dark) {
-      .tagline {
-        color: #9ca3af;
-      }
-    }
 
     .group {
       display: flex;
@@ -95,15 +90,10 @@ export class ModeSelect extends LitElement {
       font-weight: 600;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #6b6375;
+      color: var(--text-muted);
       text-align: left;
     }
 
-    @media (prefers-color-scheme: dark) {
-      h2 {
-        color: #9ca3af;
-      }
-    }
 
     .modes {
       display: flex;
@@ -119,8 +109,8 @@ export class ModeSelect extends LitElement {
       padding: 0.9rem 1.25rem;
       border-radius: 8px;
       border: none;
-      background: #aa3bff;
-      color: white;
+      background: var(--accent);
+      color: var(--accent-text);
       font-size: 1.1rem;
       font-weight: 600;
       text-align: left;
@@ -135,8 +125,8 @@ export class ModeSelect extends LitElement {
 
     button.secondary {
       background: transparent;
-      color: #aa3bff;
-      border: 1px solid #aa3bff;
+      color: var(--accent);
+      border: 1px solid var(--accent);
     }
   `
 }

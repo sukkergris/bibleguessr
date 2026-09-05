@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dark mode — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Dark mode</h1>
+      <p class="subtitle">
+        Light, Dark, or follow the system — applied through one set of semantic tokens rather than per-component
+        overrides.
+      </p>
+
+      <h2>One contract, not twenty</h2>
+      <p>
+        Colours are defined once as semantic tokens on <code>:root</code> in
+        <span class="file-ref">frontend/src/index.css</span> and inherited into every Lit shadow root, because CSS
+        custom properties cross shadow boundaries. That is what makes a single theme contract possible.
+      </p>
+      <p>
+        Tokens are named for <strong>meaning</strong>, not appearance — <code>--surface</code>, not
+        <code>--white</code> — so a component asking for a surface gets the right one in either theme without knowing
+        which theme is active.
+      </p>
+      <p>
+        The migration replaced 89 hard-coded colour literals across 20 components and removed
+        <strong>every</strong> per-component <code>prefers-color-scheme</code> block. Those blocks were not merely
+        redundant: they key off the operating system, so they would have overridden an explicit Light choice on a
+        dark machine.
+      </p>
+
+      <h2>Choosing a theme</h2>
+      <p>
+        The control lives in the Nerd Panel under <em>Appearance</em>, as native radio inputs rather than buttons
+        with <code>aria-pressed</code>: a theme is one choice among three, which is what a radio group means, and
+        native semantics give arrow-key navigation and correct announcement for free.
+      </p>
+      <p>
+        Only the preference is stored, under a versioned <code>bibleguessr:</code> key. An unrecognised, corrupt or
+        unreadable value falls back to following the system rather than leaving the application unstyled. Changing
+        theme does not touch game, chat, setup, report or cached-file state.
+      </p>
+
+      <h2>No flash of the wrong theme</h2>
+      <p>
+        The theme is applied in <span class="file-ref">frontend/src/main.ts</span> before the app renders. The
+        <code>prefers-color-scheme</code> block in the stylesheet covers the first paint before that runs, and is
+        guarded with <code>:not([data-theme='light'])</code> so it can never beat an explicit choice.
+      </p>
+      <p>
+        <code>color-scheme</code> is set alongside <code>data-theme</code>, so browser-rendered UI — form controls,
+        scrollbars — matches rather than staying stubbornly light. While the preference is <em>System</em>, the app
+        keeps listening for OS changes and repaints; an explicit choice deliberately stops listening.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/src/theme.ts</span> holds the preference, its validation and the apply logic;
+        <span class="file-ref">frontend/src/components/theme-select.ts</span> is the control. Preference validation is
+        unit tested in <span class="file-ref">frontend/src/theme.test.ts</span>; default/system behaviour,
+        persistence, corrupt storage, real rendered colours inside shadow roots, keyboard operation and
+        state preservation are covered by <span class="file-ref">frontend/e2e/theme.spec.ts</span>.
+      </p>
+    </main>
+  </body>
+</html>
