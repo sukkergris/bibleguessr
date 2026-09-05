@@ -6,13 +6,28 @@ import { test, expect, type Page } from '@playwright/test'
 // exercised by multiplayer-round.spec.ts; these cover the transition and
 // disconnect rules specifically.
 
-async function joinWorldChat(page: Page, name: string) {
+// Private rooms rather than World chat: these assert on who appears in the
+// roster, so another test's players would be visible and could change the
+// outcome (see docs/SCRUM/DONE/Task.IsolateMultiplayerTestsFromEachOther.md).
+async function createRoom(page: Page, name: string): Promise<string> {
   await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
   await expect(page.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
   await page.getByPlaceholder('e.g. Alice').fill(name)
-  await page.getByRole('button', { name: 'Join World chat' }).click()
-  await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
+  await page.getByRole('button', { name: 'Create a room' }).click()
+  const code = page.locator('bg-room-setup h1 .code')
+  await expect(code).toBeVisible()
+  return (await code.innerText()).trim()
+}
+
+async function joinRoom(page: Page, name: string, roomCode: string) {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Multiplayer' }).click()
+  await expect(page.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
+  await page.getByPlaceholder('e.g. Alice').fill(name)
+  await page.getByPlaceholder('Room code').fill(roomCode)
+  await page.getByRole('button', { name: 'Join', exact: true }).click()
+  await expect(page.locator('bg-room-setup h1 .code')).toHaveText(roomCode)
 }
 
 test('both players become available again when their game ends', async ({ browser }) => {
@@ -24,9 +39,9 @@ test('both players become available again when their game ends', async ({ browse
     const aliceName = `Alice${suffix}gs`
     const bobName = `Bob${suffix}gs`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
-    await joinWorldChat(pageC, `Carol${suffix}gs`)
+    const roomCode = await createRoom(pageA, aliceName)
+    await joinRoom(pageB, bobName, roomCode)
+    await joinRoom(pageC, `Carol${suffix}gs`, roomCode)
 
     await pageA.getByRole('button', { name: new RegExp(bobName) }).click()
     await pageB
@@ -65,9 +80,9 @@ test('a busy player who disconnects keeps their in-a-game status', async ({ brow
     const aliceName = `Alice${suffix}dc`
     const bobName = `Bob${suffix}dc`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
-    await joinWorldChat(pageC, `Carol${suffix}dc`)
+    const roomCode = await createRoom(pageA, aliceName)
+    await joinRoom(pageB, bobName, roomCode)
+    await joinRoom(pageC, `Carol${suffix}dc`, roomCode)
 
     await pageA.getByRole('button', { name: new RegExp(bobName) }).click()
     await pageB
@@ -104,9 +119,9 @@ test('a second game between the same players is not cleared by the first game en
     const aliceName = `Alice${suffix}sg`
     const bobName = `Bob${suffix}sg`
 
-    await joinWorldChat(pageA, aliceName)
-    await joinWorldChat(pageB, bobName)
-    await joinWorldChat(pageC, `Carol${suffix}sg`)
+    const roomCode = await createRoom(pageA, aliceName)
+    await joinRoom(pageB, bobName, roomCode)
+    await joinRoom(pageC, `Carol${suffix}sg`, roomCode)
 
     const playOneGame = async () => {
       await pageA.getByRole('button', { name: new RegExp(bobName) }).click()
