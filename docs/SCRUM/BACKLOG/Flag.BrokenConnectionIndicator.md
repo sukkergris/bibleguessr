@@ -45,12 +45,17 @@ broken — but it means the indicator means different things on different
 screens, which is exactly the kind of inconsistency that makes an
 indicator hard to trust.
 
-The second half of this is done: the row is now greyed out and reads "not
-used on this screen" rather than rendering green (see
-`DONE/Task.GreyOutInactiveConnectionRow.md`). What remains is the
-underlying inconsistency — either track realtime wherever a connection
-exists, or accept that the dot means different things on different
-screens and make sure that is always obvious.
+The row now reads "not used on this screen" rather than "not needed yet",
+so it no longer looks like a check that ran and passed. It was briefly
+rendered grey to reinforce that (see
+`DONE/Task.GreyOutInactiveConnectionRow.md`), but the panel has since
+settled on two colours only — red for something wrong, green for nothing
+wrong — so the row is green there and the wording carries the meaning
+(see `DONE/Feature.ConnectionPanelRefinements.md`).
+
+What remains is the underlying inconsistency — either track realtime
+wherever a connection exists, or accept that the dot means different
+things on different screens and make sure that is always obvious.
 
 ### 3. Reconsider the SignalR keep-alive settings
 
@@ -59,22 +64,38 @@ hub's own timeout. If faster detection matters, that is the setting to
 change — but it costs traffic on every idle connection, so it is a real
 trade-off rather than an oversight. Worth measuring before changing.
 
-### 4. Distinguish "degraded" from "broken"
+### 4. Distinguish "degraded" from "broken" — withdrawn
 
-The dot has two states. A slow but working backend, a reconnecting hub,
-and a completely dead server are meaningfully different situations that
-currently collapse into one red dot plus a status word. The status text
-already carries more nuance than the colour does; the visual could follow.
+This recommendation proposed a third visual state for a slow-but-working
+backend or a reconnecting hub, on the grounds that the status text already
+carries more nuance than the colour does.
+
+It has since been decided against: the panel uses two colours and no more.
+The nuance stays in the text, which is where it can be read precisely and
+where a screen reader gets it too. A third colour asks the reader to learn
+a vocabulary in a panel they opened because they wanted a quick answer,
+and the earlier grey "not applicable" experiment showed that cost in
+practice. See `DONE/Feature.ConnectionPanelRefinements.md`.
+
+The text-level nuance is still worth extending — naming the most specific
+failing signal rather than a generic one, which the panel now does — but
+not by adding colours.
 
 ## What I would not do
 
 - **Do not simply shorten the healthy polling interval.** It treats the
   symptom, adds constant traffic, and still leaves a window. The original
   bug report says this explicitly and it is right.
-- **Do not report `navigator.onLine` as connection state.** It answers a
-  different question — whether the machine has a network, not whether this
-  backend is reachable — and using it as truth would produce confident
-  wrong answers in both directions.
+- **Do not report `navigator.onLine` as *the* connection state.** It
+  answers a different question — whether the machine has a network, not
+  whether this backend is reachable — and using it as truth would produce
+  confident wrong answers in both directions.
+
+  It is now shown as its own row, which is not the same thing: it is
+  labelled as what it is ("This device"), it never substitutes for the
+  health check, and a device reporting online still proves nothing about
+  the backend. Showing it separately is what lets a local network drop
+  read as local rather than as a server failure.
 
 ## Testing note
 

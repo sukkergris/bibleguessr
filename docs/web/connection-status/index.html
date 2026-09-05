@@ -21,15 +21,21 @@
         assistive technology, so the rows are announced as belonging to something rather than read bare.
       </p>
 
-      <h2>Two independent signals</h2>
+      <h2>Three independent signals</h2>
       <p>
-        The indicator combines two things that can disagree, and deliberately keeps them separate in the details
+        The indicator combines three things that can disagree, and deliberately keeps them separate in the details
         panel:
       </p>
       <ul>
         <li>
-          <strong>Backend (HTTP)</strong> — a periodic <code>GET /api/health</code>, showing round-trip latency when
-          it succeeds.
+          <strong>This device</strong> — <code>navigator.onLine</code>, whether the machine itself reports having a
+          network.
+        </li>
+        <li>
+          <strong><code>/api/healthz</code></strong> — a periodic <code>GET</code>, showing round-trip latency when it
+          succeeds, with the base URL alongside it because that is the useful part when diagnosing a port-forwarding
+          gap. The countdown to the next check sits in this row, so the reader can tell how old the latency figure is
+          rather than guessing.
         </li>
         <li>
           <strong>Realtime (SignalR)</strong> — the hub connection's own state, reported through its
@@ -37,17 +43,36 @@
         </li>
       </ul>
       <p>
-        Realtime state is checked <em>before</em> HTTP when deciding what the dot says. A reachable health endpoint
-        tells you nothing about whether messages are still arriving, so letting it win would let a healthy server mask
-        a broken connection — which was the original complaint.
+        The endpoint was renamed from <code>/api/health</code> to <code>/api/healthz</code>; the old path still
+        responds, so anything already polling it keeps working.
+      </p>
+
+      <h2>How the rows and the dot relate</h2>
+      <p>
+        Each row is an explicit state object carrying its own <code>ok</code> flag, and the dot is derived from those
+        same objects — red when <em>any</em> row is red. The two therefore cannot disagree. This replaced a set of
+        separate getters that had to be kept consistent by hand, and were not: the dot ignored the device row
+        entirely, so a machine with no network showed a green dot directly above a row reading "offline".
+      </p>
+      <p>
+        There are exactly two colours. <strong>Red means something is wrong; green means nothing is.</strong> A grey
+        "not applicable" state was tried for the realtime row and dropped — a third colour asks the reader to learn a
+        vocabulary in a panel they open precisely because they want a quick answer. Where no hub connection exists,
+        nothing is broken, so the row is green and the <em>text</em> carries the fact that it is not in use.
       </p>
 
       <h2>What the dot says</h2>
       <p>
-        The status is text, not colour alone. In priority order: <code>Reconnecting…</code>,
-        <code>Disconnected</code>, <code>Connecting…</code>, <code>Checking…</code>,
-        <code>Server unreachable</code>, <code>Connected</code>. It appears in the button's accessible name and its
-        tooltip, so it is available to a screen reader and to anyone who cannot distinguish the colours.
+        The status is text, not colour alone. The first failing row names the problem, so the dot reports the most
+        specific thing it knows rather than a generic failure: <code>No network on this device</code>,
+        <code>Server unreachable</code>, <code>Reconnecting…</code>, <code>Disconnected</code>, or
+        <code>Connected</code>. It appears in the button's accessible name and its tooltip, so it is available to a
+        screen reader and to anyone who cannot distinguish the colours.
+      </p>
+      <p>
+        A local network drop reporting as <code>No network on this device</code> rather than
+        <code>Server unreachable</code> matters: the latter blamed the server for a problem on the player's own
+        machine.
       </p>
       <p>
         <code>Reconnecting…</code> is kept distinct from <code>Disconnected</code> because they mean different things
@@ -86,11 +111,10 @@
       </p>
       <ul>
         <li>
-          <strong>SignalR is only tracked in the multiplayer room.</strong> Elsewhere the realtime row is greyed out
-          and reads "not used on this screen", and the dot reflects HTTP alone — correct, since no hub connection
-          exists to be broken, but it means the dot is a weaker signal outside multiplayer. The row is deliberately
-          neither green nor red there: showing it as a passing check implied something had been verified when
-          nothing had been measured.
+          <strong>SignalR is only tracked in the multiplayer room.</strong> Elsewhere the realtime row reads "not used
+          on this screen" and the dot reflects the other two signals — correct, since no hub connection exists to be
+          broken, but it means the dot is a weaker signal outside multiplayer. The row is green there because nothing
+          is wrong, not because a check has passed; the wording is what distinguishes the two.
         </li>
         <li>
           <strong>A silent network failure is not detected instantly without an <code>offline</code> event.</strong>

@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.5.1"
+let BackendVersion = "0.5.2"
 
 [<EntryPoint>]
 let main args =
@@ -246,11 +246,17 @@ let main args =
     app.UseHttpLogging() |> ignore
     app.UseCors() |> ignore
 
-    app.MapGet(
-        "/api/health",
-        Func<_>(fun () -> {| status = "ok"; versesLoaded = verses.Length |})
-    )
-    |> ignore
+    // /healthz is the conventional name for a liveness endpoint, and the
+    // connection panel names it directly rather than calling it "backend"
+    // — see docs/SCRUM/TODO/Feature.ConnectionPanelRefinements.md.
+    //
+    // /api/health stays mapped to the same handler: anything already
+    // pointing at it (a script, a container probe, a bookmark) keeps
+    // working. Renaming a health check is not worth breaking a probe over.
+    let healthResponse = Func<_>(fun () -> {| status = "ok"; versesLoaded = verses.Length |})
+
+    app.MapGet("/api/healthz", healthResponse) |> ignore
+    app.MapGet("/api/health", healthResponse) |> ignore
 
     app.MapGet(
         "/api/version",

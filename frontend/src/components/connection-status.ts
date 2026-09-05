@@ -5,6 +5,21 @@ import { getGameHubConnection, onConnectionStateChange, type ConnectionState } f
 
 type HttpCheck = { status: 'checking' } | { status: 'ok'; latencyMs: number } | { status: 'error'; message: string }
 
+/** One line in the details panel.
+ *
+ * `ok` drives both the row's colour and the dot's, so a red row always
+ * turns the dot red. `summary` is what the dot says when this row is the
+ * reason — absent when the row has nothing to report. */
+interface ConnectionRow {
+  id: 'device' | 'http' | 'realtime'
+  label: string
+  /** Secondary text under the label, e.g. the host or transport. */
+  detail: string | undefined
+  ok: boolean
+  value: string
+  summary: string | undefined
+}
+
 /** How often to re-check HTTP health while everything looks fine. Long,
  * because a healthy server does not need poking. */
 const RECHECK_INTERVAL_MS = 15_000
@@ -59,6 +74,23 @@ export class ConnectionStatus extends LitElement {
   // wrong on the server side, purely a dev-mode artifact of teardown timing.
   private _httpCheckAbort?: AbortController
 
+  /** What the browser says about its own network. Shown as its own row:
+   * a player whose network dropped otherwise sees "Server unreachable"
+   * and blames the server for a local problem — see
+   * docs/SCRUM/TODO/Feature.ConnectionPanelRefinements.md. Still only a
+   * hint about the backend: a machine can be online while this server is
+   * not reachable. */
+  @state()
+  private browserOnline = navigator.onLine
+
+  /** Seconds until the next automatic check, so a reader can tell how old
+   * the latency figure is rather than guessing. */
+  @state()
+  private secondsToNextCheck = 0
+
+  private _countdownTimer?: ReturnType<typeof setInterval>
+  private _nextCheckAt?: number
+
   connectedCallback() {
     super.connectedCallback()
     void this._checkHttp()
@@ -100,6 +132,7 @@ export class ConnectionStatus extends LitElement {
   }
 
   private _onConnectivityHint = () => {
+    this.browserOnline = navigator.onLine
     void this._checkHttp()
   }
 
@@ -108,6 +141,7 @@ export class ConnectionStatus extends LitElement {
     window.removeEventListener('online', this._onConnectivityHint)
     this._unsubscribeConnectionState?.()
     clearInterval(this._recheckTimer)
+    clearInterval(this._countdownTimer)
     this._httpCheckAbort?.abort()
     super.disconnectedCallback()
   }
@@ -122,6 +156,23 @@ export class ConnectionStatus extends LitElement {
     if (this._recheckTimer !== undefined) clearInterval(this._recheckTimer)
     this._recheckIntervalMs = interval
     this._recheckTimer = setInterval(() => void this._checkHttp(), interval)
+    this._restartCountdown(interval)
+  }
+
+  /** Drives the visible countdown. Separate from the poll timer so the
+   * display ticks every second regardless of how far apart the actual
+   * checks are. */
+  private _restartCountdown(intervalMs: number) {
+    this._nextCheckAt = Date.now() + intervalMs
+    this._tickCountdown()
+
+    if (this._countdownTimer !== undefined) return
+    this._countdownTimer = setInterval(() => this._tickCountdown(), 1_000)
+  }
+
+  private _tickCountdown() {
+    if (this._nextCheckAt === undefined) return
+    this.secondsToNextCheck = Math.max(0, Math.ceil((this._nextCheckAt - Date.now()) / 1000))
   }
 
   private async _checkHttp() {
@@ -133,9 +184,15 @@ export class ConnectionStatus extends LitElement {
     this._httpCheckAbort = controller
     const timeoutId = setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), 5000)
 
+    // Reset here rather than only in the scheduler: a check can also be
+    // triggered by a connectivity change, and the countdown would
+    // otherwise keep running down to a check that already happened.
+    this._nextCheckAt = Date.now() + (this._recheckIntervalMs ?? RECHECK_INTERVAL_MS)
+    this._tickCountdown()
+
     const start = performance.now()
     try {
-      const response = await fetch(`${api.baseUrl}/api/health`, { signal: controller.signal })
+      const response = await fetch(`${api.baseUrl}/api/healthz`, { signal: controller.signal })
       const latencyMs = Math.round(performance.now() - start)
       this.http = response.ok
         ? { status: 'ok', latencyMs }
@@ -168,28 +225,92 @@ export class ConnectionStatus extends LitElement {
     this._scheduleRecheck()
   }
 
-  private get _isHealthy(): boolean {
-    return this.http.status === 'ok' && (this.signalR === 'connected' || this.signalR === 'not-started')
+  /**
+   * Each row the panel shows, as an explicit object rather than a handful
+   * of getters that had to agree with each other by hand — see CLAUDE.md's
+   * preference for explicit state models.
+   *
+   * `ok` is the single source of truth for colour. Two colours only: red
+   * means something is wrong, green means nothing is. A row that measures
+   * nothing (no hub connection outside multiplayer) is green, because
+   * nothing is wrong — the text says it is not in use.
+   */
+  private get _rows(): ConnectionRow[] {
+    return [this._deviceRow, this._httpRow, this._realtimeRow]
   }
 
-  /** What the indicator actually says, in words.
-   *
-   * Realtime state is checked BEFORE HTTP: a reachable HTTP endpoint says
-   * nothing about whether messages are still arriving, so letting it win
-   * would let a healthy server mask a broken connection — the exact
-   * complaint in
-   * docs/SCRUM/DONE/Bug.CantTrustConnectionStatusIconRightUpperCorner.md.
-   *
-   * Reconnecting and disconnected are kept apart because they mean
-   * different things to a player: one is "hold on", the other is "this is
-   * not working". */
+  /** What the browser reports about its own network. */
+  private get _deviceRow(): ConnectionRow {
+    return {
+      id: 'device',
+      label: 'This device',
+      detail: undefined,
+      ok: this.browserOnline,
+      value: this.browserOnline ? 'online' : 'offline',
+      summary: this.browserOnline ? undefined : 'No network on this device',
+    }
+  }
+
+  private get _httpRow(): ConnectionRow {
+    if (this.http.status === 'checking') {
+      return { id: 'http', label: '/api/healthz', detail: api.baseUrl, ok: true, value: 'checking…', summary: 'Checking…' }
+    }
+    if (this.http.status === 'ok') {
+      return {
+        id: 'http',
+        label: '/api/healthz',
+        detail: api.baseUrl,
+        ok: true,
+        value: `OK · ${this.http.latencyMs}ms`,
+        summary: undefined,
+      }
+    }
+    return {
+      id: 'http',
+      label: '/api/healthz',
+      detail: api.baseUrl,
+      ok: false,
+      value: this.http.message,
+      summary: 'Server unreachable',
+    }
+  }
+
+  private get _realtimeRow(): ConnectionRow {
+    const base = { id: 'realtime' as const, label: 'Realtime', detail: 'SignalR' }
+
+    switch (this.signalR) {
+      case 'not-started':
+        // Nothing is wrong here: there is no hub connection to break
+        // outside multiplayer. The text carries that, not a third colour.
+        return { ...base, ok: true, value: 'not used on this screen', summary: undefined }
+      case 'connecting':
+        return { ...base, ok: true, value: 'connecting…', summary: 'Connecting…' }
+      case 'connected':
+        return { ...base, ok: true, value: 'connected', summary: undefined }
+      case 'reconnecting':
+        return { ...base, ok: false, value: 'reconnecting…', summary: 'Reconnecting…' }
+      default:
+        return { ...base, ok: false, value: 'disconnected', summary: 'Disconnected' }
+    }
+  }
+
+  /** The dot is red when ANY row is red. Derived from the same objects the
+   * panel renders, so the two can never disagree — previously the dot
+   * ignored the browser's own connectivity entirely, and stayed green
+   * while the panel said the device was offline. */
+  private get _isHealthy(): boolean {
+    return this._rows.every((row) => row.ok)
+  }
+
+  /** What the dot says in words. The first failing row wins, so the most
+   * specific problem is named rather than a generic "something is wrong";
+   * falling back to the first row that has anything to say at all. */
   private get _statusText(): string {
-    if (this.signalR === 'reconnecting') return 'Reconnecting…'
-    if (this.signalR === 'disconnected') return 'Disconnected'
-    if (this.signalR === 'connecting') return 'Connecting…'
-    if (this.http.status === 'checking') return 'Checking…'
-    if (this.http.status !== 'ok') return 'Server unreachable'
-    return 'Connected'
+    const failing = this._rows.find((row) => !row.ok && row.summary)
+    if (failing?.summary) return failing.summary
+
+    const pending = this._rows.find((row) => row.summary)
+    return pending?.summary ?? 'Connected'
   }
 
   render() {
@@ -206,28 +327,6 @@ export class ConnectionStatus extends LitElement {
     `
   }
 
-  /** Whether a realtime connection is even expected here. Outside the
-   * multiplayer room there is no hub, so the row describes nothing —
-   * which is different from describing something healthy. */
-  private get _realtimeApplies(): boolean {
-    return this.signalR !== 'not-started'
-  }
-
-  private get _realtimeTone(): string {
-    if (!this._realtimeApplies) return 'inactive'
-    if (this.signalR === 'connected') return 'ok'
-    if (this.signalR === 'connecting') return 'checking'
-    return 'bad'
-  }
-
-  private get _realtimeText(): string {
-    if (!this._realtimeApplies) return 'not used on this screen'
-    if (this.signalR === 'connecting') return 'connecting…'
-    if (this.signalR === 'connected') return 'connected'
-    if (this.signalR === 'reconnecting') return 'reconnecting…'
-    return 'disconnected'
-  }
-
   private _renderDetails() {
     return html`
       <div class="details" role="group" aria-labelledby="connection-status-heading">
@@ -235,31 +334,51 @@ export class ConnectionStatus extends LitElement {
              it previously opened straight into two data rows, so there
              was nothing saying what they described. -->
         <h2 id="connection-status-heading">Connection status</h2>
-        <div class="row">
-          <span class="label">Backend (${api.baseUrl})</span>
-          ${this.http.status === 'checking'
-            ? html`<span class="value checking">checking…</span>`
-            : this.http.status === 'ok'
-              ? html`<span class="value ok">OK · ${this.http.latencyMs}ms</span>`
-              : html`<span class="value bad">${this.http.message}</span>`}
-        </div>
-        <div class="row">
-          <span class="label">Realtime (SignalR)</span>
-          <!-- Grey, not green, when there is no hub connection to report
-               on. Showing it as a passing check invited the reading that
-               something had been verified, when in fact the row simply
-               does not apply outside multiplayer — see
-               docs/SCRUM/BACKLOG/Flag.BrokenConnectionIndicator.md. -->
-          <span class="value ${this._realtimeTone}">${this._realtimeText}</span>
-        </div>
-        ${!this._isHealthy
+
+        <dl>
+          ${this._rows.map((row) => this._renderRow(row))}
+        </dl>
+
+        ${!this.browserOnline
           ? html`
               <p class="hint">
-                If the backend is reachable elsewhere (e.g. from a terminal <code>curl</code>) but not here, this is
-                usually a port-forwarding gap between the browser and the server — check the PORTS tab.
+                Your device reports no network connection, so the server has not been reached. This is local — the
+                server may be perfectly healthy.
               </p>
             `
-          : null}
+          : !this._isHealthy
+            ? html`
+                <p class="hint">
+                  If the backend is reachable elsewhere (e.g. from a terminal <code>curl</code>) but not here, this is
+                  usually a port-forwarding gap between the browser and the server — check the PORTS tab.
+                </p>
+              `
+            : null}
+      </div>
+    `
+  }
+
+  /** One row, rendered straight from its state object — the row decides
+   * its own colour via `ok`, so the panel cannot drift out of step with
+   * the dot above it. */
+  private _renderRow(row: ConnectionRow) {
+    return html`
+      <div class="row ${row.ok ? '' : 'row-bad'}">
+        <dt>
+          ${row.id === 'http' ? html`<code>${row.label}</code>` : row.label}
+          ${row.detail ? html`<span class="host">${row.detail}</span>` : null}
+        </dt>
+        <dd class="value ${row.ok ? 'ok' : 'bad'}">
+          <!-- The countdown belongs to the check it counts down to, so it
+               sits in that row rather than floating under the panel, and
+               ahead of the value so the result stays the rightmost thing
+               the eye lands on. aria-hidden: useful to look at, useless to
+               hear once a second — the row's value carries the state. -->
+          ${row.id === 'http'
+            ? html`<span class="next-check" aria-hidden="true">${this.secondsToNextCheck}s</span>`
+            : null}
+          ${row.value}
+        </dd>
       </div>
     `
   }
@@ -305,26 +424,81 @@ export class ConnectionStatus extends LitElement {
       position: absolute;
       top: 1.5rem;
       right: 0;
-      width: 18rem;
+      width: 19rem;
       padding: 0.75rem;
       border-radius: 8px;
       background: var(--surface-raised);
-      border: 1px solid #ddd;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+      /* Was a hard-coded #ddd, which stayed light in dark mode — the same
+         class of miss as the white backgrounds fixed earlier. */
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 16px var(--overlay);
       font-size: 0.8rem;
     }
 
+    dl {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
 
+    /* Hairline separators rather than boxes: enough structure for the eye
+       to find a row without the panel turning into a table. */
     .row {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
       gap: 0.75rem;
-      padding: 0.25rem 0;
+      padding: 0.35rem 0.1rem;
+      border-top: 1px solid var(--border);
     }
 
-    .label {
+    .row:first-child {
+      border-top: none;
+    }
+
+    /* A failing row is marked by weight and a left rule as well as
+       colour, so the state is not carried by hue alone. */
+    .row-bad {
+      border-left: 3px solid var(--error);
+      padding-left: 0.4rem;
+      margin-left: -0.4rem;
+    }
+
+    dt {
       color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      min-width: 0;
+    }
+
+    dd {
+      margin: 0;
+    }
+
+    /* The endpoint's host sits under its name rather than beside it: the
+       URL is long, and pushing it onto its own line keeps the value
+       column aligned instead of wrapping mid-row. */
+    .host {
+      font-size: 0.9em;
+      opacity: 0.75;
+      word-break: break-all;
+    }
+
+    dt code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text);
+    }
+
+    /* Sits beside the value it belongs to, muted so it reads as metadata
+       about the row rather than as part of the result. */
+    .next-check {
+      margin-right: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
     }
 
 
@@ -351,21 +525,10 @@ export class ConnectionStatus extends LitElement {
       color: var(--error);
     }
 
-    /* Deliberately the muted token, not a status colour: this row is
-       reporting "no answer expected", which is neither good nor bad. */
-    .value.inactive {
-      color: var(--text-muted);
-      font-weight: 400;
-    }
-
-    .value.checking {
-      color: var(--text-muted);
-    }
-
     .hint {
       margin: 0.5rem 0 0;
       padding-top: 0.5rem;
-      border-top: 1px solid #eee;
+      border-top: 1px solid var(--border);
       color: var(--text-muted);
       line-height: 1.4;
     }
