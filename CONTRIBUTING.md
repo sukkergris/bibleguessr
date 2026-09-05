@@ -39,7 +39,7 @@ For tests that send email, start the local Mailpit service and use the developme
 
 ### Bible test data
 
-Some parser and end-to-end tests require Bible files. The repository does not provide copyrighted translations for redistribution. Provide your own legally obtained files locally, following [bibles/jw.org/README-BROTHER.md](bibles/jw.org/README-BROTHER.md) and the relevant test fixtures.
+Some parser and end-to-end tests require Bible files. The repository does not provide copyrighted translations for redistribution. Provide your own legally obtained files locally, following [bibles/jw.org/README.md](bibles/jw.org/README.md) and the relevant test fixtures.
 
 Keep private Bible files out of commits. Uploaded Bible text must remain in the player's browser and must never be sent to the server or other players. Only book number, chapter number, and verse number may cross the multiplayer boundary.
 

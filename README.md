@@ -85,3 +85,19 @@ served by the backend. Translations the app isn't entitled to redistribute
 (e.g. Jehovah's Witnesses' Ny Verden-Oversættelsen) are never loaded
 server-side at all — they only work through "bring your own file" above,
 where the text stays in the player's own browser.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project conventions, local
+setup, and the checks to run before opening a change. Security issues
+should be reported privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+The code is [MIT licensed](LICENSE).
+
+The Bible translations are not covered by that license — they are separate
+works with their own terms. The bundled Danish text is public domain; see
+[NOTICE.md](NOTICE.md) for its provenance and attribution, and for the
+licenses of third-party dependencies. Please do not commit copyrighted
+Bible text to this repository.

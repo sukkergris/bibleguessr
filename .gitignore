@@ -328,6 +328,15 @@ backup/habibi-vip-taxi/backup/*
 
 bibles/bibelen-dk/Bibelen Files/
 bibles/jw.org/*
-!bibles/jw.org/README-BROTHER.md
+!bibles/jw.org/README.md
 !bibles/jw.org/.gitkeep
 backend/test-results/.last-run.json
+
+## Playwright run state — build output, not project config
+test-results/
+
+## Per-developer tool permissions, not project settings
+.claude/settings.local.json
+
+## macOS directory metadata
+.DS_Store

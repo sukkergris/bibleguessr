@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(task dotnet:dev)",
-      "Bash(disown)",
-      "Bash(curl -s -o /dev/null -w \"backend:%{http_code}\\\\n\" http://localhost:5162/api/health)"
-    ]
-  }
-}

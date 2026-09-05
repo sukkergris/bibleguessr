@@ -20,5 +20,5 @@ Only add files that you are permitted to download, store, and use for local
 testing. Do not commit Bible text, private translations, or other copyrighted
 content to this repository.
 
-`README-BROTHER.md` and `.gitkeep` are intentionally tracked so this folder's
+This `README.md` and `.gitkeep` are intentionally tracked so this folder's
 purpose and structure remain visible even when the local test data is absent.
