@@ -58,6 +58,37 @@
         keeps listening for OS changes and repaints; an explicit choice deliberately stops listening.
       </p>
 
+      <h2>A background token is not a foreground token</h2>
+      <p>
+        Naming tokens for meaning only helps if each one is used for the meaning it carries. The mode-switch tabs
+        (&ldquo;Server translation&rdquo; / &ldquo;My own Bible file&rdquo;) set the unselected tab's
+        <code>color</code> to <code>var(--surface-raised)</code> &mdash; a <em>background</em> token used as a
+        <em>foreground</em>. Since the pill is <code>background: transparent</code>, the label was painted in the
+        colour of the surface behind it and disappeared: white on white at <strong>1.00:1</strong> in the light
+        theme, and <strong>1.22:1</strong> in the dark theme.
+      </p>
+      <p>
+        The selected tab was unaffected, because its <code>.active</code> rule overrides the colour &mdash; which is
+        why the switch looked half-broken rather than obviously wrong. The label was also still in the DOM with a
+        correct accessible name, so the a11y audit could not see it. Only a computed-colour check catches a defect
+        of this shape, which is what <span class="file-ref">frontend/e2e/mode-switch-contrast.spec.ts</span> does,
+        in both themes and both screens.
+      </p>
+      <p>
+        The rule of thumb: <code>--text</code> and <code>--text-muted</code> are the only tokens that belong in a
+        <code>color</code> declaration, unless the element paints its own background and uses the matching pair
+        (<code>--accent</code> with <code>--accent-text</code>). See
+        <span class="file-ref">docs/SCRUM/DONE/Bug.ModeSwitchTabLabelInvisible.md</span>.
+      </p>
+      <p>
+        That spec also surfaced a second, unrelated defect in the tokens themselves: dark-theme
+        <code>--accent</code> (<code>#aa3bff</code>) under white <code>--accent-text</code> measures
+        <strong>4.39:1</strong>, just short of the 4.5:1 AA threshold, affecting every accent-filled control
+        app-wide. It is tracked separately in
+        <span class="file-ref">docs/SCRUM/BUGS/Bug.DarkThemeAccentContrast.md</span> rather than fixed in passing,
+        because changing it recolours the whole application.
+      </p>
+
       <h2>Implementation</h2>
       <p>
         <span class="file-ref">frontend/src/theme.ts</span> holds the preference, its validation and the apply logic;

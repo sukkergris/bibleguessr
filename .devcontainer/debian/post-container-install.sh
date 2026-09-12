@@ -42,6 +42,25 @@ else
   echo "WARNING: playwright-cli not found on PATH — skipping Chromium browser install" >&2
 fi
 
+# The frontend e2e suite uses the repo's own `@playwright/test`, which is a
+# DIFFERENT tool from the global `playwright-cli` above and pins its own
+# browser revision — so the download above does not satisfy it, and
+# `task frontend:test-e2e` otherwise fails on first use with "Executable
+# doesn't exist ... run npx playwright install".
+#
+# The dependency lives in frontend/, which postCreateCommand does not install
+# (that is `task frontend:install`), so install it here only if it happens to
+# be present already. Missing node_modules is the normal first-build case, not
+# a fault: the browser is then fetched by the install step below on demand.
+FRONTEND_DIR="/xyz/frontend"
+if [ -d "$FRONTEND_DIR/node_modules/@playwright/test" ]; then
+  (cd "$FRONTEND_DIR" && npx --no-install playwright install chromium) \
+    || echo "WARNING: npx playwright install chromium failed" >&2
+else
+  echo "NOTE: frontend/node_modules not present — the e2e browser will be installed"
+  echo "      by 'task frontend:install'. Run that before 'task frontend:test-e2e'."
+fi
+
 claude --print "." > /dev/null 2>&1 || true
 
 # gh itself comes from Dockerfile.debian and its credentials persist in the

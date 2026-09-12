@@ -374,7 +374,10 @@ export class TranslationSourceSelect extends LitElement {
       border-radius: 999px;
       border: 1px solid #ccc;
       background: transparent;
-      color: var(--surface-raised);
+      /* The unselected tab sits on the page surface, so it takes the
+         foreground token. --surface-raised here rendered white-on-white in
+         light theme and dark-on-dark in dark theme, hiding the label. */
+      color: var(--text);
       font-size: 0.85rem;
       line-height: 1.3;
       text-align: center;
@@ -382,6 +385,10 @@ export class TranslationSourceSelect extends LitElement {
       cursor: pointer;
     }
 
+    .mode-switch button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
 
     .mode-switch button.active {
       background: var(--accent);

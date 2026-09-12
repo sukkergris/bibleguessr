@@ -48,11 +48,26 @@ tasks:
     cmds:
       - npm run test
 
+  install-browsers:
+    desc: Download the browser binary the e2e tests need (safe to re-run; no-op once present)
+    dir: "{{.FRONTEND_DIR}}"
+    deps:
+      - install
+    cmds:
+      # The devcontainer also does this on create, but only when
+      # frontend/node_modules already exists — on a fresh build it does not,
+      # so this is what actually covers that case. Note the browser revision
+      # is pinned by the repo's @playwright/test and differs from the one the
+      # global `playwright-cli` downloads; they are separate tools and do not
+      # satisfy each other. Playwright skips the download when the pinned
+      # build is already in ~/.cache/ms-playwright, so re-running is cheap.
+      - npx playwright install chromium
+
   test-e2e:
     desc: Run end-to-end tests (requires dotnet:dev and frontend:dev already running)
     dir: "{{.FRONTEND_DIR}}"
     deps:
-      - install
+      - install-browsers
     cmds:
       - npx playwright test
 
