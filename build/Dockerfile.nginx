@@ -2,7 +2,12 @@
 # serving the built frontend as static files. Build context is the
 # repository root, e.g.:
 #   docker build -f build/Dockerfile.nginx -t bibleguessr-nginx .
-FROM node:22-alpine AS build-env
+# Pin the build image to the current Alpine release so it receives the latest
+# security fixes instead of relying on the moving, unversioned Alpine tag.
+FROM node:24-alpine3.23 AS build-env
+
+# Bring Alpine packages up to date to reduce vulnerabilities in the build image.
+RUN apk upgrade --no-cache
 
 WORKDIR /app/bibleguessr
 
@@ -17,6 +22,9 @@ COPY ["frontend/", "."]
 RUN npm run build
 
 FROM openresty/openresty:alpine AS final
+
+# Bring Alpine packages up to date to reduce vulnerabilities in the runtime image.
+RUN apk upgrade --no-cache
 
 # Clean default html
 RUN rm -rf /usr/share/nginx/html/*
