@@ -21,7 +21,9 @@ COPY ["frontend/", "."]
 
 RUN npm run build
 
-FROM openresty/openresty:alpine AS final
+# Pin to a specific OpenResty release+revision on Alpine instead of the
+# moving `alpine` tag, so the base image only changes when we bump it here.
+FROM openresty/openresty:1.31.1.1-3-alpine AS final
 
 # Bring Alpine packages up to date to reduce vulnerabilities in the runtime image.
 RUN apk upgrade --no-cache
