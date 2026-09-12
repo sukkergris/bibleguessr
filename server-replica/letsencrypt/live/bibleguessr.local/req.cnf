@@ -1,0 +1,23 @@
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+C = DK
+ST = Central Denmark Region
+L = Tilst
+O = K-for-kode
+OU = IT
+CN = bibleguessr.single
+
+[v3_req]
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = bibleguessr.single
+DNS.2 = squidex.bibleguessr.single
+DNS.3 = www.bibleguessr.single
+DNS.4 = www.squidex.bibleguessr.single

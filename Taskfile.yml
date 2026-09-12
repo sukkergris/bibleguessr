@@ -7,14 +7,12 @@ includes:
   dotnet:
     taskfile: ./Taskfile.Dotnet.yml
     dir: .
+  certs:
+    taskfile: ./Taskfile.Certs.yml
+    dir: .
 
 tasks:
   default:
     desc: List all available tasks
     cmds:
       - task --list-all
-
-  dev:
-    desc: Start the frontend dev server (alias for frontend:dev)
-    cmds:
-      - task: frontend:dev

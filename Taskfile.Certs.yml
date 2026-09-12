@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  add-dev-certs:
+    desc: Create and trust dev certs on the host
+    cmds:
+      - ./scripts/certs/cert-issue.sh
