@@ -31,7 +31,7 @@ services:
     networks:
       - internal
   nginx:
-    image: nginx:alpine
+    image: openresty/openresty:alpine
     # pull_policy: missing
     # container_name: site-fleet-cms-nginx
     ports:

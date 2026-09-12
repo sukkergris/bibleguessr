@@ -47,3 +47,9 @@ When a feature is completed, increase the version number for each affected appli
 ## Data security
 
 Uploaded verse text must never be sent to the server or to other players. Only the book number, chapter number, and verse number may be transmitted.
+
+## Bible translation licensing
+
+Only public-domain or explicitly redistributable Bible translations may be committed to this repository. Copyrighted translations — e.g. Jehovah's Witnesses' Ny Verden-Oversættelsen (jw.org material) — must never be added to git, in any form or location, in this repo or any other. They are used only through the app's "bring your own file" mode: the player supplies their own legally obtained file, it is parsed entirely in their browser, and it is never uploaded (see `docs/jw.org/README.md` for the local-only test-data workflow, and `NOTICE.md` for the full licensing picture and what's bundled today).
+
+Before staging, committing, or moving any file under a path containing `jw.org`, stop and confirm it is still excluded by `.gitignore` rather than assuming it is safe.

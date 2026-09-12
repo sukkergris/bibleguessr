@@ -323,13 +323,11 @@ env/*
 
 .task/
 
-backup/habibi-vip-taxi/backup.env
-backup/habibi-vip-taxi/backup/*
 
 bibles/bibelen-dk/Bibelen Files/
-bibles/jw.org/*
-!bibles/jw.org/README.md
-!bibles/jw.org/.gitkeep
+**/jw.org/*
+!**/jw.org/README.md
+!**/jw.org/.gitkeep
 backend/test-results/.last-run.json
 
 ## Playwright run state — build output, not project config
