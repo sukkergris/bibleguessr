@@ -1,0 +1,35 @@
+# Production image for the BibleGuessr backend API (F# / ASP.NET Core).
+# Build context is the repository root, e.g.:
+#   docker build -f build/Dockerfile.api -t bibleguessr-api .
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+WORKDIR /src
+
+# Restore first, using only the project files, so dependency restore is
+# cached independently of source code changes.
+COPY backend/Api/BibleGuessr.Api.fsproj backend/Api/
+COPY backend/Domain/BibleGuessr.Domain.fsproj backend/Domain/
+RUN dotnet restore backend/Api/BibleGuessr.Api.fsproj
+
+# Now bring in the rest of the source and publish. (Restore runs again here
+# rather than passing --no-restore: on Alpine, publish's own dependency
+# resolution does not reliably reuse the earlier restore's package set.)
+COPY backend/Api/ backend/Api/
+COPY backend/Domain/ backend/Domain/
+RUN dotnet publish backend/Api/BibleGuessr.Api.fsproj \
+    --configuration Release \
+    --output /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+WORKDIR /app
+
+# Run as a non-root user.
+RUN adduser --disabled-password --home /app --gecos '' apiuser \
+    && chown -R apiuser /app
+USER apiuser
+
+COPY --from=build --chown=apiuser /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "BibleGuessr.Api.dll"]

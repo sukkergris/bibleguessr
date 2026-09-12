@@ -1,0 +1,20 @@
+name: bibleguessr-build
+
+# Builds the production images for the API and the OpenResty reverse proxy.
+# Build context is the repository root (one level up from this file), since
+# both Dockerfiles need access to backend/ and server-replica/ respectively.
+#
+# Usage (from the repository root):
+#   docker compose -f build/docker-compose.build.yml build
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile.api
+    image: bibleguessr-api:latest
+
+  nginx:
+    build:
+      context: ..
+      dockerfile: build/Dockerfile.nginx
+    image: bibleguessr-nginx:latest

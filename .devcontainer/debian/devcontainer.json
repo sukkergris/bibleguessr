@@ -77,7 +77,9 @@
         "csharpier.csharpier-vscode",
         "google.google-antigravity",
         "DavidAnson.vscode-markdownlint",
-        "ritwickdey.LiveServer"
+        "ritwickdey.LiveServer",
+        "docker.docker",
+        "redhat.vscode-yaml"
       ]
     }
   },

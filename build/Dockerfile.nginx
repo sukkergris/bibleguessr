@@ -1,0 +1,36 @@
+# Production image for the OpenResty (nginx + LuaJIT) reverse proxy,
+# serving the built frontend as static files. Build context is the
+# repository root, e.g.:
+#   docker build -f build/Dockerfile.nginx -t bibleguessr-nginx .
+FROM node:22-alpine AS build-env
+
+WORKDIR /app/bibleguessr
+
+# Copy package files first for better layer caching
+COPY ["frontend/package.json", "frontend/package-lock.json", "./"]
+
+RUN npm ci
+
+# Then copy source and build
+COPY ["frontend/", "."]
+
+RUN npm run build
+
+FROM openresty/openresty:alpine AS final
+
+# Clean default html
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy static site
+COPY --from=build-env /app/bibleguessr/dist /usr/share/nginx/html
+
+# For extension files
+RUN mkdir -p /etc/nginx/includes /etc/nginx/conf.d/snippets
+
+# The config lives in server-replica/nginx (mounted read-only in the
+# devcontainer's docker-compose; baked in here for the production image).
+COPY server-replica/nginx/nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
+
+EXPOSE 80 443
+
+CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
