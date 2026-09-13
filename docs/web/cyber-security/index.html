@@ -120,10 +120,37 @@
         <code>joomla</code>), and DNS-over-HTTP paths (<code>dns-query</code>) used to probe for open resolvers.
       </p>
       <p>
-        Rather than a fast 403, each match is served a large decoy file at a deliberately crawling
-        <code>limit_rate</code> — 10 KB/s for generic probes, 8 KB/s for PHP, 4 KB/s for CMS admin paths — with a
-        <code>Content-Disposition</code> header naming it <code>production.conf</code>. The intent is to hold the
-        scanner's connection open for hours on a worthless file instead of letting it move on quickly.
+        Rather than a fast 403, each match is answered by a Lua handler
+        (<span class="file-ref">lua/tarpit.lua</span>) that <em>generates</em> a fake configuration file and
+        streams it slowly — 10 KB/s for generic probes, 8 KB/s for PHP, 4 KB/s for CMS admin paths — with a
+        <code>Content-Disposition</code> header naming it <code>production.conf</code>. The scanner's connection is
+        held open on a worthless file instead of being freed for the next target.
+      </p>
+      <p>
+        Nothing is read from disk: there is no decoy file to mount, build into the image, or commit. The body is
+        open-ended, so the response is chunked with no <code>Content-Length</code>, and the bait values are
+        randomized per request — two scanners never receive byte-identical bodies.
+      </p>
+      <div class="callout">
+        <span class="callout-title">Why the pacing is in Lua</span>
+        <p>
+          <code>limit_rate</code> only throttles nginx's own file and proxy output filters; it does not apply to
+          <code>ngx.print</code> from a <code>content_by_lua</code> handler. The handler therefore paces itself
+          against elapsed wall-clock time, sleeping only while it is ahead of the budget the configured rate allows.
+          Per-block sleeps were tried first and drifted well above the target, because blocks vary in size and
+          <code>ngx.sleep</code> has millisecond granularity.
+        </p>
+      </div>
+      <p>
+        Two safeguards keep a tarpit from costing more than it saves: <code>ngx.on_abort</code> plus a checked
+        <code>ngx.flush</code> stop generation the moment the scanner hangs up, and
+        <code>max_seconds</code> (default 900) caps how long any single connection is held. Because the handler
+        sleeps rather than spins, a held connection costs a coroutine, not a worker.
+      </p>
+      <p>
+        Ordering matters in <span class="file-ref">includes/tarpit.conf</span>: nginx uses the first matching regex
+        location, so the specific CMS admin list is placed above the generic <code>\.php$</code> rule. Reversed, every
+        <code>.php</code> path would take the faster generic rate.
       </p>
       <p>
         Hits are logged under the <code>security_events</code> format
@@ -132,26 +159,12 @@
         traffic can be grepped out of the normal access log.
       </p>
 
-      <div class="callout">
-        <span class="callout-title">Currently inert in the devcontainer</span>
-        <p>
-          The tarpit locations <code>alias</code> to
-          <span class="file-ref">/usr/share/nginx/html/the-forbidden-zone/production.conf</span>, but the compose
-          mount that would put a file there is commented out in
-          <span class="file-ref">.devcontainer/debian/docker-compose.yml</span> and still points at an old path.
-          With nothing mounted, these locations return 404 — the paths are still not served, but no tarpitting
-          happens. The decoy files themselves live in
-          <span class="file-ref">server-replica/the-forbidden-zone/</span>. In the production image
-          (<span class="file-ref">build/Dockerfile.nginx</span>) the web root is populated from the frontend build,
-          which does not contain that folder either, so this needs wiring up in both places before it does anything.
-        </p>
-      </div>
-
       <h2>Layer 5 — Sensitive-path blocking</h2>
       <p>
         <span class="file-ref">includes/security-headers.conf</span> covers a similar path list to the tarpit, adding
         <code>node_modules</code>, with <code>access_log off</code> so routine scanner noise does not fill the log.
-        Despite the filename it defines no HTTP security headers — see the gaps below.
+        It uses the same generated body, so it too needs no file on disk. Despite the filename it defines no HTTP
+        security headers — see the gaps below.
       </p>
 
       <h2>Layer 6 — TLS</h2>
@@ -191,10 +204,6 @@ openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
           is reachable directly. Nothing currently enforces that it is not.
         </li>
         <li>
-          <strong>The tarpit is not wired up.</strong> Its decoy is not mounted in the devcontainer and not present
-          in the production image.
-        </li>
-        <li>
           <strong>The blocklist is manual.</strong> 23 hand-collected IPs, updated by editing a file; scanners rotate
           addresses far faster than that. It is a supplement to Cloudflare, not a substitute.
         </li>
@@ -202,10 +211,10 @@ openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
           <strong><code>$is_bad_ip</code> has no consumer.</strong> Defined and verified, but unused.
         </li>
         <li>
-          <strong>~195 MB of decoy binaries are committed.</strong>
-          <span class="file-ref">the-forbidden-zone/production.conf</span> (100 MB) and
-          <span class="file-ref">troll.png</span> (94 MB) are tracked in git, which is most of the repository's
-          129 MB history and is paid by every clone. Generating them at image-build time would avoid that.
+          <strong>The old decoy file is still in git.</strong> The tarpit no longer reads it, but
+          <span class="file-ref">the-forbidden-zone/production.conf</span> (100 MB of random bytes) is still
+          tracked — the bulk of the repository's ~129 MB history, paid by every clone. It can now be deleted;
+          purging it from past history needs a rewrite.
         </li>
       </ul>
 
@@ -218,7 +227,9 @@ openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
         <span class="file-ref">bad-guys.conf</span>, <span class="file-ref">geo-bad-ips.conf</span>,
         <span class="file-ref">rate-limiting.conf</span>, <span class="file-ref">tarpit.conf</span>,
         <span class="file-ref">security-checks.conf</span>, <span class="file-ref">security-headers.conf</span>,
-        <span class="file-ref">ssl-params.conf</span> and <span class="file-ref">log-formats.conf</span>.
+        <span class="file-ref">ssl-params.conf</span> and <span class="file-ref">log-formats.conf</span>. The
+        generated tarpit body is <span class="file-ref">lua/tarpit.lua</span>, found via the
+        <code>lua_package_path</code> set in <span class="file-ref">includes/http-globals.conf</span>.
       </p>
     </main>
   </body>
