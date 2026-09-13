@@ -6,5 +6,6 @@ export default defineConfig({
     // Bind to all interfaces so the dev server is reachable from outside
     // the devcontainer (e.g. via VS Code port forwarding).
     host: true,
+    allowedHosts: ['bibleguessr.single', 'www.bibleguessr.single'],
   },
 });
