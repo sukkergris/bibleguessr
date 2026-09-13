@@ -27,10 +27,29 @@ mkdir -p "${SSH_DIR}" || {
   echo "ERROR: creating SSH dir failed" >&2
   exit 1
 }
-cp -rf "${TEMPLATE_DIR}/." "${SSH_DIR}/" || {
-  echo "ERROR: copying SSH template failed" >&2
-  exit 1
-}
+# Entries under TEMPLATE_DIR to skip when copying, e.g. "agent" holds live
+# ssh-agent sockets that don't survive the bind mount and make cp/stat fail.
+IGNORE_LIST=("agent")
+
+shopt -s dotglob nullglob
+for item in "${TEMPLATE_DIR}"/*; do
+  base="$(basename "${item}")"
+  skip=false
+  for ignored in "${IGNORE_LIST[@]}"; do
+    if [ "${base}" = "${ignored}" ]; then
+      skip=true
+      break
+    fi
+  done
+  if [ "${skip}" = true ]; then
+    continue
+  fi
+  cp -rf "${item}" "${SSH_DIR}/" || {
+    echo "ERROR: copying SSH template failed" >&2
+    exit 1
+  }
+done
+shopt -u dotglob nullglob
 
 chmod 700 "${SSH_DIR}"
 find "${SSH_DIR}" -mindepth 1 -type d -exec chmod 700 {} + 2>/dev/null || true

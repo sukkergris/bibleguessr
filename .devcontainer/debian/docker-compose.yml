@@ -40,8 +40,8 @@ services:
     networks:
       internal:
         aliases:
-          - bibleguessr.local
-          - www.bibleguessr.local
+          - bibleguessr.single
+          - www.bibleguessr.single
 
     volumes:
       - ../../server-replica/nginx:/etc/nginx:ro

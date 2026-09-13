@@ -37,10 +37,9 @@ COPY --from=build-env /app/bibleguessr/dist /usr/share/nginx/html
 # For extension files
 RUN mkdir -p /etc/nginx/includes /etc/nginx/conf.d/snippets
 
-# The config lives in server-replica/nginx (mounted read-only in the
-# devcontainer's docker-compose; baked in here for the production image).
-COPY server-replica/nginx/nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
+# Copy configuration files to /etc/nginx
+COPY server-replica/nginx /etc/nginx
 
 EXPOSE 80 443
 
-CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
+CMD ["/usr/local/openresty/bin/openresty", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
