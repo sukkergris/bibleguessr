@@ -14,8 +14,8 @@ open BibleGuessr.Domain
 /// SMTP connection + addressing settings, read from configuration at
 /// startup — see Program.fs's `Configuration["Smtp:..."]` reads, which
 /// follow the same `Option.ofObj |> Option.defaultValue` idiom as the
-/// existing Frontend:Origin/Verses:Directory config values. Local/secret
-/// values (host, credentials) belong in appsettings.Development.json
+/// existing Verses:Directory config values. Local/secret values (host,
+/// credentials) belong in appsettings.Development.json
 /// (gitignored) rather than the tracked appsettings.json, same convention
 /// as any other local-only setting in this project.
 type SmtpSettings =

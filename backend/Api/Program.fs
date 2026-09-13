@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.5.2"
+let BackendVersion = "0.5.3"
 
 [<EntryPoint>]
 let main args =
@@ -76,15 +76,13 @@ let main args =
             ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration)
     |> ignore
 
-    let frontendOrigin =
-        builder.Configuration["Frontend:Origin"] |> Option.ofObj |> Option.defaultValue "http://localhost:5173"
-
-    builder.Services.AddCors(fun options ->
-        options.AddDefaultPolicy(fun policy ->
-            policy.WithOrigins(frontendOrigin).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
-            |> ignore))
-    |> ignore
-
+    // No CORS setup here on purpose. The browser only ever reaches this
+    // API same-origin: the web server in front (nginx in the server
+    // replica, Vite's dev proxy locally) serves the frontend and routes
+    // /api/ and /hubs/ to this process under the same scheme, host and
+    // port. Same-origin requests aren't subject to CORS at all, so a
+    // policy here would grant nothing and only invite drift between the
+    // allowed origin and the real one.
     builder.Services
         .AddSignalR(fun options ->
             // Without this, a hub method that fails via `failwith "..."`
@@ -240,11 +238,9 @@ let main args =
 
     let startupLogger = app.Services.GetRequiredService<ILogger<obj>>()
     startupLogger.LogInformation("Verses loaded: {Count}", verses.Length)
-    startupLogger.LogInformation("CORS allowed origin: {Origin}", frontendOrigin)
     startupLogger.LogInformation("SMTP host for bug reports: {Host}:{Port}", smtpSettings.Host, smtpSettings.Port)
 
     app.UseHttpLogging() |> ignore
-    app.UseCors() |> ignore
 
     // /healthz is the conventional name for a liveness endpoint, and the
     // connection panel names it directly rather than calling it "backend"
