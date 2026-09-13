@@ -178,18 +178,33 @@
 
       <h2>Verifying a change</h2>
       <p>
-        Because the config loads on two paths, a config test should cover both. In a throwaway container with the
-        config copied to <span class="file-ref">/etc/nginx</span>:
+        The tarpit has an end-to-end test suite. It starts a throwaway OpenResty container with this config copied
+        in, fires real requests at the tarpit locations and asserts on what comes back, so it neither touches the
+        devcontainer's nginx nor needs the app running:
+      </p>
+      <pre>server-replica/nginx/test/run-tarpit-tests.sh</pre>
+      <p>
+        It covers both config load paths, that scanner paths are tarpitted and normal paths are not, that CMS
+        admin paths are throttled harder than generic <code>.php</code> ones, the streaming rate, the response
+        shape (chunked, no <code>Content-Length</code>, exactly one generated header), per-request uniqueness, the
+        <code>max_seconds</code> cap, and client-abort handling. See
+        <span class="file-ref">server-replica/nginx/test/README.md</span>.
+      </p>
+      <div class="callout">
+        <span class="callout-title">The checks were mutation-tested</span>
+        <p>
+          Each check was validated by breaking the implementation on purpose and confirming the suite goes red —
+          a test that passes against broken code is worse than no test. One mutation originally slipped through:
+          moving the generic <code>\.php$</code> rule above the CMS list still tarpitted every path, so every check
+          passed while the 4 KB/s tier was silently lost. The byte-count assertion exists to close that gap.
+        </p>
+      </div>
+      <p>
+        For a config-only change, a syntax check on both paths is the minimum — but note it does not prove a
+        <code>geo</code> variable resolves, only that the file parses:
       </p>
       <pre>openresty -t                              # image default config path
 openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
-      <p>
-        Both must report <code>test is successful</code>. To check that a
-        <code>geo</code> variable actually resolves — a syntax pass does not prove this — send requests with a
-        spoofed <code>X-Forwarded-For</code> to a probe server that has <code>real_ip_header X-Forwarded-For</code>
-        set and returns <code>$bad_guys</code> / <code>$is_bad_ip</code>, and confirm a known-bad address yields
-        <code>1</code> while a clean address yields <code>0</code>.
-      </p>
 
       <h2>Known gaps</h2>
       <ul>
@@ -211,10 +226,10 @@ openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
           <strong><code>$is_bad_ip</code> has no consumer.</strong> Defined and verified, but unused.
         </li>
         <li>
-          <strong>The old decoy file is still in git.</strong> The tarpit no longer reads it, but
-          <span class="file-ref">the-forbidden-zone/production.conf</span> (100 MB of random bytes) is still
-          tracked — the bulk of the repository's ~129 MB history, paid by every clone. It can now be deleted;
-          purging it from past history needs a rewrite.
+          <strong>The deleted decoy still weighs on history.</strong>
+          <span class="file-ref">the-forbidden-zone/production.conf</span> (100 MB of random bytes) has been
+          removed from the working tree, but the blob remains in git history and is still paid by every clone.
+          Reclaiming that space needs a history rewrite, which changes commit hashes and has to be coordinated.
         </li>
       </ul>
 
