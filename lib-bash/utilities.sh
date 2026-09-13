@@ -38,11 +38,23 @@ util::folder_exists() {
   [[ -d "$folder" ]]
 }
 
+# Usage: util::spot_duplicate_file_names <search-dir> [file-name-pattern]
+# Prints each duplicate file name once, sorted alphabetically.
 util::spot_duplicate_file_names() {
     local search_dir="${1:-}"
-    local pattern="$2:-*.sh"
+    local pattern="${2:-*.sh}"
 
-    if [[ -z "$searhc_dir" ]]; then
-        echo "";
+    if [[ -z "$search_dir" ]]; then
+        printf 'Error: search directory is required.\n' >&2
+        return 1
     fi
+
+    if [[ ! -d "$search_dir" ]]; then
+        printf 'Error: search directory does not exist: %s\n' "$search_dir" >&2
+        return 1
+    fi
+
+    find "$search_dir" -type f -name "$pattern" -exec basename {} \; |
+        LC_ALL=C sort |
+        uniq -d
 }

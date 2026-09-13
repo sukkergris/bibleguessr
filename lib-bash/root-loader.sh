@@ -20,6 +20,7 @@ find_project_root() {
 }
 
 PROJECT_ROOT="$(find_project_root)"
+
 export PROJECT_ROOT
 # Standard paths
 export LIB_DIR="$PROJECT_ROOT/lib-bash"

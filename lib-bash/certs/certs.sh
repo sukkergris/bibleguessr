@@ -12,7 +12,9 @@ _CERTS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 load_module "os-detection"
 
 create_dummy_cert() {
-  local out_dir="${1:-$PROJECT_ROOT/nginx/ssl}"
+  local out_dir="${1:-$PROJECT_ROOT/server-replica/nginx/ssl}"
+
+  log::info "Creating dummy cert in ${out_dir}"
 
   mkdir -p "$out_dir"
   openssl req -x509 -nodes \
