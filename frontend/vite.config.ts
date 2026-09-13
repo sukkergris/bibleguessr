@@ -7,5 +7,8 @@ export default defineConfig({
     // the devcontainer (e.g. via VS Code port forwarding).
     host: true,
     allowedHosts: ['bibleguessr.single', 'www.bibleguessr.single'],
+    proxy: {
+      '/api': 'http://localhost:5162',
+    },
   },
 });

@@ -1,9 +1,7 @@
 import type { Room, Verse, VerseReference, VerseRestriction, VerseSource } from './types'
 
-// Configure via a Vite env var (frontend/.env.local) if the backend isn't
-// running on the default dev port, e.g. VITE_API_BASE_URL=http://localhost:5080
-// Default matches backend/Api/Properties/launchSettings.json's "http" profile.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5162'
+// API requests are always same-origin and are routed by the serving web server.
+const API_BASE_URL = ''
 
 // Wraps fetch with logging so failures are easy to diagnose from the
 // browser console: which URL was requested, whether the request even
