@@ -2,6 +2,10 @@
 
 set -u
 
+[[ -n "${_UTILITIES_LOADED:-}" ]] && return 0
+_UTILITIES_LOADED=1
+
+
 # --- Project Utility Functions (2026 Edition) ---
 
 # Logging and error handling should be sourced by the caller if needed.

@@ -26,9 +26,12 @@ create_dummy_cert() {
 # Crate selfsigned certs letsencrypt style
 create_selfsigned_letsencrypt_files() {
   local domain="${1:?domain required}"
-  local req_cnf="${2:-$PROJECT_ROOT/letsencrypt/live/$domain/req.cnf}"
+  local req_cnf="${2:-$PROJECT_ROOT/server-replica/letsencrypt/live/$domain/req.cnf}"
   local days="${3:-825}"
-  local live_dir="${PROJECT_ROOT}/letsencrypt/live/${domain}"
+  local live_dir="${PROJECT_ROOT}/server-replica/letsencrypt/live/${domain}"
+
+  util::folder_exists "${live_dir}"
+  log::info "Folder exists: ${live_dir}"
 
   local key_file="${live_dir}/privkey.pem"
   local cert_file="${live_dir}/cert.pem"

@@ -16,7 +16,7 @@ setup_certs() {
     printf 'Skipping setup_certs: running inside Docker container.\n'
     return 1
   fi
-  local domains=("biblegessr.single")
+  local domains=("bibleguessr.single")
   local domain cert_file
 
   for domain in "${domains[@]}"; do
