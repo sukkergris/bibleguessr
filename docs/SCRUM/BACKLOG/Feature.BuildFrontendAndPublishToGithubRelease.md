@@ -48,13 +48,84 @@ Three version values exist and disagree:
 | `build/.env` (`IMAGE_TAG`)                                  | `0.0.0` | backend container tag      |
 
 `frontend/src/components/nerd-panel.ts:86` reads the meta tag, so users
-currently see `0.7.2` while the package claims `0.8.3`. A release cannot be
-labelled correctly until one of these is designated authoritative. Note the
-backend version lives separately, in `backend/Api/Program.fs:46`
+currently see `0.7.2` while the package claims `0.8.3`. No test asserts that the
+two agree, which is how they drifted apart unnoticed.
+
+The backend version lives separately, in `backend/Api/Program.fs:46`
 (`BackendVersion = "0.5.3"`), and is exposed at `/api/version`.
 
-Existing git tags are `v1.0.0` and `v2.0.0`, which match none of the above.
-The tagging scheme therefore also needs a decision, not just an implementation.
+Existing git tags are `v1.0.0` (3 Sep) and `v2.0.0` (5 Sep). They match none of
+the component versions — they are whole-repository milestones from before the
+two applications were versioned independently.
+
+Resolved by decisions **D1** and **D2** below.
+
+## Decisions
+
+Settled during refinement. These were previously open questions; the feature is
+now implementable without further input.
+
+### D1 — `frontend/package.json` is the single source of truth
+
+`frontend/package.json` holds the authoritative frontend version. The
+`<meta name="application-version">` tag in `index.html` becomes **generated
+output**, injected by Vite at build time (`transformIndexHtml`), not a
+hand-maintained copy.
+
+This was chosen over keeping both in sync by hand because it removes the cause
+rather than guarding the symptom: once the tag is generated, `0.8.3` vs `0.7.2`
+cannot happen again. There is one place to edit, and everything downstream
+derives from it:
+
+```
+frontend/package.json  "version": "0.8.3"    <- the only place edited by hand
+        |
+        +-- vite build -> index.html meta tag -> Nerd tab shows 0.8.3
+        +-- release:bundle -> bibleguessr-frontend-0.8.3.tar.gz
+        +-- release:add-git-tag -> frontend-v0.8.3
+```
+
+The backend keeps its own version in `backend/Api/Program.fs` and is unaffected.
+
+### D2 — Component-prefixed tags: `frontend-v<version>`
+
+Release tags are prefixed with the component they release:
+
+```
+v1.0.0            <- existing repo milestone, left untouched
+v2.0.0            <- existing repo milestone, left untouched
+frontend-v0.8.3   <- this feature
+backend-v0.5.3    <- when the backend is released
+frontend-v0.8.4   <- next frontend release
+```
+
+The two applications version independently (`CLAUDE.md` requires bumping each
+one only when it changes), so a single shared tag cannot express "only the
+frontend changed". The existing unprefixed tags are kept as they are; they are
+historical repo milestones and are not retrofitted.
+
+A prefix was chosen over a slash namespace (`fe/v0.8.3`) because slashes in tag
+names collide with branch-name patterns in some tooling.
+
+### D3 — Releases are created as drafts
+
+`gh release create --draft`. The release and its assets are reviewable before
+anything is public, so a bad tarball can be replaced without anyone having
+downloaded it. Publishing is a deliberate manual step.
+
+### D4 — The tarball ships `LICENSE` and `NOTICE.md`
+
+Alongside the build output, the archive includes:
+
+- `LICENSE` — the project's MIT terms, so a recipient has them without having
+  to find the repository.
+- `NOTICE.md` — the provenance of the bundled Bible text. Not legally required
+  for a public-domain work, but `NOTICE.md` itself states that provenance
+  matters; shipping the attribution with the artifact is the consistent choice.
+
+No generated deployment README: the documentation in `docs/web` covers how to
+serve the bundle, and a second copy inside the tarball would be one more thing
+to keep in sync.
 
 ## Scope
 
@@ -82,17 +153,21 @@ Out of scope:
 - [x] `Taskfile.yml` includes `./Taskfile.Release.yml`, spelled correctly.
 - [x] `task --list-all` succeeds and lists the four release tasks.
 
-### 2. A single authoritative frontend version
+### 2. A single authoritative frontend version (D1)
 
-- [ ] One source of truth for the frontend version is chosen and documented.
-- [ ] `frontend/package.json` and the `<meta name="application-version">` tag
-      in `frontend/index.html` agree.
-- [ ] The Nerd tab shows that same version.
-- [ ] The release tag, the tarball filename, and the displayed version are
-      derived from that one value, so they cannot drift apart.
-- [ ] The tag naming scheme is documented, including how a frontend-only
-      release is distinguished from a backend release now that both are
-      versioned independently.
+- [ ] Vite injects `frontend/package.json`'s version into the
+      `<meta name="application-version">` tag at build time, via
+      `transformIndexHtml` in `vite.config.ts`.
+- [ ] The version is no longer hand-written in `frontend/index.html`; the
+      current literal `0.7.2` is replaced by the injected value.
+- [ ] The Nerd tab shows the injected version in both `vite dev` and a
+      production build. `nerd-panel.ts:86` reads the meta tag and needs no
+      change, but must keep working in both modes.
+- [ ] A unit test asserts the served meta tag matches `package.json`. Without
+      it nothing stops the next silent drift — the current `0.8.3` vs `0.7.2`
+      gap exists precisely because no test covers this.
+- [ ] The release tag, the tarball filename, and the displayed version all
+      derive from `package.json`, so they cannot disagree.
 
 ### 3. `task release:build-frontend`
 
@@ -120,20 +195,22 @@ Out of scope:
 
 ### 5. `task release:add-git-tag`
 
-- [ ] Reads the version as decided in criterion 2. The task's current
-      description says "from .env" — note `.env` is gitignored (`.gitignore:288`)
-      and no root `.env` exists; `build/.env` holds `IMAGE_TAG`, which is the
-      _backend_ image tag. Using a gitignored, backend-scoped file as the source
-      of a frontend release tag is a trap and should be reconsidered as part of
-      criterion 2.
+- [ ] Reads the version from `frontend/package.json` (**D1**) and creates the
+      tag `frontend-v<version>` (**D2**).
+- [ ] The task's `desc` is corrected: it currently reads "Add tag to git from
+      .env", which is wrong on two counts — `.env` is gitignored
+      (`.gitignore:288`) and no root `.env` exists, and `build/.env` holds
+      `IMAGE_TAG`, the _backend_ image tag. A gitignored, backend-scoped file
+      must not be the source of a frontend release tag.
 - [ ] Refuses to tag if the working tree is dirty.
 - [ ] Refuses to overwrite an existing tag; re-running is either a safe no-op
       or a clear failure, never a silent force-push.
 
 ### 6. `task release:publish-to-github-release`
 
-- [ ] Creates the GitHub release for the tag and uploads both the tarball and
-      the checksum file as assets.
+- [ ] Creates the GitHub release **as a draft** (**D3**) for the
+      `frontend-v<version>` tag, and uploads both the tarball and the checksum
+      file as assets. Publishing the draft stays a manual step.
 - [ ] Uses the `gh` CLI (already available in this environment).
 - [ ] Fails clearly when not authenticated, rather than appearing to succeed.
 - [ ] Is idempotent enough to be safe to retry after a partial upload.
@@ -167,17 +244,13 @@ passes. Applied here:
 4. **Prove the guards fire.** Confirm `add-git-tag` actually refuses a dirty
    tree and an existing tag, rather than assuming the checks work.
 
-## Open questions
+## Refinement notes
 
-These need a decision before implementation starts:
+The four questions this document originally left open are resolved in
+**Decisions** above (D1–D4). No blocking unknowns remain; the criteria can be
+worked through in order.
 
-1. Which version source is authoritative — `package.json`, the meta tag, or a
-   new dedicated file?
-2. How are frontend and backend releases distinguished in the tag namespace,
-   given they version independently (`0.8.3` vs `0.5.3`) and the existing tags
-   (`v1.0.0`, `v2.0.0`) match neither?
-3. Should the release be published as a draft for review before going public?
-4. Should `bundle` include `NOTICE.md` and `LICENSE` in the tarball? The
-   bundled Bible text is public domain but its provenance is recorded in
-   `NOTICE.md`, and shipping the attribution alongside the build is the more
-   respectful default even where it is not legally required.
+One consequence worth stating plainly: **D1 changes user-visible behaviour
+before any release exists.** Injecting the version moves the Nerd tab from
+`0.7.2` to `0.8.3` — a visible correction, not a regression, but the reason the
+displayed number jumps should be recorded in the commit that does it.
