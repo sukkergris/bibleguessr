@@ -511,7 +511,10 @@ export class TranslationSourceSelect extends LitElement {
       border-radius: 10px;
       border: 1px solid #ccc;
       background: transparent;
-      color: var(--surface-raised);
+      /* The unselected control sits on the page surface, so it takes the
+         foreground token. --surface-raised here rendered white-on-white in
+         light theme and dark-on-dark in dark theme, hiding the label. */
+      color: var(--text);
       font-size: 0.9rem;
       text-align: left;
       cursor: pointer;

@@ -55,10 +55,35 @@
         than an inline split that only worked by coincidence of field order.
       </p>
 
+      <h2>Background tokens used as foregrounds</h2>
+      <p>
+        The theme tokens are named for meaning, not appearance, and the failure mode that follows from getting one
+        wrong is unusually invisible. Styling a control with <code>color: var(--surface-raised)</code> paints its
+        label in the colour of the surface behind it: white on white in the light theme (1.00:1), near-black on
+        near-black in the dark theme (1.22:1). The text is still in the DOM, still has an accessible name, and still
+        passes the audit above — it simply cannot be seen.
+      </p>
+      <p>
+        This has now been found twice. The first time it was the translation-source mode switch; the fix left a
+        comment, but three sibling controls carrying the same three-line block were missed — the game-type scope
+        pills (All&nbsp;/&nbsp;Books&nbsp;/&nbsp;Chapters) and the cached-translation entries in both setup screens.
+        An unselected control sits on the page surface, so it takes <code>--text</code>; only a control that paints
+        its own filled background takes a paired foreground such as <code>--accent-text</code>.
+      </p>
+      <p>
+        Because neither an accessible-name audit nor a unit test can see it, this is covered by computed-colour
+        checks that read each control's foreground against the background actually painted behind it — resolved by
+        walking up through shadow hosts, since the controls themselves are transparent. Both specs assert only the
+        <em>unselected</em> state; the selected pill is <code>--accent-text</code> on <code>--accent</code>, which is
+        4.39:1 in the dark theme — a separate pre-existing defect in the token itself, affecting every accent-filled
+        control app-wide.
+      </p>
+
       <h2>What automation cannot settle</h2>
       <p>
-        Contrast, whether announcements actually read well aloud, focus order judged as a whole, and behaviour at
-        200% zoom in a real browser all need a person. Those live in
+        Contrast is only partly automated — the computed-colour checks above cover specific controls that regressed,
+        not the palette as a whole. That, whether announcements actually read well aloud, focus order judged as a
+        whole, and behaviour at 200% zoom in a real browser all still need a person. Those live in
         <span class="file-ref">docs/SCRUM/TODO/Checklist.ManualAccessibilityPass.md</span>. Passing the automated
         audit is not a claim of WCAG conformance.
       </p>
@@ -68,6 +93,8 @@
         <span class="file-ref">frontend/e2e/helpers/a11y.ts</span> holds the audit;
         <span class="file-ref">frontend/e2e/accessibility.spec.ts</span> runs it per screen and covers keyboard
         access, announcements, zoom and touch targets.
+        <span class="file-ref">frontend/e2e/mode-switch-contrast.spec.ts</span> and
+        <span class="file-ref">frontend/e2e/game-type-contrast.spec.ts</span> hold the computed-colour checks.
       </p>
     </main>
   </body>
