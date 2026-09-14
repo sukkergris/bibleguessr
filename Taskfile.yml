@@ -10,6 +10,9 @@ includes:
   certs:
     taskfile: ./Taskfile.Certs.yml
     dir: .
+  release:
+    taskfile: ./Taskfile.Release.yml
+    dir: .
 
 tasks:
   default:

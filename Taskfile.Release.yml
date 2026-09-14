@@ -1,0 +1,22 @@
+version: '3'
+
+tasks:
+  build-frontend:
+    desc: Build production version
+    cmds:
+      - 'TODO'
+
+  bundle:
+    desc: Bundle for upload to github
+    cmds:
+      - 'TODO'
+
+  add-git-tag:
+    desc: Add tag to git from .env
+    cmds:
+      - 'TODO'
+
+  publish-to-github-release:
+    desc: Publish package to github release
+    cmds:
+      - 'TODO'
