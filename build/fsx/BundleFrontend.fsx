@@ -1,9 +1,9 @@
 #r "System.IO.Compression"
 #load "lib/Common.fsx"
-#load "lib/Rootloader.fsx"
+#load "lib/RootLoader.fsx"
 
 open Common
-open Rootloader
+open RootLoader
 open System.IO.Compression
 open System.IO
 
