@@ -14,7 +14,7 @@ let artifact = $"bibleguessr-frontend-{version}"
 
 let artifactPath = Path.Combine( rootDir,"artifacts", artifact)
 
-let sourcePath = Path.Combine(rootDir, "frontend", "")
+let sourcePath = Path.Combine(rootDir, "frontend", "dist")
 
 let pack (source: string, dist: string) =
     if not (Directory.Exists source) then
