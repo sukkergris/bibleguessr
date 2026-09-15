@@ -1,22 +1,32 @@
-version: '3'
+version: "3"
+
+vars:
+  FSX_DIR: build/fsx
 
 tasks:
-  build-frontend:
-    desc: Build production version
+  frontend:
+    desc: Build the production frontend and verify the release artifact
+    deps:
+      - :frontend:test
+      - :frontend:build
     cmds:
-      - 'TODO'
+      - dotnet fsi {{.FSX_DIR}}/VerifyFrontendArtifact.fsx
 
   bundle:
-    desc: Bundle for upload to github
+    desc: Package the verified frontend build as a release tarball
+    deps:
+      - frontend
     cmds:
-      - 'TODO'
+      - dotnet fsi {{.FSX_DIR}}/BundleFrontend.fsx
 
-  add-git-tag:
-    desc: Add tag to git from .env
+  tag:
+    desc: Tag the current commit with the frontend version
     cmds:
-      - 'TODO'
+      - dotnet fsi {{.FSX_DIR}}/AddGitTag.fsx
 
-  publish-to-github-release:
-    desc: Publish package to github release
+  publish:
+    desc: Create a draft GitHub release and upload the tarball
+    deps:
+      - bundle
     cmds:
-      - 'TODO'
+      - dotnet fsi {{.FSX_DIR}}/PublishGitHubRelease.fsx

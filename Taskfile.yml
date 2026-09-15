@@ -13,9 +13,6 @@ includes:
   release:
     taskfile: ./Taskfile.Release.yml
     dir: .
-  build:
-    taskfile: ./Taskfile.Fsx.yml
-    dir: .
 
 tasks:
   default:

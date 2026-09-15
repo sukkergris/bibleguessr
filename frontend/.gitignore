@@ -6,8 +6,7 @@ dist
 dist-ssr
 
 # Artifacts output
-artifact
-
+artifacts/**
 # Vite local env overrides (secrets live in the root .gitignore rules)
 *.local
 
