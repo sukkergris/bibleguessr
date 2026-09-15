@@ -27,7 +27,7 @@ let metaVersion (html: string) =
 let placeholderVersion = "0.0.0"
 let expected = packageVersion ()
 let validate () =
-    match metaVersion <| indexHtml with
+    match metaVersion indexHtml with
         | None -> fail "Missing application-version meta tag in index.html"
         | Some v when v = placeholderVersion -> fail $"Version is still the {placeholderVersion} placeholder — injection did not run."
         | Some v when v <> expected ->
