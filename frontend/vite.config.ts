@@ -1,11 +1,34 @@
-import { defineConfig } from "vite";
+import { readFileSync } from 'node:fs';
+import { defineConfig } from 'vite';
 
 // The backend's dev port — matches backend/Api/Properties/launchSettings.json's
 // "http" profile and Taskfile.Dotnet.yml's API_PORT.
-const apiTarget = "http://localhost:5162";
+const apiTarget = 'http://localhost:5162';
+
+// The single source of truth for the frontend version is package.json.
+// It is read here and injected into index.html's meta tag at build time,
+// so the version can never be edited in two places and drift apart.
+const packageJson = readFileSync(
+  new URL('./package.json', import.meta.url),
+  'utf-8'
+);
+const appVersion = JSON.parse(packageJson).version;
 
 // https://vite.dev/config/
 export default defineConfig({
+  plugins: [
+    {
+      name: 'inject-app-version',
+      // Runs for both `vite dev` and `vite build`, so the Nerd tab shows
+      // the same version in development and in a production bundle.
+      transformIndexHtml(html) {
+        return html.replace(
+          /(<meta name="application-version" content=")[^"]*(")/,
+          `$1${appVersion}$2`
+        );
+      },
+    },
+  ],
   server: {
     // Bind to all interfaces so the dev server is reachable from outside
     // the devcontainer (e.g. via VS Code port forwarding).

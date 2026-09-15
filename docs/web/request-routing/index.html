@@ -12,133 +12,392 @@
       <span class="eyebrow">Reference</span>
       <h1>Request routing</h1>
       <p class="subtitle">
-        How the browser reaches the API and the SignalR hub over HTTPS on <code>bibleguessr.single</code> — everything
-        same-origin, and why that removed CORS rather than reconfiguring it.
+        How the browser reaches the API and the SignalR hub over HTTPS on
+        <code>bibleguessr.single</code>
+        — everything same-origin, and why that removed CORS rather than
+        reconfiguring it.
       </p>
 
       <h2>One origin, three kinds of request</h2>
       <p>
-        The browser only ever talks to a single origin: <code>https://bibleguessr.single</code>. The web server in
-        front decides what each path belongs to, and the frontend never names a backend host of its own.
+        The browser only ever talks to a single origin:
+        <code>https://bibleguessr.single</code>
+        . The web server in front decides what each path belongs to, and the
+        frontend never names a backend host of its own.
       </p>
       <ul>
-        <li><strong><code>/api/…</code></strong> — the REST API, proxied to the backend.</li>
-        <li><strong><code>/hubs/…</code></strong> — the SignalR hub, proxied to the same backend as a WebSocket.</li>
-        <li><strong>everything else</strong> — the frontend (the Vite dev server in the replica).</li>
+        <li>
+          <strong><code>/api/…</code></strong>
+          — the REST API, proxied to the backend.
+        </li>
+        <li>
+          <strong><code>/hubs/…</code></strong>
+          — the SignalR hub, proxied to the same backend as a WebSocket.
+        </li>
+        <li>
+          <strong>everything else</strong>
+          — the frontend (the Vite dev server in the replica).
+        </li>
       </ul>
       <p>
-        Because the page, the API and the hub share a scheme, host and port, these are same-origin requests. That is
-        the whole reason the CORS configuration could be deleted rather than updated — see
-        <a href="#cors">No CORS</a> below.
+        Because the page, the API and the hub share a scheme, host and port,
+        these are same-origin requests. That is the whole reason the CORS
+        configuration could be deleted rather than updated — see
+        <a href="#cors">No CORS</a>
+        below.
       </p>
 
       <h2>Two front ends, same shape</h2>
       <p>
-        There are two ways to run the app, and both present the same origin layout so that code written against one
-        works against the other unchanged:
+        There are two ways to run the app, and both present the same origin
+        layout so that code written against one works against the other
+        unchanged:
       </p>
       <ul>
         <li>
-          <strong>The server replica</strong> — nginx terminates TLS on <code>bibleguessr.single</code> and proxies
-          <code>/api/</code> and <code>/hubs/</code> to the backend, with <code>/</code> going to the frontend.
+          <strong>The server replica</strong>
+          — nginx terminates TLS on
+          <code>bibleguessr.single</code>
+          and proxies
+          <code>/api/</code>
+          and
+          <code>/hubs/</code>
+          to the backend, with
+          <code>/</code>
+          going to the frontend.
         </li>
         <li>
-          <strong>Plain <code>vite dev</code> on :5173</strong> — Vite's own dev proxy forwards the same two prefixes
-          to the backend. Without this, the dev server would answer <code>/hubs/game</code> itself and the hub would
-          never reach the backend at all.
+          <strong>
+            Plain
+            <code>vite dev</code>
+            on :5173
+          </strong>
+          — Vite's own dev proxy forwards the same two prefixes to the backend.
+          Without this, the dev server would answer
+          <code>/hubs/game</code>
+          itself and the hub would never reach the backend at all.
         </li>
       </ul>
 
       <h2>The API prefix is real, not stripped</h2>
       <p>
-        Every backend route is declared with its <code>/api/</code> prefix already on it —
-        <code>/api/version</code>, <code>/api/verses/random</code>, <code>/api/rooms</code>, and so on. The proxy
-        therefore passes the path through <em>unchanged</em>.
+        Every backend route is declared with its
+        <code>/api/</code>
+        prefix already on it —
+        <code>/api/version</code>
+        ,
+        <code>/api/verses/random</code>
+        ,
+        <code>/api/rooms</code>
+        , and so on. The proxy therefore passes the path through
+        <em>unchanged</em>
+        .
       </p>
       <p>
-        An earlier <code>rewrite ^/api/(.*)$ /$1 break;</code> in the nginx location stripped the prefix before
-        forwarding, which meant the backend was asked for <code>/version</code> — a path it does not serve. Removing
-        the rewrite is what makes the prefix line up on both sides. If a route ever stops resolving through nginx but
-        works when the backend is called directly, this is the first thing to check.
+        An earlier
+        <code>rewrite ^/api/(.*)$ /$1 break;</code>
+        in the nginx location stripped the prefix before forwarding, which meant
+        the backend was asked for
+        <code>/version</code>
+        — a path it does not serve. Removing the rewrite is what makes the
+        prefix line up on both sides. If a route ever stops resolving through
+        nginx but works when the backend is called directly, this is the first
+        thing to check.
       </p>
 
       <h2>The hub needs its own location</h2>
       <p>
-        <code>/hubs/</code> is matched before the catch-all <code>/</code>, because the hub lives on the backend and
-        the catch-all points at the frontend. Two details in that block are load-bearing:
+        <code>/hubs/</code>
+        is matched before the catch-all
+        <code>/</code>
+        , because the hub lives on the backend and the catch-all points at the
+        frontend. Two details in that block are load-bearing:
       </p>
       <ul>
         <li>
-          <strong>WebSocket headers.</strong> The block includes the WebSocket proxy params, which forward
-          <code>Upgrade</code> and <code>Connection</code>. The ordinary proxy params do not, and without them the
-          upgrade handshake never completes — the request simply hangs instead of returning an error, which is what
-          makes this failure mode confusing to diagnose.
+          <strong>WebSocket headers.</strong>
+          The block includes the WebSocket proxy params, which forward
+          <code>Upgrade</code>
+          and
+          <code>Connection</code>
+          . The ordinary proxy params do not, and without them the upgrade
+          handshake never completes — the request simply hangs instead of
+          returning an error, which is what makes this failure mode confusing to
+          diagnose.
         </li>
         <li>
-          <strong>Long read/send timeouts.</strong> A hub connection stays open with no traffic between rounds. The
-          default 60-second read timeout would drop an idle connection and force a visible reconnect mid-game.
+          <strong>Long read/send timeouts.</strong>
+          A hub connection stays open with no traffic between rounds. The
+          default 60-second read timeout would drop an idle connection and force
+          a visible reconnect mid-game.
         </li>
       </ul>
       <p>
-        Rate limiting is deliberately <em>not</em> applied here. A hub connection is one long-lived request rather
-        than many short ones, so the API's per-request limit does not describe it usefully.
+        Rate limiting is deliberately
+        <em>not</em>
+        applied here. A hub connection is one long-lived request rather than
+        many short ones, so the API's per-request limit does not describe it
+        usefully.
       </p>
 
       <h2>Why the client only speaks WebSockets</h2>
       <p>
-        The client pins the WebSockets transport and sets <code>skipNegotiation</code>, so there is no HTTP
-        "negotiate" round-trip and no fallback to Server-Sent Events or long polling. The practical consequence for
-        routing is that <code>/hubs/game</code> is <em>only</em> ever seen as an upgrade request — a proxy that
-        handles plain HTTP correctly but drops the upgrade headers will fail every time, not intermittently.
+        The client pins the WebSockets transport and sets
+        <code>skipNegotiation</code>
+        , so there is no HTTP "negotiate" round-trip and no fallback to
+        Server-Sent Events or long polling. The practical consequence for
+        routing is that
+        <code>/hubs/game</code>
+        is
+        <em>only</em>
+        ever seen as an upgrade request — a proxy that handles plain HTTP
+        correctly but drops the upgrade headers will fail every time, not
+        intermittently.
       </p>
       <p>
-        Over TLS the client derives <code>wss://</code> from the page's own origin, so the hub inherits the
-        certificate and the host without being told about either.
+        Over TLS the client derives
+        <code>wss://</code>
+        from the page's own origin, so the hub inherits the certificate and the
+        host without being told about either.
       </p>
 
       <h2 id="cors">No CORS</h2>
       <p>
-        The backend configures no CORS policy at all, and this is intentional rather than an omission. Same-origin
-        requests are not subject to CORS, so a policy would grant nothing; what it <em>would</em> do is introduce a
-        second place where the frontend's origin is written down, free to drift from the real one. The previous
-        setup had exactly that shape: an allowed origin defaulting to <code>http://localhost:5173</code>, which
-        stopped describing reality the moment the app moved to HTTPS on <code>bibleguessr.single</code>.
+        The backend configures no CORS policy at all, and this is intentional
+        rather than an omission. Same-origin requests are not subject to CORS,
+        so a policy would grant nothing; what it
+        <em>would</em>
+        do is introduce a second place where the frontend's origin is written
+        down, free to drift from the real one. The previous setup had exactly
+        that shape: an allowed origin defaulting to
+        <code>http://localhost:5173</code>
+        , which stopped describing reality the moment the app moved to HTTPS on
+        <code>bibleguessr.single</code>
+        .
       </p>
       <p>
-        If the frontend is ever served from a genuinely different origin, CORS has to come back — but it should come
-        back deliberately, as a decision about that deployment, not as configuration carried forward by habit.
+        If the frontend is ever served from a genuinely different origin, CORS
+        has to come back — but it should come back deliberately, as a decision
+        about that deployment, not as configuration carried forward by habit.
+      </p>
+
+      <h2>Adding a new proxied prefix</h2>
+      <p>
+        A prefix has to be added in
+        <em>both</em>
+        front ends, or it works through one entrance and fails through the
+        other:
+        <span class="file-ref">
+          server-replica/nginx/conf.d/10-bibleguessr.conf
+        </span>
+        for
+        <code>bibleguessr.single</code>
+        , and
+        <span class="file-ref">frontend/vite.config.ts</span>
+        for plain
+        <code>vite dev</code>
+        on :5173. The two are not alternatives — they are the same routing
+        expressed for two ways of running the app, and the e2e suite uses the
+        second one.
+      </p>
+
+      <div class="callout limitation">
+        <span class="callout-title">Worked example is hypothetical</span>
+        <p>
+          The
+          <code>/cms/</code>
+          → Squidex example below is written out as a pattern. Squidex is not
+          part of this repository's compose setup, and no
+          <code>/cms/</code>
+          route has been exercised end-to-end. Treat the snippets as the shape
+          to follow, not as configuration known to work.
+        </p>
+      </div>
+
+      <h3>Does the upstream expect the prefix?</h3>
+      <p>
+        This is the decision that separates the existing blocks, and getting it
+        wrong produces 404s from a service that is otherwise reachable. The
+        backend declares its routes
+        <em>with</em>
+        <code>/api/</code>
+        on them, so the path passes through untouched. A third-party service
+        like Squidex serves
+        <code>/api/…</code>
+        at its own root, so the
+        <code>/cms/</code>
+        prefix has to come off before forwarding.
+      </p>
+      <p>
+        In nginx the trailing slash on
+        <code>proxy_pass</code>
+        is what strips it:
+      </p>
+      <ul>
+        <li>
+          <code>proxy_pass $web_api_upstream;</code>
+          — no slash.
+          <code>/api/version</code>
+          arrives as
+          <code>/api/version</code>
+          .
+        </li>
+        <li>
+          <code>proxy_pass $squidex_upstream/;</code>
+          — trailing slash.
+          <code>/cms/api/apps</code>
+          arrives as
+          <code>/api/apps</code>
+          .
+        </li>
+      </ul>
+
+      <h3>The nginx side</h3>
+      <p>
+        Define a shared upstream as a
+        <code>map</code>
+        in
+        <span class="file-ref">
+          server-replica/nginx/includes/upstreams.conf
+        </span>
+        rather than writing the host into the location. Using a variable in
+        <code>proxy_pass</code>
+        defers the DNS lookup to request time, so nginx does not cache the
+        address at config load and fail if the container is not up yet or is
+        recreated with a new IP. Upstreams used by a single server block are set
+        with
+        <code>set</code>
+        inside that block instead.
+      </p>
+      <p>
+        The location itself picks one of two includes:
+        <span class="file-ref">includes/proxy-params.conf</span>
+        for ordinary HTTP, or
+        <span class="file-ref">includes/proxy-websocket.conf</span>
+        for anything that upgrades — the latter forwards
+        <code>Upgrade</code>
+        and
+        <code>Connection</code>
+        , and is what
+        <code>/hubs/</code>
+        uses along with its extended timeouts. Ordinary proxied services take
+        the former.
+      </p>
+      <p>
+        Order matters: a new location must be declared before the catch-all
+        <code>/</code>
+        , which points at the frontend and will otherwise answer first.
+      </p>
+
+      <h3>The Vite side</h3>
+      <p>
+        Vite's dev proxy expresses the same two decisions. Its
+        <code>rewrite</code>
+        option is the counterpart to nginx's trailing slash, and
+        <code>ws: true</code>
+        the counterpart to the WebSocket include:
+      </p>
+      <ul>
+        <li>
+          <code>'/api': apiTarget</code>
+          — prefix preserved, plain HTTP.
+        </li>
+        <li>
+          <code>'/hubs': { target: apiTarget, ws: true }</code>
+          — prefix preserved, upgrade forwarded.
+        </li>
+        <li>
+          <code>
+            '/cms': { target: squidexTarget, rewrite: (p) =&gt;
+            p.replace(/^\/cms/, '') }
+          </code>
+          — prefix stripped, mirroring
+          <code>proxy_pass …/</code>
+          .
+        </li>
+      </ul>
+      <p>
+        Omitting the rewrite is the failure worth naming: the same frontend code
+        then reaches the service as
+        <code>/api/apps</code>
+        through nginx and
+        <code>/cms/api/apps</code>
+        through Vite. Nothing errors at startup — it simply behaves differently
+        depending on which entrance was used.
       </p>
 
       <h2>Verifying a change here</h2>
       <p>
-        Routing failures are easy to mistake for application bugs, so check the layers separately. A WebSocket
-        handshake that works is a <code>101 Switching Protocols</code>:
+        Routing failures are easy to mistake for application bugs, so check the
+        layers separately. A WebSocket handshake that works is a
+        <code>101 Switching Protocols</code>
+        :
       </p>
       <ul>
-        <li><strong>Backend directly</strong> on its own port — proves the hub itself is up.</li>
-        <li><strong>Through nginx over TLS</strong> with the real <code>Host</code> — proves the proxy block.</li>
-        <li><strong>Through Vite on :5173</strong> — proves the dev-server path.</li>
+        <li>
+          <strong>Backend directly</strong>
+          on its own port — proves the hub itself is up.
+        </li>
+        <li>
+          <strong>Through nginx over TLS</strong>
+          with the real
+          <code>Host</code>
+          — proves the proxy block.
+        </li>
+        <li>
+          <strong>Through Vite on :5173</strong>
+          — proves the dev-server path.
+        </li>
       </ul>
       <p>
-        An empty response rather than an HTTP error status is the signature of upgrade headers being dropped. Note
-        that a missing <code>/hubs/</code> block in nginx can be masked by the catch-all forwarding to Vite, which
-        may then proxy to the backend itself — so when testing whether a given layer is doing the work, remove one
-        layer at a time rather than trusting a single end-to-end success.
+        An empty response rather than an HTTP error status is the signature of
+        upgrade headers being dropped. Note that a missing
+        <code>/hubs/</code>
+        block in nginx can be masked by the catch-all forwarding to Vite, which
+        may then proxy to the backend itself — so when testing whether a given
+        layer is doing the work, remove one layer at a time rather than trusting
+        a single end-to-end success.
       </p>
 
       <h2>Implementation</h2>
       <p>
-        <span class="file-ref">server-replica/nginx/conf.d/10-bibleguessr.conf</span> holds the
-        <code>/api/</code> and <code>/hubs/</code> locations and the upstream definitions.
-        <span class="file-ref">server-replica/nginx/includes/proxy-websocket.conf</span> carries the upgrade headers.
-        <span class="file-ref">frontend/vite.config.ts</span> mirrors the same routing for plain
-        <code>vite dev</code>.
+        <span class="file-ref">
+          server-replica/nginx/conf.d/10-bibleguessr.conf
+        </span>
+        holds the
+        <code>/api/</code>
+        and
+        <code>/hubs/</code>
+        locations and the per-server upstream definitions, with shared upstreams
+        in
+        <span class="file-ref">
+          server-replica/nginx/includes/upstreams.conf
+        </span>
+        .
+        <span class="file-ref">
+          server-replica/nginx/includes/proxy-websocket.conf
+        </span>
+        carries the upgrade headers, and
+        <span class="file-ref">
+          server-replica/nginx/includes/proxy-params.conf
+        </span>
+        the ordinary HTTP ones.
+        <span class="file-ref">frontend/vite.config.ts</span>
+        mirrors the same routing for plain
+        <code>vite dev</code>
+        .
       </p>
       <p>
-        <span class="file-ref">frontend/src/api.ts</span> holds the empty base URL that makes API calls same-origin,
-        and <span class="file-ref">frontend/src/signalr-client.ts</span> builds the hub URL from it.
-        <span class="file-ref">backend/Api/Program.fs</span> declares the <code>/api/</code>-prefixed routes and maps
-        the hub at <code>/hubs/game</code>.
+        <span class="file-ref">frontend/src/api.ts</span>
+        holds the empty base URL that makes API calls same-origin, and
+        <span class="file-ref">frontend/src/signalr-client.ts</span>
+        builds the hub URL from it.
+        <span class="file-ref">backend/Api/Program.fs</span>
+        declares the
+        <code>/api/</code>
+        -prefixed routes and maps the hub at
+        <code>/hubs/game</code>
+        .
       </p>
     </main>
   </body>
