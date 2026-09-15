@@ -80,7 +80,8 @@
         "ritwickdey.LiveServer",
         "docker.docker",
         "redhat.vscode-yaml",
-        "Ionide.Ionide-fsharp"
+        "Ionide.Ionide-fsharp",
+        "GitHub.vscode-github-actions"
       ]
     }
   },

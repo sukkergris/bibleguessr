@@ -20,8 +20,8 @@ let sourcePath = Path.Combine(rootDir, "frontend", "dist")
 let copyReleaseFiles(dist: string) =
     let license = "LICENSE"
     let notice = "NOTICE.md"
-    File.Copy(Path.Combine(rootDir, license), Path.Combine(sourcePath, license))
-    File.Copy( Path.Combine(rootDir, notice ), Path.Combine(sourcePath, notice))
+    File.Copy(Path.Combine(rootDir, license), Path.Combine(sourcePath, license), true)
+    File.Copy( Path.Combine(rootDir, notice ), Path.Combine(sourcePath, notice), true)
     ()
 
 let pack (source: string, dist: string) =

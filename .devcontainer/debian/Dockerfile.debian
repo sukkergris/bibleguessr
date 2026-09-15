@@ -44,5 +44,17 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
+# actionlint — static checker for GitHub Actions workflow files. Installed
+# from the project's own release assets rather than apt, which has no package
+# for it. Pinned so every container gets the same checks; bump deliberately.
+ARG ACTIONLINT_VERSION=1.7.12
+RUN ARCH="$(dpkg --print-architecture)" \
+    && curl -fsSL -o /tmp/actionlint.tar.gz \
+        "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${ARCH}.tar.gz" \
+    && mkdir -p /tmp/actionlint \
+    && tar -xzf /tmp/actionlint.tar.gz -C /tmp/actionlint \
+    && install -m 755 /tmp/actionlint/actionlint /usr/local/bin/actionlint \
+    && rm -rf /tmp/actionlint /tmp/actionlint.tar.gz
+
 USER container-user
 RUN curl -fsSL https://claude.ai/install.sh | bash
