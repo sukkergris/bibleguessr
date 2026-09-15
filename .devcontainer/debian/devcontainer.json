@@ -79,7 +79,8 @@
         "DavidAnson.vscode-markdownlint",
         "ritwickdey.LiveServer",
         "docker.docker",
-        "redhat.vscode-yaml"
+        "redhat.vscode-yaml",
+        "Ionide.Ionide-fsharp"
       ]
     }
   },

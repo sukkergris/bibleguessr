@@ -14,12 +14,50 @@ Thank you for contributing to BibleGuessr. This guide covers the project convent
 
 Install:
 
-- .NET SDK
+- .NET SDK 10.0 or newer — the backend projects target `net10.0`
 - Node.js and npm
 - Task
 - Playwright browser binaries for end-to-end tests
+- GitHub CLI (`gh`), for the release tasks
 
 Run `task --list-all` to see the available project tasks.
+
+### F# scripts (`.fsx`)
+
+Build and release automation is written as F# scripts under `build/fsx/`, run
+through **F# Interactive** — the F# REPL that ships with the .NET SDK. There is
+nothing extra to install: `dotnet fsi` is part of the SDK you already need for
+the backend.
+
+Which REPL this repository uses matters, because several F# script runners
+exist and they are not interchangeable:
+
+| Runner                     | Used here | Notes                                                                                                                                                                                                                                                      |
+| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dotnet fsi`               | **Yes**   | F# Interactive, bundled with the .NET SDK. The only one these scripts are written for.                                                                                                                                                                     |
+| `dotnet script`            | No        | A separate global tool for C# (`.csx`). It is installed in the devcontainer for unrelated reasons. Pointing it at an `.fsx` file makes it parse F# as C#, so the failure is a wall of `CS0103`/`CS1002` errors rather than a clear "wrong runner" message. |
+| `fsi.exe` / Mono `fsharpi` | No        | Older, pre-.NET-Core F# Interactive. Not present and not supported.                                                                                                                                                                                        |
+
+Verify the toolchain before running any script:
+
+```sh
+dotnet --version      # 10.0.302 or newer
+dotnet fsi --version  # F# Interactive ... for F# 10.0
+```
+
+Scripts are invoked through Task rather than directly, so the working directory
+and arguments are consistent:
+
+```sh
+task fsx:build-frontend
+```
+
+Running `dotnet fsi build/fsx/<Script>.fsx` by hand works too, but only from the
+repository root — the scripts resolve paths relative to it.
+
+A first run compiles the script before executing it, which takes a few seconds.
+That cost is why the `.fsx` scripts hold release automation rather than anything
+run frequently; day-to-day tasks such as `task frontend:dev` stay in Task itself.
 
 ## Local setup
 

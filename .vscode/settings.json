@@ -1,4 +1,7 @@
 {
+  "cSpell.enabledFileTypes": {
+    "fsharp": true
+  },
   "cSpell.words": [
     "adduser",
     "Anson",

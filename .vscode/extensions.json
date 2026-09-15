@@ -2,6 +2,7 @@
   "recommendations": [
     "davidanson.vscode-markdownlint",
     "esbenp.prettier-vscode",
+    "ionide.ionide-fsharp",
     "william-voyek.vscode-nginx",
     "docker.docker",
     "ms-azuretools.vscode-docker",
