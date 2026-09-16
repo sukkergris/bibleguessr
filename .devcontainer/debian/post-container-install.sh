@@ -12,6 +12,10 @@ export NVM_DIR="$HOME/.nvm"
 
 SCRIPTS_DIR="/xyz/.devcontainer/scripts"
 
+# The workspace mount is often owned by a different UID than container-user,
+# which makes git refuse to operate on it ("detected dubious ownership").
+git config --global --add safe.directory /xyz
+
 # Docker creates fresh volumes owned by root, which leaves the tools that own
 # these directories unable to write to them. Must run before the steps below
 # that write into ~/.ssh and ~/.gh.
