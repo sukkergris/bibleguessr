@@ -18,6 +18,9 @@ services:
       - bibleguessr-elm-devcontainer:/home/container-user/.elm
       - bibleguessr-claude:/home/container-user/.claude
       - bibleguessr-continue:/home/container-user/.continue
+      # Persists the Google Antigravity extension's login session and
+      # settings (~/.gemini/antigravity, ~/.gemini/config) across rebuilds.
+      - bibleguessr-gemini:/home/container-user/.gemini
       # A direct child of $HOME, deliberately not ~/.config/gh: mounting a
       # volume under ~/.config would force Docker to create that missing
       # parent directory as root (it doesn't exist in the image), which then
@@ -81,6 +84,7 @@ volumes:
   bibleguessr-elm-devcontainer:
   bibleguessr-claude:
   bibleguessr-continue:
+  bibleguessr-gemini:
   bibleguessr-gh:
   bibleguessr-mailpit-data:
 
