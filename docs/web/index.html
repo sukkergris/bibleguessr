@@ -11,17 +11,20 @@
       <span class="eyebrow">BibleGuessr</span>
       <h1>Developer documentation</h1>
       <p class="subtitle">
-        How each feature works, under the hood — for anyone picking this codebase up. Each page covers what the
-        feature does, how it's built (backend + frontend), and how to verify it.
+        How each feature works, under the hood — for anyone picking this
+        codebase up. Each page covers what the feature does, how it's built
+        (backend + frontend), and how to verify it.
       </p>
 
       <div class="callout">
         <span class="callout-title">Scope</span>
         <p>
-          This documents the multiplayer/chat system and its supporting infrastructure as of the current codebase.
-          Singleplayer's core loop (verse card, guess form, server-side verse serving) is straightforward enough
-          that it isn't covered separately — see <span class="pill">frontend/src/components/bg-app.ts</span> for the
-          overall phase flow, which every page below links back to.
+          This documents the multiplayer/chat system and its supporting
+          infrastructure as of the current codebase. Singleplayer's core loop
+          (verse card, guess form, server-side verse serving) is straightforward
+          enough that it isn't covered separately — see
+          <span class="pill">frontend/src/components/bg-app.ts</span>
+          for the overall phase flow, which every page below links back to.
         </p>
       </div>
 
@@ -29,108 +32,176 @@
       <div class="feature-grid">
         <a class="feature-card" href="multiplayer-rooms/index.html">
           <h3>Multiplayer rooms &amp; chat</h3>
-          <p>Room codes, World chat, the SignalR hub, and the join/roster/chat protocol everything else builds on.</p>
+          <p>
+            Room codes, World chat, the SignalR hub, and the join/roster/chat
+            protocol everything else builds on.
+          </p>
         </a>
         <a class="feature-card" href="play-requests/index.html">
           <h3>Start a game from chat</h3>
           <p>
-            Choosing a game type and clicking a player's name to challenge them — send, see, accept, deny, withdraw,
-            REPLACE semantics.
+            Choosing a game type and clicking a player's name to challenge them
+            — send, see, accept, deny, withdraw, REPLACE semantics.
           </p>
         </a>
         <a class="feature-card" href="multiplayer-round-sync/index.html">
           <h3>Multiplayer round sync</h3>
           <p>
-            The synced gameplay loop after accept — verse picking, guessing, scoring, timers, forfeit, and the
-            final results screen, with verse text that never crosses the wire.
+            The synced gameplay loop after accept — verse picking, guessing,
+            scoring, timers, forfeit, and the final results screen, with verse
+            text that never crosses the wire.
           </p>
         </a>
         <a class="feature-card" href="forfeit/index.html">
           <h3>Forfeit confirmation</h3>
-          <p>Accessible in-app confirmation, keyboard focus management, dismissal, retryable errors, and submission protection.</p>
+          <p>
+            Accessible in-app confirmation, keyboard focus management,
+            dismissal, retryable errors, and submission protection.
+          </p>
         </a>
         <a class="feature-card" href="connection-status/index.html">
           <h3>Connection status</h3>
-          <p>What the corner dot measures, how fast it reacts, and where it is still a weak signal.</p>
+          <p>
+            What the corner dot measures, how fast it reacts, and where it is
+            still a weak signal.
+          </p>
         </a>
         <a class="feature-card" href="dark-mode/index.html">
           <h3>Dark mode</h3>
-          <p>Light/Dark/System through one set of semantic tokens, with no flash and no per-component overrides.</p>
+          <p>
+            Light/Dark/System through one set of semantic tokens, with no flash
+            and no per-component overrides.
+          </p>
         </a>
         <a class="feature-card" href="accessibility/index.html">
           <h3>Accessibility</h3>
-          <p>Automated audit, keyboard access, live-region announcements, and what still needs a manual pass.</p>
+          <p>
+            Automated audit, keyboard access, live-region announcements, and
+            what still needs a manual pass.
+          </p>
         </a>
         <a class="feature-card" href="matchmaking/index.html">
           <h3>Random matchmaking</h3>
-          <p>One room-scoped queue: wait for the next player, or be paired with whoever is already waiting.</p>
+          <p>
+            One room-scoped queue: wait for the next player, or be paired with
+            whoever is already waiting.
+          </p>
         </a>
         <a class="feature-card" href="bug-report/index.html">
           <h3>Report a bug</h3>
-          <p>Sticky bug panel with its own endpoint, validation, rate limiting, and retryable delivery states.</p>
+          <p>
+            Sticky bug panel with its own endpoint, validation, rate limiting,
+            and retryable delivery states.
+          </p>
         </a>
         <a class="feature-card" href="keyboard-shortcuts/index.html">
           <h3>Keyboard shortcuts</h3>
-          <p>Discoverable shortcut guide in the Nerd Panel, with its browser caveat and a no-typing-interference rule.</p>
+          <p>
+            Discoverable shortcut guide in the Nerd Panel, with its browser
+            caveat and a no-typing-interference rule.
+          </p>
         </a>
         <a class="feature-card" href="github-mcp/index.html">
           <h3>GitHub MCP setup</h3>
-          <p>Fine-grained token setup, local MCP configuration, safe verification, and permission hygiene.</p>
+          <p>
+            Fine-grained token setup, local MCP configuration, safe
+            verification, and permission hygiene.
+          </p>
         </a>
         <a class="feature-card" href="game-preferences/index.html">
           <h3>Remembered setup choices</h3>
-          <p>Round count and time limit persisted per browser, with validation, defaults, and safe fallbacks.</p>
+          <p>
+            Round count and time limit persisted per browser, with validation,
+            defaults, and safe fallbacks.
+          </p>
         </a>
         <a class="feature-card" href="report-abuse/index.html">
           <h3>Report abuse</h3>
-          <p>Always-available reporting control, validated form, email delivery, rate limiting, and accessible submission states.</p>
+          <p>
+            Always-available reporting control, validated form, email delivery,
+            rate limiting, and accessible submission states.
+          </p>
         </a>
         <a class="feature-card" href="player-presence/index.html">
           <h3>Player presence</h3>
-          <p>Connection-status dots, the 5-minute stale-player sweep, and remembering your name per browser.</p>
+          <p>
+            Connection-status dots, the 5-minute stale-player sweep, and
+            remembering your name per browser.
+          </p>
         </a>
         <a class="feature-card" href="unique-player-names/index.html">
           <h3>Unique player names</h3>
           <p>
-            Rejects a join with a name already taken by a connected player, and frees up a disconnected player's
-            name automatically so reconnecting under it doesn't get stuck as a duplicate.
+            Rejects a join with a name already taken by a connected player, and
+            frees up a disconnected player's name automatically so reconnecting
+            under it doesn't get stuck as a duplicate.
           </p>
         </a>
         <a class="feature-card" href="local-bible-files/index.html">
           <h3>Bring your own Bible file</h3>
-          <p>Client-side EPUB/RTF parsing for translations the backend can't legally redistribute, plus caching.</p>
+          <p>
+            Client-side EPUB/RTF parsing for translations the backend can't
+            legally redistribute, plus caching.
+          </p>
         </a>
         <a class="feature-card" href="scoring/index.html">
           <h3>Scoring</h3>
-          <p>The book/chapter/verse point tiers, mirrored by hand between the F# backend and the TS frontend.</p>
+          <p>
+            The book/chapter/verse point tiers, mirrored by hand between the F#
+            backend and the TS frontend.
+          </p>
+        </a>
+        <a class="feature-card" href="frontend-release/index.html">
+          <h3>Frontend release</h3>
+          <p>
+            How a frontend version becomes a zip on GitHub — the four Task
+            steps, the checks that stop a mislabelled artifact, and the CI
+            workflow.
+          </p>
         </a>
         <a class="feature-card" href="request-routing/index.html">
           <h3>Request routing</h3>
-          <p>How the browser reaches the API and the SignalR hub same-origin over HTTPS, and why there's no CORS.</p>
+          <p>
+            How the browser reaches the API and the SignalR hub same-origin over
+            HTTPS, and why there's no CORS.
+          </p>
         </a>
         <a class="feature-card" href="cyber-security/index.html">
           <h3>Cyber security</h3>
-          <p>Edge defenses in nginx — catch-all 444s, the IP blocklist, API rate limiting, scanner tarpits, TLS, and the gaps that remain.</p>
+          <p>
+            Edge defenses in nginx — catch-all 444s, the IP blocklist, API rate
+            limiting, scanner tarpits, TLS, and the gaps that remain.
+          </p>
         </a>
         <a class="feature-card" href="testing/index.html">
           <h3>Testing</h3>
-          <p>What's covered (xUnit, Vitest, Playwright), what isn't, and exactly how to run all of it.</p>
+          <p>
+            What's covered (xUnit, Vitest, Playwright), what isn't, and exactly
+            how to run all of it.
+          </p>
         </a>
       </div>
 
       <h2>Not built yet</h2>
       <p>
-        Multiplayer round sync and starting a game from an accepted challenge are both fully built now — see
-        <a href="multiplayer-round-sync/index.html">Multiplayer round sync</a>. One caveat remains:
+        Multiplayer round sync and starting a game from an accepted challenge
+        are both fully built now — see
+        <a href="multiplayer-round-sync/index.html">Multiplayer round sync</a>
+        . One caveat remains:
       </p>
       <ul>
         <li>
-          <strong>Reconnecting to the same identity.</strong> A dropped-then-restored connection always mints a
-          brand-new player id — there's no session resume. See <a href="player-presence/index.html">Player presence</a>.
+          <strong>Reconnecting to the same identity.</strong>
+          A dropped-then-restored connection always mints a brand-new player id
+          — there's no session resume. See
+          <a href="player-presence/index.html">Player presence</a>
+          .
         </li>
       </ul>
 
-      <footer class="page-footer">BibleGuessr · docs/web · viewed via the project's VS Code extension</footer>
+      <footer class="page-footer">
+        BibleGuessr · docs/web · viewed via the project's VS Code extension
+      </footer>
     </main>
   </body>
 </html>
