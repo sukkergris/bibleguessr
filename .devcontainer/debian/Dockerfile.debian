@@ -32,7 +32,8 @@ RUN apt-get update && apt-get install -y \
 # `git` alone covers commits, tags and pushes.
 #
 # Authentication is deliberately NOT baked in: run `gh auth login` once per
-# machine, which stores its token in ~/.config/gh/ (outside the repository).
+# machine, which stores its token in ~/.gh/ (outside the repository, via
+# GH_CONFIG_DIR — see docker-compose.yml).
 # Never add a token to this image or to a file inside the project.
 RUN mkdir -p -m 755 /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \

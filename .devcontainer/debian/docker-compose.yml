@@ -16,14 +16,23 @@ services:
       # 'cached' optimizes mount performance on macOS/Windows.
       - ../..:/xyz:cached
       - bibleguessr-elm-devcontainer:/home/container-user/.elm
-      - bibleguessr-claude-bibleguessr:/home/container-user/.claude
-      - bibleguessr-continue-bibleguessr:/home/container-user/.continue
+      - bibleguessr-claude:/home/container-user/.claude
+      - bibleguessr-continue:/home/container-user/.continue
+      # A direct child of $HOME, deliberately not ~/.config/gh: mounting a
+      # volume under ~/.config would force Docker to create that missing
+      # parent directory as root (it doesn't exist in the image), which then
+      # blocks the dotfiles repo's stow packages from writing their own
+      # subdirectories into ~/.config.
+      - bibleguessr-gh:/home/container-user/.gh
       # - /var/run/docker.sock:/var/run/docker.sock
       # macOS Docker Desktop: forwards SSH agent via host-services socket.
       # Linux alternative: ${SSH_AUTH_SOCK}:/ssh-agent
       - /run/host-services/ssh-auth.sock:/ssh-agent
     environment:
       SSH_AUTH_SOCK: /ssh-agent
+      # Redirects gh's config/credentials away from the default ~/.config/gh
+      # to match the volume mount above.
+      GH_CONFIG_DIR: /home/container-user/.gh
     # Command to run when the container starts.
     # 'sleep infinity' keeps the container running indefinitely so VS Code can attach.
     command: sleep infinity
@@ -70,8 +79,9 @@ services:
 
 volumes:
   bibleguessr-elm-devcontainer:
-  bibleguessr-claude-bibleguessr:
-  bibleguessr-continue-bibleguessr:
+  bibleguessr-claude:
+  bibleguessr-continue:
+  bibleguessr-gh:
   bibleguessr-mailpit-data:
 
 networks:

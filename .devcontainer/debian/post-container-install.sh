@@ -14,11 +14,11 @@ SCRIPTS_DIR="/xyz/.devcontainer/scripts"
 
 # Docker creates fresh volumes owned by root, which leaves the tools that own
 # these directories unable to write to them. Must run before the steps below
-# that write into ~/.ssh and ~/.config/gh.
+# that write into ~/.ssh and ~/.gh.
 sudo chown -R container-user:container-user \
   "$HOME/.claude" \
   "$HOME/.continue" \
-  "$HOME/.config/gh" \
+  "$HOME/.gh" \
   "$HOME/.ssh" \
   "$HOME/.sshtemplate" 2>/dev/null || true
 
@@ -64,8 +64,9 @@ fi
 claude --print "." > /dev/null 2>&1 || true
 
 # gh itself comes from Dockerfile.debian and its credentials persist in the
-# ~/.config/gh volume, but a token must never be baked into an image — so
-# logging in stays a manual step, once per machine.
+# ~/.gh volume (GH_CONFIG_DIR, set in docker-compose.yml), but a token must
+# never be baked into an image — so logging in stays a manual step, once per
+# machine.
 if ! gh auth status >/dev/null 2>&1; then
   echo "NOTE: gh is not authenticated. Run 'gh auth login' for issues, PRs and releases."
   echo "      Git push/pull already works over SSH without it."
