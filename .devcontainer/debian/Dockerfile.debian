@@ -3,6 +3,7 @@ FROM isuperman/elm-devcontainer-foundation:0.1.10
 USER root
 
 RUN apt-get update && apt-get install -y \
+    act \
     git-filter-repo \
     xvfb \
     x11vnc \
