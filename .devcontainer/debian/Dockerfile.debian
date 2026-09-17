@@ -3,7 +3,6 @@ FROM isuperman/elm-devcontainer-foundation:0.1.10
 USER root
 
 RUN apt-get update && apt-get install -y \
-    act \
     git-filter-repo \
     xvfb \
     x11vnc \
@@ -57,6 +56,22 @@ RUN ARCH="$(dpkg --print-architecture)" \
     && tar -xzf /tmp/actionlint.tar.gz -C /tmp/actionlint \
     && install -m 755 /tmp/actionlint/actionlint /usr/local/bin/actionlint \
     && rm -rf /tmp/actionlint /tmp/actionlint.tar.gz
+
+# act — runs GitHub Actions workflows locally. Installed from the project's
+# own release assets rather than apt, which has no package for it. Pinned so
+# every container gets the same version; bump deliberately.
+ARG ACT_VERSION=0.2.89
+RUN case "$(dpkg --print-architecture)" in \
+        amd64) ACT_ARCH=x86_64 ;; \
+        arm64) ACT_ARCH=arm64 ;; \
+        *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/act.tar.gz \
+        "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_${ACT_ARCH}.tar.gz" \
+    && mkdir -p /tmp/act \
+    && tar -xzf /tmp/act.tar.gz -C /tmp/act \
+    && install -m 755 /tmp/act/act /usr/local/bin/act \
+    && rm -rf /tmp/act /tmp/act.tar.gz
 
 USER container-user
 RUN curl -fsSL https://claude.ai/install.sh | bash
