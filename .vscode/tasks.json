@@ -20,7 +20,7 @@
     {
       "label": "start-frontend",
       "type": "shell",
-      "command": "task dev",
+      "command": "task frontend:dev",
       "options": {
         "cwd": "${workspaceFolder}"
       },

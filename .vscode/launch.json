@@ -22,7 +22,7 @@
       "request": "launch",
       "preLaunchTask": "start-frontend",
       "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}/frontend/src",
+      "webRoot": "${workspaceFolder}/frontend",
       "sourceMaps": true
     }
   ],

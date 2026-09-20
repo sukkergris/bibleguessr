@@ -1,6 +1,6 @@
 # Tarpit tests
 
-End-to-end tests for the scanner tarpit (`../lua/tarpit.lua`).
+End-to-end tests for the scanner tarpit (`../njs/tarpit.js`).
 
 ---
 
@@ -50,13 +50,13 @@ bash server-replica/nginx/test/run-tarpit-tests.sh
 
 **Only Docker.** In particular you do *not* need:
 
-- Lua or LuaJIT on your machine — the Lua runs inside the container
-- OpenResty or nginx installed locally
+- njs or Node on your machine — the JavaScript runs inside the container
+- nginx installed locally
 - the BibleGuessr backend or frontend running
 - any `npm install` / `dotnet` step
 
-The first run pulls the `openresty/openresty:alpine` image if you do not have
-it yet, which adds a minute or two. Later runs reuse it.
+The first run pulls the `nginx:1.31.6-alpine` image if you do not have it yet,
+which adds a minute or two. Later runs reuse it.
 
 ### Does this touch my devcontainer?
 
@@ -74,12 +74,11 @@ So you can run this repeatedly while working, without disturbing anything.
 
 ```text
 Tarpit end-to-end tests
-  image:  openresty/openresty:alpine
+  image:  nginx:1.31.6-alpine
   config: /xyz/server-replica/nginx
 
 Starting test container...
-Config loads on both paths
-  PASS image default config path
+Config loads
   PASS our nginx.conf path
 
 Scanner paths reach the tarpit; normal paths do not
@@ -114,8 +113,8 @@ Failures are usually one of:
 ### Useful variations
 
 ```sh
-# Test against the exact image production uses, instead of the moving tag
-TARPIT_TEST_IMAGE=openresty/openresty:1.31.1.1-3-alpine \
+# Test against a different nginx image than the default
+TARPIT_TEST_IMAGE=nginx:1.31.6-alpine \
   server-replica/nginx/test/run-tarpit-tests.sh
 
 # Give the container longer to live, if you are stepping through by hand
@@ -128,7 +127,7 @@ TARPIT_TEST_TTL=900 server-replica/nginx/test/run-tarpit-tests.sh
 
 | Check | Why it matters |
 | --- | --- |
-| Config loads on both paths | `conf.d/` is loaded both by our `nginx.conf` and by the image's built-in default config. A definition reachable from only one path is an outage on the other. |
+| Config loads | The whole `conf.d/` tree parses under stock nginx with the njs module loaded. Unlike OpenResty, where Lua was built in, `load_module` is only valid in the main context — so the tarpit loads via our `nginx.conf` only, which is what both the devcontainer and the production image use. |
 | Scanner paths are tarpitted | `/.env`, `/.git/config`, `/wp-login.php`, `/phpMyAdmin`, `/index.php`, `/dns-query` all reach the handler; `/` does not. |
 | CMS paths throttled hardest | nginx uses the *first* matching regex location. If the generic `\.php$` rule is ordered above the CMS list it silently shadows it, and `wp-login.php` gets the faster tier. Only the byte count reveals this. |
 | Streaming rate | The measured bytes/second tracks the configured `rate`, and the fast endpoint outruns the slow one. |
@@ -139,7 +138,7 @@ TARPIT_TEST_TTL=900 server-replica/nginx/test/run-tarpit-tests.sh
 
 ---
 
-## How it works (and a little Lua)
+## How it works (and a little njs)
 
 You do not need to read this to run the tests.
 
@@ -148,8 +147,8 @@ You do not need to read this to run the tests.
 ```text
 run-tarpit-tests.sh   the runner: starts the container, asserts, reports
 lib.sh                shared shell helpers (assertions, container lifecycle)
-probes.lua            cosocket helpers used by every probe
-test-*.lua            one probe per concern, swapped in as current-probe.lua
+probes.js             ngx.fetch helpers used by every probe
+test-*.js             one probe per concern, swapped in as current-probe.js
 fixtures/*.conf       the two nginx instances used during a run
 ```
 
@@ -159,30 +158,41 @@ A run starts two nginx servers inside the container:
   rules, plus a few fixed-rate endpoints so a rate can be asserted without
   depending on path routing.
 - **port 8096** — a probe server whose single endpoint executes whichever
-  `test-*.lua` file the runner has just copied in as `current-probe.lua`.
+  `test-*.js` file the runner has just copied in as `current-probe.js`.
 
 The runner copies in one probe at a time, requests `/run`, and asserts on the
 text that comes back.
 
-### Why the probes are written in Lua
+### Why the probes run inside nginx
 
-The tarpit response never ends — that is the entire point of a tarpit. A shell
-client cannot express *"read for 4 seconds, then tell me how many bytes
-arrived"*: `curl` and `wget` only have timeouts, and a timeout kills the process
-along with its byte count.
+The probes issue their requests with `ngx.fetch` from inside the test nginx,
+rather than with `curl`/`wget` from the shell, so a probe can measure elapsed
+time and byte counts in one place and report them as its response body.
 
-Lua **cosockets** (`ngx.socket.tcp`) can. They open a raw TCP connection, read
-in a loop until a deadline, then close and report. That is all `probes.lua`
-does, and it is why the probes run inside nginx rather than from the shell.
+njs has no cosocket API (the Lua version used `ngx.socket.tcp` to read an
+open-ended stream for N seconds and then stop). `ngx.fetch` instead reads a
+response **to completion**, so every endpoint a probe requests must terminate on
+its own. That is why `fixtures/tarpit-server.conf` sets a short
+`$tarpit_max_seconds` default: the production rules in `includes/tarpit.conf`
+are deliberately uncapped, and are included under test exactly as written, but
+the cap lets each request finish.
 
-Two Lua details worth knowing if you edit these files:
+Two njs details worth knowing if you edit these files:
 
-- `ngx.say(...)` writes a line to the HTTP response. That response *is* the test
-  output the runner parses — so a probe communicates by printing.
-- `require("probes")` loads `probes.lua` once and caches it. The fixture sets
-  `lua_code_cache off` so the runner can swap `current-probe.lua` between
-  tests; with the cache on, `content_by_lua_file` compiles once and every later
-  test would silently re-run the first probe.
+- `r.return(200, text)` sends the probe's result. That response *is* the test
+  output the runner parses — so a probe communicates by returning text.
+- njs compiles `js_import` modules when the config loads, and has no
+  `lua_code_cache off` equivalent. The runner therefore **restarts** the probe
+  server after swapping `current-probe.js` (`use_probe`); overwriting the file
+  alone would keep serving the previously compiled module. The two fixtures use
+  separate `pid` files so one can be stopped without signalling the other.
+
+### The one probe that is not njs
+
+The client-abort check runs from the shell (`timeout 1 wget`), because
+`ngx.fetch` reads to completion and its `timeout` option does not cut a read
+short — njs cannot hang up mid-stream. A killed `wget` does exactly that, and is
+a truer simulation of a scanner dropping the connection anyway.
 
 ### Tuning
 
@@ -201,14 +211,22 @@ and confirming the suite goes red.
 | Mutation | Caught by |
 | --- | --- |
 | Header template left in the repeating body | `exactly one header line` (saw 36) |
-| `opts.rate` ignored | `4096 B/s endpoint`, `fast outruns slow` |
-| `max_seconds` never honoured | `capped endpoint finished early` (ran the full window) |
+| Configured `rate` ignored | `4096 B/s endpoint`, `fast outruns slow` |
+| `max_seconds` never honoured | `capped endpoint finished early` (the run never terminates) |
 | `\.php$` ordered above the CMS list | `CMS paths are throttled harder than generic .php` |
 
-The last one originally slipped through — both paths still tarpitted, so every
-check passed while the CMS tier was silently lost. The byte-count assertion was
-added specifically to close that gap.
+The last one has now slipped through **twice**, in both the Lua and njs
+versions, and is worth understanding before you trust it.
 
-If you change `../lua/tarpit.lua`, do the same: break your change on purpose,
+Both paths still tarpit when the rule is shadowed, so the only difference is the
+rate — and the check originally just asserted `cms_bytes < php_bytes`. During
+the njs migration that comparison passed against deliberately shadowed config on
+a 35-byte difference (16560 < 16595): with both tiers served at the same rate,
+the winner was decided by run-to-run noise. The assertion now requires the CMS
+tier to be **under 70% of** the `.php` tier, which is what a genuine 4096-vs-8192
+split looks like, and it fails on the shadowed config as it should.
+
+If you change `../njs/tarpit.js`, do the same: break your change on purpose,
 confirm a check fails, then restore it. A test that passes against broken code
-looks like protection and is not.
+looks like protection and is not — and "it went red" is not enough on its own,
+because a check can go red for a reason unrelated to the bug you introduced.

@@ -1,4 +1,4 @@
-# Production image for the OpenResty (nginx + LuaJIT) reverse proxy,
+# Production image for the nginx (+ njs) reverse proxy,
 # serving the built frontend as static files. Build context is the
 # repository root, e.g.:
 #   docker build -f build/Dockerfile.nginx -t bibleguessr-nginx .
@@ -21,9 +21,10 @@ COPY ["frontend/", "."]
 
 RUN npm run build
 
-# Pin to a specific OpenResty release+revision on Alpine instead of the
-# moving `alpine` tag, so the base image only changes when we bump it here.
-FROM openresty/openresty:1.31.1.1-3-alpine AS final
+# Pin to a specific nginx release on Alpine instead of the moving `alpine`
+# tag, so the base image only changes when we bump it here. The njs module
+# ships with this image as a dynamic module; nginx.conf loads it.
+FROM nginx:1.31.6-alpine AS final
 
 # Bring Alpine packages up to date to reduce vulnerabilities in the runtime image.
 RUN apk upgrade --no-cache
@@ -42,4 +43,4 @@ COPY server-replica/nginx /etc/nginx
 
 EXPOSE 80 443
 
-CMD ["/usr/local/openresty/bin/openresty", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
+CMD ["nginx", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]

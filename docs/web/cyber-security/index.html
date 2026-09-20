@@ -19,7 +19,7 @@
       <div class="callout">
         <span class="callout-title">Where this lives</span>
         <p>
-          Everything on this page is nginx (OpenResty) configuration under
+          Everything on this page is nginx (with the njs module) configuration under
           <span class="file-ref">server-replica/nginx</span>. None of it is application code: the F# backend and the
           Lit frontend are unaware of it. It is a reverse proxy sitting in front of both.
         </p>
@@ -31,9 +31,9 @@
         <span class="file-ref">conf.d/*.conf</span> is loaded on two different paths:
       </p>
       <ol>
-        <li>Our own <span class="file-ref">nginx.conf</span>, when OpenResty is started with
+        <li>Our own <span class="file-ref">nginx.conf</span>, when nginx is started with
           <code>-c /etc/nginx/nginx.conf</code>.</li>
-        <li>The OpenResty image's <em>built-in</em> default config, which does
+        <li>The nginx image's <em>built-in</em> default config, which does
           <code>include /etc/nginx/conf.d/*.conf</code> and nothing else of ours — this is what runs if the
           <code>-c</code> argument is missing from the container's command.</li>
       </ol>
@@ -120,8 +120,8 @@
         <code>joomla</code>), and DNS-over-HTTP paths (<code>dns-query</code>) used to probe for open resolvers.
       </p>
       <p>
-        Rather than a fast 403, each match is answered by a Lua handler
-        (<span class="file-ref">lua/tarpit.lua</span>) that <em>generates</em> a fake configuration file and
+        Rather than a fast 403, each match is answered by an njs handler
+        (<span class="file-ref">njs/tarpit.js</span>) that <em>generates</em> a fake configuration file and
         streams it slowly — 10 KB/s for generic probes, 8 KB/s for PHP, 4 KB/s for CMS admin paths — with a
         <code>Content-Disposition</code> header naming it <code>production.conf</code>. The scanner's connection is
         held open on a worthless file instead of being freed for the next target.
@@ -132,20 +132,20 @@
         randomized per request — two scanners never receive byte-identical bodies.
       </p>
       <div class="callout">
-        <span class="callout-title">Why the pacing is in Lua</span>
+        <span class="callout-title">Why the pacing is in njs</span>
         <p>
           <code>limit_rate</code> only throttles nginx's own file and proxy output filters; it does not apply to
-          <code>ngx.print</code> from a <code>content_by_lua</code> handler. The handler therefore paces itself
+          <code>r.send</code> from a <code>js_content</code> handler. The handler therefore paces itself
           against elapsed wall-clock time, sleeping only while it is ahead of the budget the configured rate allows.
           Per-block sleeps were tried first and drifted well above the target, because blocks vary in size and
-          <code>ngx.sleep</code> has millisecond granularity.
+          timers have millisecond granularity.
         </p>
       </div>
       <p>
-        Two safeguards keep a tarpit from costing more than it saves: <code>ngx.on_abort</code> plus a checked
-        <code>ngx.flush</code> stop generation the moment the scanner hangs up, and
-        <code>max_seconds</code> (default 900) caps how long any single connection is held. Because the handler
-        sleeps rather than spins, a held connection costs a coroutine, not a worker.
+        Two safeguards keep a tarpit from costing more than it saves: <code>r.send</code> throws once the scanner
+        hangs up, which ends generation, and <code>max_seconds</code> (default 900, set per location via
+        <code>$tarpit_max_seconds</code>) caps how long any single connection is held. Because the handler awaits a
+        timer rather than spinning, a held connection costs a pending callback, not a worker.
       </p>
       <p>
         Ordering matters in <span class="file-ref">includes/tarpit.conf</span>: nginx uses the first matching regex
@@ -178,13 +178,13 @@
 
       <h2>Verifying a change</h2>
       <p>
-        The tarpit has an end-to-end test suite. It starts a throwaway OpenResty container with this config copied
+        The tarpit has an end-to-end test suite. It starts a throwaway nginx container with this config copied
         in, fires real requests at the tarpit locations and asserts on what comes back, so it neither touches the
         devcontainer's nginx nor needs the app running:
       </p>
       <pre>server-replica/nginx/test/run-tarpit-tests.sh</pre>
       <p>
-        It covers both config load paths, that scanner paths are tarpitted and normal paths are not, that CMS
+        It covers that the config loads, that scanner paths are tarpitted and normal paths are not, that CMS
         admin paths are throttled harder than generic <code>.php</code> ones, the streaming rate, the response
         shape (chunked, no <code>Content-Length</code>, exactly one generated header), per-request uniqueness, the
         <code>max_seconds</code> cap, and client-abort handling. See
@@ -194,17 +194,31 @@
         <span class="callout-title">The checks were mutation-tested</span>
         <p>
           Each check was validated by breaking the implementation on purpose and confirming the suite goes red —
-          a test that passes against broken code is worse than no test. One mutation originally slipped through:
-          moving the generic <code>\.php$</code> rule above the CMS list still tarpitted every path, so every check
-          passed while the 4 KB/s tier was silently lost. The byte-count assertion exists to close that gap.
+          a test that passes against broken code is worse than no test. The same mutation has slipped through
+          twice: moving the generic <code>\.php$</code> rule above the CMS list still tarpits every path, so only
+          the rate differs. The original check just asserted that the CMS path returned fewer bytes, and during the
+          njs migration it passed against shadowed config on a 35-byte difference — noise, not signal. It now
+          requires the CMS tier to be under 70% of the <code>.php</code> tier, which is what a real 4096-vs-8192
+          split looks like.
         </p>
       </div>
       <p>
-        For a config-only change, a syntax check on both paths is the minimum — but note it does not prove a
+        For a config-only change, a syntax check is the minimum — but note it does not prove a
         <code>geo</code> variable resolves, only that the file parses:
       </p>
-      <pre>openresty -t                              # image default config path
-openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
+      <pre>nginx -c /etc/nginx/nginx.conf -t     # our config path</pre>
+      <div class="callout">
+        <span class="callout-title">njs is a dynamic module</span>
+        <p>
+          OpenResty had Lua built in; stock nginx ships njs as a loadable module, so
+          <span class="file-ref">nginx.conf</span> begins with
+          <code>load_module modules/ngx_http_js_module.so;</code>. <code>load_module</code> is only valid in the main
+          context, above <code>events</code> and <code>http</code>, so it cannot be added from
+          <span class="file-ref">conf.d/</span>. The image's built-in default config has no such line — meaning the
+          tarpit loads only via our own <code>nginx.conf</code>. Both the devcontainer (which mounts over
+          <span class="file-ref">/etc/nginx</span>) and the production image use it, so this is the path that runs.
+        </p>
+      </div>
 
       <h2>Known gaps</h2>
       <ul>
@@ -243,8 +257,11 @@ openresty -c /etc/nginx/nginx.conf -t     # our config path</pre>
         <span class="file-ref">rate-limiting.conf</span>, <span class="file-ref">tarpit.conf</span>,
         <span class="file-ref">security-checks.conf</span>, <span class="file-ref">security-headers.conf</span>,
         <span class="file-ref">ssl-params.conf</span> and <span class="file-ref">log-formats.conf</span>. The
-        generated tarpit body is <span class="file-ref">lua/tarpit.lua</span>, found via the
-        <code>lua_package_path</code> set in <span class="file-ref">includes/http-globals.conf</span>.
+        generated tarpit body is <span class="file-ref">njs/tarpit.js</span>, imported via the
+        <code>js_path</code> and <code>js_import</code> set in
+        <span class="file-ref">includes/http-globals.conf</span>, which also declares the
+        <code>js_var</code> tuning variables (<code>$tarpit_rate</code>, <code>$tarpit_max_seconds</code>,
+        <code>$tarpit_filename</code>) each location overrides with <code>set</code>.
       </p>
     </main>
   </body>

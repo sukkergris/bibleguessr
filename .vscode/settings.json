@@ -37,6 +37,7 @@
     "Eeuo",
     "elease",
     "eleases",
+    "esac",
     "esult",
     "facebookexternalhit",
     "fastcgi",
@@ -156,9 +157,6 @@
     "**/node_modules": true,
     "**/test-results": true,
     "**/playwright-report": true
-  },
-  "files.exclude": {
-    "**/node_modules": true
   },
   "[markdown]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",

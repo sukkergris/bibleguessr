@@ -16,7 +16,7 @@ for how the tarpit fits into the rest of the edge defenses.
 Nothing in this folder is served any more.
 
 The tarpit body now comes from
-[`server-replica/nginx/lua/tarpit.lua`](../nginx/lua/tarpit.lua), which
+[`server-replica/nginx/njs/tarpit.js`](../nginx/njs/tarpit.js), which
 generates a fake configuration file on the fly and streams it at a few KB/s.
 Generating it has three advantages over serving a file from disk:
 

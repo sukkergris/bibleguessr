@@ -1,1 +1,1 @@
-# Optimised for openresty
+# Optimised for nginx with njs

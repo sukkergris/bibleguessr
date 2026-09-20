@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Shared helpers for the tarpit tests.
 #
-# The tests run against a throwaway OpenResty container with the repository's
+# The tests run against a throwaway nginx container with the repository's
 # nginx config copied in, so they never touch the devcontainer's nginx and
 # never need the app running.
 
 set -uo pipefail
 
-IMAGE="${TARPIT_TEST_IMAGE:-openresty/openresty:alpine}"
+IMAGE="${TARPIT_TEST_IMAGE:-nginx:1.31.6-alpine}"
 NGINX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTAINER_TTL="${TARPIT_TEST_TTL:-300}"
 
@@ -74,9 +74,14 @@ push() { docker cp "$1" "$CID:$2" >/dev/null; }
 cexec() { docker exec "$CID" "$@"; }
 
 # Start an nginx instance in the container from a config already pushed there.
-start_nginx() { cexec /usr/local/openresty/bin/openresty -c "$1"; }
+start_nginx() { cexec nginx -c "$1"; }
 
-# Run a Lua probe served at $PROBE_PORT/run and print its output.
+# Stop every nginx instance in the container. njs compiles js_import modules at
+# config load and has no lua_code_cache equivalent, so swapping a probe module
+# means restarting the probe server rather than just overwriting the file.
+stop_nginx() { cexec pkill -9 nginx >/dev/null 2>&1; sleep 1; }
+
+# Run an njs probe served at $PROBE_PORT/run and print its output.
 # Backgrounded inside the container, then polled, because these probes
 # deliberately take several seconds and a foreground `docker exec` can return
 # before the response is written.
