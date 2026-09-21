@@ -36,6 +36,9 @@ jobs:
   docker-build:
     needs: [backend-test, frontend-test]
     runs-on: ubuntu-24.04
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - run: docker compose -f build/docker-compose.build.yml build

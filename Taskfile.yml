@@ -1,5 +1,9 @@
 version: "3"
 
+env:
+  IMAGE_TAG:
+    sh: ./scripts/ci/load-image-version.sh
+
 includes:
   frontend:
     taskfile: ./Taskfile.Frontend.yml
@@ -12,6 +16,12 @@ includes:
     dir: .
   release:
     taskfile: ./Taskfile.Release.yml
+    dir: .
+  ci:
+    taskfile: ./Taskfile.CI.yml
+    dir: .
+  docker:
+    taskfile: ./Taskfile.Docker.yml
     dir: .
 
 tasks:

@@ -21,7 +21,7 @@
       "type": "msedge",
       "request": "launch",
       "preLaunchTask": "start-frontend",
-      "url": "http://localhost:5173",
+      "url": "https://www.bibleguessr.single",
       "webRoot": "${workspaceFolder}/frontend",
       "sourceMaps": true
     }
