@@ -12,14 +12,9 @@ tasks:
       - ./scripts/ci/run-ci-workflow.sh {{.CLI_ARGS}}
 
   act-all:
-    desc: Run the CI workflow locally in containers - .env
-    cmds:
-      - ./scripts/ci/run-ci-workflow.sh --env-file .env --env IMAGE_TAG="${IMAGE_TAG}"
-
-  act-build-images:
     desc: Run only build of images
     env:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
     cmds:
       - 'echo "IMAGE_TAG: ${IMAGE_TAG}"'
-      - ./scripts/ci/run-ci-workflow.sh --env-file .env -j docker-build --env IMAGE_TAG="${IMAGE_TAG}"
+      - ./scripts/ci/run-ci-workflow.sh --env-file .env --env IMAGE_TAG="${IMAGE_TAG}"
