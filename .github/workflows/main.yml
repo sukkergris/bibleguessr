@@ -6,9 +6,6 @@ on:
       - 'frontend-v*'
   workflow_dispatch:
 
-env:
-  BIBLEGUESSR_LOCAL_ACT: ${{ vars.BIBLEGUESSR_LOCAL_ACT }}
-
 jobs:
 
   backend-test:

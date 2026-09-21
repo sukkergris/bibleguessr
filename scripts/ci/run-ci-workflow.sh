@@ -18,7 +18,7 @@ else
   exit 1
 fi
 
-output="$(act -W .github/workflows/ci.yml "$@" 2>&1 | tee /dev/tty)" || status=$?
+output="$(act -W .github/workflows/ci.yml --var-file "${PROJECT_ROOT}/.env" "$@" 2>&1 | tee /dev/tty)" || status=$?
 
 if grep -q "Skipping unsupported platform" <<<"$output"; then
     log::error "A job was skipped — .actrc is out of sync with runs-on in ci.yml"

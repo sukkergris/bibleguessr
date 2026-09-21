@@ -12,7 +12,7 @@ tasks:
       - ./scripts/ci/run-ci-workflow.sh {{.CLI_ARGS}}
 
   act-ci:
-    desc: Run the CI workflow locally with act
+    desc: Run only build of images
     env:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
     cmds:
@@ -20,7 +20,7 @@ tasks:
       - ./scripts/ci/run-ci-workflow.sh --env-file .env --env IMAGE_TAG="${IMAGE_TAG}"
 
   act-main:
-    desc: Run the application release workflow locally with act
+    desc: Run only build of images
     env:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
     cmds:
