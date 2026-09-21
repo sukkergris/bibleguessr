@@ -11,8 +11,16 @@
   --accent: #aa3bff;
   --accent-soft: rgba(170, 59, 255, 0.08);
   --accent-soft-strong: rgba(170, 59, 255, 0.16);
+  /* --accent is 3.94:1 on --accent-soft — short of the 4.5:1 AA threshold
+     for normal-size text, since --accent-soft is a light near-white tint.
+     This darker variant is for small text set directly on --accent-soft
+     (e.g. .tag); --accent itself is unaffected and still used elsewhere. */
+  --accent-text-on-soft: #7c1cc4;
   --code-bg: #f1eef7;
   --ok: #16a34a;
+  /* Same reasoning as --accent-text-on-soft: --ok alone is only 2.64:1 on
+     --accent-soft-strong (used by .tag-testing), well short of 4.5:1. */
+  --ok-text-on-soft: #166534;
   --warn: #b45309;
   --warn-bg: #fef3e2;
   --danger: #dc2626;
@@ -29,8 +37,14 @@
     --accent: #c586ff;
     --accent-soft: rgba(197, 134, 255, 0.12);
     --accent-soft-strong: rgba(197, 134, 255, 0.22);
+    /* --accent is already 5.43:1 on the composited --accent-soft here, so
+       no darker variant is needed in dark mode. */
+    --accent-text-on-soft: var(--accent);
     --code-bg: #262130;
     --ok: #4ade80;
+    /* 6.54:1 on the composited --accent-soft-strong here — already clears
+       AA, so no darker variant is needed in dark mode. */
+    --ok-text-on-soft: var(--ok);
     --warn: #fbbf24;
     --warn-bg: #3a2e12;
     --danger: #f87171;
@@ -298,9 +312,52 @@ th {
 }
 
 .feature-card p {
-  margin: 0;
+  margin: 0 0 0.75rem;
   font-size: 0.88rem;
   color: var(--text-muted);
+}
+
+.feature-card p:last-child {
+  margin-bottom: 0;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  /* --accent-text-on-soft, not --accent: at this text size, --accent alone
+     falls to 3.94:1 on --accent-soft in light mode, short of the 4.5:1 AA
+     threshold. See the token's definition in :root. */
+  color: var(--accent-text-on-soft);
+  border: 1px solid transparent;
+}
+
+/* Tag color variants. Each reuses an existing semantic token rather than a
+   new hardcoded color, so every variant already has a dark-mode value. */
+.tag-security {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.tag-testing {
+  background: var(--accent-soft-strong);
+  color: var(--ok-text-on-soft);
+}
+
+.tag-multiplayer {
+  background: var(--code-bg);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 footer.page-footer {
