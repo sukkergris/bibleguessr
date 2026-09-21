@@ -278,7 +278,6 @@ __pycache__/
 
 # Logfiles during development
 **/logfiles/
-.env
 test/web-api-logfiles/
 
 

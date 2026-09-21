@@ -25,4 +25,4 @@ tasks:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
     cmds:
       - 'echo "IMAGE_TAG: ${IMAGE_TAG}"'
-      - ./scripts/ci/run-ci-workflow.sh --env-file .env --env IMAGE_TAG="${IMAGE_TAG}"
+      - ./scripts/ci/run-main-workflow.sh --env-file .env --env IMAGE_TAG="${IMAGE_TAG}"
