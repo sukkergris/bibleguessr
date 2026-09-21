@@ -8,35 +8,13 @@ on:
 
 jobs:
 
-  backend-test:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - uses: arduino/setup-task@v2
-        with:
-          version: '3.x'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task dotnet:test
-
-  frontend-build:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - uses: arduino/setup-task@v2
-        with:
-          version: '3.x'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task frontend:test
-      - run: task frontend:build
+  ci:
+    # https://github.com/github/vscode-github-actions/issues/254
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   docker-publish:
-    needs: [backend-test, frontend-build]
+    needs: [ci]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +30,7 @@ jobs:
       - run: task docker:publish:app
 
   bundle:
-    needs: [docker-publish]
+    needs: [ci]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
