@@ -251,6 +251,21 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         secret instead.
       </p>
 
+      <h3>Docker Hub login for local release runs</h3>
+      <p>
+        The main release workflow publishes Docker images. Before running it
+        locally with <code>act</code>, authenticate Docker Hub from the dev
+        container:
+      </p>
+      <pre><code>docker login -u "$DOCKER_USERNAME"</code></pre>
+      <p>
+        Enter a Docker Hub personal access token with Read &amp; Write
+        permissions when Docker prompts for a password. The login must remain
+        available for the full <code>act</code> run so its publish step can
+        push the API and nginx images. Do not commit the token or include it
+        in a command line.
+      </p>
+
       <h3>On a real GitHub runner</h3>
       <p>
         There is no

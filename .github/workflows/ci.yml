@@ -37,7 +37,7 @@ jobs:
     needs: [backend-test, frontend-build]
     runs-on: ubuntu-24.04
     env:
-      DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4

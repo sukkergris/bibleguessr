@@ -35,6 +35,7 @@ git config --global --add safe.directory /xyz || true
 bash "$SCRIPTS_DIR/copy-ssh-files.sh"
 bash "$SCRIPTS_DIR/remove-userkeychain.sh" "$HOME/.ssh/config"
 bash "$SCRIPTS_DIR/install-global-npm-tools.sh"
+bash "$SCRIPTS_DIR/configure-docker-credentials.sh"
 
 # Download the Chromium browser binary for @playwright/cli / @playwright/mcp
 # (installed above). System-level runtime deps for it (libnspr4, libnss3,
