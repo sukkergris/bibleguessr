@@ -330,3 +330,6 @@ test-results/
 
 # Local-only evanessences directory
 .evanessences/
+
+.env
+.secrets
