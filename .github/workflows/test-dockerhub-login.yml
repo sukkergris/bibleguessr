@@ -9,5 +9,5 @@ jobs:
     steps:
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
+          username: ${{ vars.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESSTOKEN_RW }}

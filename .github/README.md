@@ -90,6 +90,10 @@ git push origin frontend-v0.8.3
 gh run watch
 ```
 
+The workflow also publishes the API and nginx images. Both currently use the
+fixed Docker tag `0.0.1`, which is overwritten by each publish and cannot
+identify a specific release. Container-image versioning remains a known gap.
+
 ## Cleaning up a test release
 
 Deleting the release does not delete the tag, and the tag exists in three
@@ -183,19 +187,27 @@ breaking changes beyond the Node version.
 
 ## Local testing
 
-Workflows cannot meaningfully be run locally here. `act` needs to mount the
-repository into a container, and Docker Desktop on the host does not share the
-devcontainer's `/xyz` path. Even where it runs, `act` uses its own runner
-images, handles the `setup-*` actions differently, and has no artifact server.
-
-What _can_ be checked locally:
+The repository includes Task wrappers for running its workflows under `act`.
+The local release run needs a gitignored `.env` containing `DOCKER_USERNAME`,
+a gitignored `.secrets` file containing `DOCKERHUB_ACCESSTOKEN_RW`, and a
+Docker Hub login in the dev container. On GitHub, set `DOCKER_USERNAME` as a
+repository variable and `DOCKERHUB_ACCESSTOKEN_RW` as a repository secret:
 
 ```sh
-# the repository's own logic — the only part of the workflow that is ours
+docker login -u "$DOCKER_USERNAME"
+
+# frontend build, version check, and release zip
 task release:bundle
 
-# workflow syntax, via actionlint piped over stdin (avoids the mount problem)
-cat .github/workflows/main.yml | docker run --rm -i rhysd/actionlint:latest -
+# full local release rehearsal, including Docker image publication
+task ci:act-main
+
+# workflow syntax
+task ci:lint
 ```
 
-Everything else is environment differences, which only a real run reveals.
+`act` cannot provide GitHub's `ACTIONS_RUNTIME_TOKEN`, so the release workflow
+skips `actions/upload-artifact` during a local run. A GitHub-hosted tag run
+still uploads the zip and creates the draft release. The Docker images are
+published by both local and hosted runs, so use a disposable Docker Hub
+namespace when rehearsing with credentials you do not intend to publish from.

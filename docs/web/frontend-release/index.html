@@ -3,31 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Frontend release — BibleGuessr Docs</title>
+    <title>Application release — BibleGuessr Docs</title>
     <link rel="stylesheet" href="../shared/styles.css" />
   </head>
   <body>
     <main class="page">
       <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
       <span class="eyebrow">Procedure</span>
-      <h1>Frontend release</h1>
+      <h1>Application release</h1>
       <p class="subtitle">
-        How a frontend version becomes a downloadable artifact on GitHub — the
-        four Task steps, what each one refuses to do, and how the same chain
-        runs in CI.
+        How a versioned frontend bundle and Docker images are released from one
+        Git tag.
       </p>
 
       <h2>What a release is here</h2>
       <p>
-        A release is a zip of the production frontend build, attached to a
-        GitHub release and named after the version it contains. Something else —
-        a polyhost nginx image — downloads it and unpacks it, rather than
-        building the frontend itself. That is the whole point: the artifact is
-        built and verified once, then consumed as-is.
+        An application release creates two deliverables from one commit: a zip
+        of the production frontend build, attached to a draft GitHub release,
+        and Docker images for the API and nginx services. The zip is named after
+        the frontend version. Both images currently use the fixed Docker tag
+        <code>0.0.1</code>.
       </p>
       <p>
-        The backend is released separately, to Docker Hub. The two applications
-        version independently, which is why the tags are prefixed.
+        The frontend and backend retain independent application versions. The
+        fixed image tag is a known deployment-versioning limitation.
       </p>
 
       <h2>The version is one value</h2>
@@ -76,11 +75,11 @@
         to be packaged.
       </p>
 
-      <h2>The four steps</h2>
+      <h2>The local build steps</h2>
       <p>
         <span class="file-ref">Taskfile.Release.yml</span>
-        holds the chain. Each task depends on the one before it, so running a
-        later step runs everything ahead of it:
+        holds the local frontend build chain. Running the bundle task also runs
+        the verification ahead of it:
       </p>
       <ul>
         <li>
@@ -93,19 +92,11 @@
           <strong><code>task release:bundle</code></strong>
           — packages the verified build as a zip.
         </li>
-        <li>
-          <strong><code>task release:tag</code></strong>
-          — tags the current commit.
-        </li>
-        <li>
-          <strong><code>task release:publish</code></strong>
-          — creates the draft release and uploads the zip.
-        </li>
       </ul>
       <p>
-        <code>tag</code>
-        deliberately has no dependencies. Tagging is a claim about a commit, not
-        a build step, and forcing a build in order to tag would be backwards.
+        Creating a Git tag and publishing the draft release are CI operations,
+        not Task commands. This keeps the release authority in GitHub Actions,
+        where the Docker Hub and GitHub credentials are available.
       </p>
 
       <h2>Verification is a step, not an assumption</h2>
@@ -201,8 +192,7 @@
 
       <h2>Running it by hand</h2>
       <p>
-        The chain can be run locally end to end. Everything up to publishing
-        needs no credentials:
+        The frontend artifact can be checked locally without credentials:
       </p>
       <pre><code>task release:bundle       # test, build, verify, package
 unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
@@ -214,10 +204,10 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
       <h2>Running it in CI</h2>
       <p>
         <span class="file-ref">.github/workflows/main.yml</span>
-        runs the same chain on a GitHub runner. It calls
-        <code>task release:bundle</code>
-        rather than repeating the build steps in YAML, so there is one
-        description of how the frontend is built, not two that can drift.
+        first runs backend and frontend tests, then builds and publishes the
+        Docker images, and finally calls <code>task release:bundle</code>. The
+        frontend build remains defined once in the Taskfile rather than being
+        repeated in YAML.
       </p>
       <p>The workflow has two triggers:</p>
       <ul>
@@ -226,12 +216,13 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
             A tag push matching
             <code>frontend-v*</code>
           </strong>
-          — builds, bundles, and creates a draft release.
+          — runs the tests, publishes the Docker images, bundles the frontend,
+          and creates a draft release.
         </li>
         <li>
           <strong><code>workflow_dispatch</code></strong>
-          — a manual button that builds and bundles but skips the release step,
-          because
+          — a manual button that runs the same tests, publishes Docker images,
+          and bundles the frontend, but skips the GitHub release step because
           <code>github.ref</code>
           is then a branch rather than a tag. Useful for checking that the build
           still works without producing a release.
@@ -254,13 +245,23 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
       </p>
 
       <h2>Cutting a release</h2>
-      <pre><code>git tag frontend-v0.8.3
+      <p>
+        First update the frontend version when the frontend changed, and update
+        the backend version when the backend changed. Commit and push those
+        version changes before creating a tag whose version matches
+        <code>frontend/package.json</code>:
+      </p>
+      <pre><code>task release:bundle
+git add frontend/package.json backend/Api/Program.fs
+git commit -m "release: frontend v0.8.3"
+git push origin main
+git tag frontend-v0.8.3
 git push origin frontend-v0.8.3
 gh run watch</code></pre>
       <p>
-        The tag is the trigger, so it should point at a commit that is already
-        pushed and that you are willing to ship. When the run finishes, the
-        draft appears under
+        Omit unchanged version files from the commit. The tag is the release
+        trigger, so it must point at the already-pushed commit that is intended
+        to ship. When the run finishes, the draft appears under
         <strong>Releases</strong>
         with the zip attached.
       </p>
@@ -273,28 +274,22 @@ git tag -d frontend-v0.8.3                             # local tag</code></pre>
 
       <h2>Consuming the artifact</h2>
       <p>
-        The zip is downloaded and unpacked during an image build rather than by
-        a script in this repository.
-        <code>unzip</code>
-        is already present in
-        <code>nginx:alpine</code>
-        , so no extra tooling is needed:
+        The release zip is a downloadable frontend distribution. The current
+        nginx Dockerfile does not consume it; it builds the frontend source
+        from the same checkout as the API image. Both images are published with
+        the same fixed tag.
       </p>
-      <pre><code>RUN wget -qO /tmp/f.zip "&lt;release asset url&gt;" \
- &amp;&amp; unzip /tmp/f.zip -d /usr/share/nginx/html/bibleguessr/ \
- &amp;&amp; rm /tmp/f.zip</code></pre>
       <p>
-        Fetching and removing in a single
-        <code>RUN</code>
-        keeps the zip out of the image layers. Pin the version explicitly rather
-        than resolving "latest" at build time, or the same Dockerfile produces
-        different images on different days.
+        The fixed image tag is overwritten by each publish, so it cannot
+        identify a release or safely pin a deployment. Use the frontend GitHub
+        release for versioned frontend distribution; container-image versioning
+        remains a known limitation.
       </p>
 
       <h2>Implementation</h2>
       <p>
         <span class="file-ref">Taskfile.Release.yml</span>
-        defines the four tasks.
+        defines the frontend verification and bundle tasks.
         <span class="file-ref">build/fsx/VerifyFrontendArtifact.fsx</span>
         checks the built artifact and
         <span class="file-ref">build/fsx/BundleFrontend.fsx</span>

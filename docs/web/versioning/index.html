@@ -151,35 +151,22 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         <span class="file-ref">Taskfile.yml</span>
         and
         <span class="file-ref">Taskfile.Docker.yml</span>
-        both declare it as a dynamic root-level
-        <code>env:</code>
-        entry:
+        both obtain it through
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        :
       </p>
-      <pre><code>env:
-  IMAGE_TAG:
-    sh: ./scripts/ci/load-image-version.sh</code></pre>
+      <pre><code>echo '0.0.1'</code></pre>
       <p>
-        Task runs that script once and exports the result to every task,
-        including included taskfiles. That is why
-        <code>${IMAGE_TAG}</code>
-        resolves inside a task that does not declare it itself — a per-task
-        <code>env:</code>
-        block repeating
-        <code>IMAGE_TAG: '{{.IMAGE_TAG}}'</code>
-        is redundant.
+        The script currently returns one fixed value, regardless of the source
+        commit or either application version.
       </p>
       <div class="callout limitation">
-        <span class="callout-title">
-          <code>load-image-version.sh</code>
-          is a stub
-        </span>
+        <span class="callout-title">Image tags are not release identifiers</span>
         <p>
-          It is three lines and echoes a hardcoded
-          <code>0.0.1</code>
-          . Every image built today carries that tag regardless of what either
-          application's version says. Making the tag meaningful means giving
-          this script a real source; until then, treat published tags as not
-          identifying a build.
+          Every publish overwrites the <code>0.0.1</code> tag. Do not use it to
+          pin a deployment or infer which application version it contains. A
+          future image-versioning change must give this script a meaningful,
+          immutable source.
         </p>
       </div>
 
@@ -202,53 +189,15 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         interpolates it. Nothing else is involved.
       </p>
       <p>
-        <strong>Through the CI workflow under
-        <code>act</code></strong>
-        , via
-        <span class="file-ref">Taskfile.CI.yml</span>
-        . Here the value has to cross into a container, which needs an explicit
-        flag:
-      </p>
-      <pre><code>./scripts/ci/run-ci-workflow.sh --env-file .env -j docker-build --env IMAGE_TAG="${IMAGE_TAG}"</code></pre>
-      <p>
-        <code>--env</code>
-        sets a real environment variable in the job's shell, and works even
-        though
-        <span class="file-ref">.github/workflows/ci.yml</span>
-        does not declare
-        <code>IMAGE_TAG</code>
-        in its
-        <code>env:</code>
-        block.
-      </p>
-      <div class="callout limitation">
-        <span class="callout-title">
-          <code>--env</code>
-          , not
-          <code>-s</code>
-        </span>
-        <p>
-          <code>-s</code>
-          passes a
-          <em>secret</em>
-          , reachable only as
-          <code>${{ secrets.IMAGE_TAG }}</code>
-          inside the workflow YAML. It is never exported to the job's shell, so
-          <code>docker compose</code>
-          sees nothing and the build fails with
-          <code>required variable IMAGE_TAG is missing a value</code>
-          . The two flags look interchangeable and are not.
-        </p>
-      </div>
-      <p>
         <code>DOCKER_USERNAME</code>
         travels a different route: a gitignored root
         <span class="file-ref">.env</span>
         , passed with
         <code>--env-file</code>
-        . In GitHub Actions it comes from the
-        <code>DOCKERHUB_USERNAME</code>
-        secret instead.
+        . In GitHub Actions it comes from the repository variable
+        <code>DOCKER_USERNAME</code>
+        instead. The Docker Hub token is the
+        <code>DOCKERHUB_ACCESSTOKEN_RW</code> repository secret.
       </p>
 
       <h3>Docker Hub login for local release runs</h3>
@@ -268,21 +217,9 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
 
       <h3>On a real GitHub runner</h3>
       <p>
-        There is no
-        <code>--env</code>
-        flag on GitHub Actions, so
-        <code>IMAGE_TAG</code>
-        must be declared in the workflow. The
-        <code>docker-build</code>
-        job in
-        <span class="file-ref">.github/workflows/ci.yml</span>
-        currently sets only
-        <code>DOCKER_USERNAME</code>
-        and
-        <code>COMMIT_SHA</code>
-        , so a pushed run will fail the same way the local run did until an
-        <code>IMAGE_TAG</code>
-        entry is added there.
+        Both GitHub Actions workflows run the same tag script through Task, so
+        they publish the same fixed <code>0.0.1</code> image tag. No separate
+        <code>IMAGE_TAG</code> workflow variable is necessary.
       </p>
 
       <h2>Running the image build locally</h2>
@@ -291,17 +228,9 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
       </p>
       <pre><code>task docker:build:app     # or docker:build:api / docker:build:nginx</code></pre>
       <p>
-        <code>task ci:act-build-images</code>
-        looks like the equivalent but is not.
-        <code>-j docker-build</code>
-        does not run that job alone —
-        <code>docker-build</code>
-        declares
-        <code>needs: [backend-test, frontend-test]</code>
-        , and
-        <code>act</code>
-        honours it, so the whole test suite runs first. Use it to rehearse the
-        full CI chain, not to check an image build.
+        To rehearse the release workflow locally, authenticate Docker Hub and
+        then run <code>task ci:act-main</code>. It runs the full dependency
+        chain; <code>act</code> honors each job's <code>needs</code> entries.
       </p>
       <div class="callout limitation">
         <span class="callout-title">Two things that will bite</span>
@@ -313,13 +242,19 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
           failure but is not one; give Docker more memory.
         </p>
         <p>
-          <span class="file-ref">scripts/ci/run-ci-workflow.sh</span>
+          <span class="file-ref">scripts/ci/run-main-workflow.sh</span>
           pipes through
           <code>tee /dev/tty</code>
           , which fails with
           <code>No such device or address</code>
           when there is no terminal — so the script cannot currently be run from
           a non-interactive context.
+        </p>
+        <p>
+          <code>act</code> cannot supply GitHub's
+          <code>ACTIONS_RUNTIME_TOKEN</code>, so the local wrapper marks its run
+          and skips <code>actions/upload-artifact</code>. GitHub-hosted runs
+          still upload the artifact and create the draft release for a tag.
         </p>
       </div>
 

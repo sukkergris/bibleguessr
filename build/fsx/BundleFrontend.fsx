@@ -32,7 +32,12 @@ let pack (source: string, dist: string) =
 
     copyReleaseFiles dist
 
-    ZipFile.CreateFromDirectory(source, dist + ".zip", CompressionLevel.Optimal, false)
+    let archivePath = dist + ".zip"
+
+    if File.Exists archivePath then
+        File.Delete archivePath
+
+    ZipFile.CreateFromDirectory(source, archivePath, CompressionLevel.Optimal, false)
 
 pack( sourcePath, artifactPath)
 

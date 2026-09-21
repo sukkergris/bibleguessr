@@ -37,8 +37,7 @@ jobs:
     needs: [backend-test, frontend-build]
     runs-on: ubuntu-24.04
     env:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      COMMIT_SHA: ${{ github.sha }}
+      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-task@v2

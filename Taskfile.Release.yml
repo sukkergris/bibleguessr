@@ -13,20 +13,8 @@ tasks:
       - dotnet fsi {{.FSX_DIR}}/VerifyFrontendArtifact.fsx
 
   bundle:
-    desc: Package the verified frontend build as a release tarball
+    desc: Package the verified frontend build as a release zip
     deps:
       - frontend
     cmds:
       - dotnet fsi {{.FSX_DIR}}/BundleFrontend.fsx
-
-  tag:
-    desc: Tag the current commit with the frontend version
-    cmds:
-      - dotnet fsi {{.FSX_DIR}}/AddGitTag.fsx
-
-  publish:
-    desc: Create a draft GitHub release and upload the tarball
-    deps:
-      - bundle
-    cmds:
-      - dotnet fsi {{.FSX_DIR}}/PublishGitHubRelease.fsx
