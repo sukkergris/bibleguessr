@@ -1,10 +1,13 @@
-name: Release frontend
+name: Release app
 
 on:
   push:
     tags:
       - 'frontend-v*'
   workflow_dispatch:
+
+env:
+  BIBLEGUESSR_LOCAL_ACT: ${{ vars.BIBLEGUESSR_LOCAL_ACT }}
 
 jobs:
 
@@ -75,6 +78,7 @@ jobs:
       - run: task release:bundle
 
       - uses: actions/upload-artifact@v4
+        if: env.BIBLEGUESSR_LOCAL_ACT != 'true'
         with:
           name: frontend-zip
           path: artifacts/*.zip
