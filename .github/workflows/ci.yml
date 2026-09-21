@@ -19,7 +19,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: task dotnet:test
 
-  frontend-test:
+  frontend-build:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
       - run: task frontend:build
 
   docker-build:
-    needs: [backend-test, frontend-test]
+    needs: [backend-test, frontend-build]
     runs-on: ubuntu-24.04
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}

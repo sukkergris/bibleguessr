@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Versioning — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Procedure</span>
+      <h1>Versioning</h1>
+      <p class="subtitle">
+        Where each version number lives, which ones derive from another and
+        which are typed by hand, and what to edit when a feature is finished.
+      </p>
+
+      <h2>Two applications, two version numbers</h2>
+      <p>
+        The frontend and the backend version independently. They ship
+        separately — the frontend as a zip on a GitHub release, the backend as a
+        Docker image — so there is no single "project version" and no attempt to
+        keep the two numbers in step.
+      </p>
+      <p>
+        <span class="file-ref">CLAUDE.md</span>
+        states the rule: when a feature is complete, bump the version of each
+        application it changed. A frontend-only change bumps only the frontend.
+        A change touching both bumps both.
+      </p>
+
+      <h2>The frontend version</h2>
+      <p>
+        <span class="file-ref">frontend/package.json</span>
+        is the single source of truth. It currently reads
+        <code>0.8.3</code>
+        . Three things derive from it, and none of them is edited by hand:
+      </p>
+      <ul>
+        <li>
+          <strong>The meta tag users see.</strong>
+          <span class="file-ref">frontend/vite.config.ts</span>
+          reads
+          <code>package.json</code>
+          at build time and rewrites
+          <code>&lt;meta name="application-version"&gt;</code>
+          in
+          <span class="file-ref">frontend/index.html</span>
+          through a
+          <code>transformIndexHtml</code>
+          plugin. The checked-in placeholder is
+          <code>0.0.0</code>
+          and never survives a build.
+          <span class="file-ref">frontend/src/components/nerd-panel.ts</span>
+          reads that tag to display the version in the Nerd panel.
+        </li>
+        <li>
+          <strong>The release zip filename</strong>
+          —
+          <code>bibleguessr-frontend-&lt;version&gt;.zip</code>
+          .
+        </li>
+        <li>
+          <strong>The git tag</strong>
+          —
+          <code>frontend-v&lt;version&gt;</code>
+          .
+        </li>
+      </ul>
+      <p>
+        To bump it, edit
+        <code>package.json</code>
+        and rebuild. Nothing else needs touching.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Why the derivation exists</span>
+        <p>
+          The meta tag used to be maintained by hand and drifted:
+          <code>package.json</code>
+          said
+          <code>0.8.3</code>
+          while the Nerd panel showed
+          <code>0.7.2</code>
+          , because nothing asserted the two agreed. Two checks now do —
+          <span class="file-ref">frontend/src/app-version.test.ts</span>
+          against a fresh build, and
+          <span class="file-ref">build/fsx/VerifyFrontendArtifact.fsx</span>
+          against the artifact about to be packaged. See
+          <a href="../frontend-release/index.html">Frontend release</a>
+          for what that verification refuses to let through.
+        </p>
+      </div>
+
+      <h2>The backend version</h2>
+      <p>
+        <span class="file-ref">backend/Api/Program.fs</span>
+        holds it as a literal on line 46:
+      </p>
+      <pre><code>let BackendVersion = "0.5.3"</code></pre>
+      <p>
+        It is served from
+        <code>/api/version</code>
+        , which the Nerd panel fetches and displays next to the frontend
+        version. To bump it, edit the literal.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">This is the weak spot</span>
+        <p>
+          There is no
+          <code>&lt;Version&gt;</code>
+          property in
+          <span class="file-ref">backend/Api/BibleGuessr.Api.fsproj</span>
+          , so the backend version has no build-time representation. Nothing
+          outside the running process can read it the way the release scripts
+          read
+          <code>package.json</code>
+          — a build script wanting the backend version would have to parse F#
+          source. The assemblies carry the .NET default
+          <code>1.0.0.0</code>
+          , unrelated to the literal.
+        </p>
+        <p>
+          This is a known gap, recorded under "The backend has no version" in
+          <span class="file-ref">
+            docs/SCRUM/BACKLOG/Feature.CI-CD-construction.md
+          </span>
+          .
+        </p>
+      </div>
+
+      <h2>The container image tag</h2>
+      <p>
+        <span class="file-ref">build/docker-compose.build.yml</span>
+        names both images after an environment variable, using the
+        <code>:?</code>
+        form so a missing value fails the build rather than producing an image
+        tagged with an empty string:
+      </p>
+      <pre><code>image: ${DOCKER_USERNAME:?}/bibleguessr-api:${IMAGE_TAG:?}
+image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
+      <p>
+        <code>IMAGE_TAG</code>
+        is a deployment coordinate, not an application version. It tags both
+        images together, while the two applications inside them version
+        separately.
+      </p>
+
+      <h3>Where the value comes from</h3>
+      <p>
+        <span class="file-ref">Taskfile.yml</span>
+        and
+        <span class="file-ref">Taskfile.Docker.yml</span>
+        both declare it as a dynamic root-level
+        <code>env:</code>
+        entry:
+      </p>
+      <pre><code>env:
+  IMAGE_TAG:
+    sh: ./scripts/ci/load-image-version.sh</code></pre>
+      <p>
+        Task runs that script once and exports the result to every task,
+        including included taskfiles. That is why
+        <code>${IMAGE_TAG}</code>
+        resolves inside a task that does not declare it itself — a per-task
+        <code>env:</code>
+        block repeating
+        <code>IMAGE_TAG: '{{.IMAGE_TAG}}'</code>
+        is redundant.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">
+          <code>load-image-version.sh</code>
+          is a stub
+        </span>
+        <p>
+          It is three lines and echoes a hardcoded
+          <code>0.0.1</code>
+          . Every image built today carries that tag regardless of what either
+          application's version says. Making the tag meaningful means giving
+          this script a real source; until then, treat published tags as not
+          identifying a build.
+        </p>
+      </div>
+
+      <h3>Getting it into a container build</h3>
+      <p>
+        There are two paths to
+        <code>docker compose</code>
+        , and they carry the variable differently.
+      </p>
+      <p>
+        <strong>Directly</strong>
+        , via
+        <span class="file-ref">Taskfile.Docker.yml</span>
+        —
+        <code>task docker:build:app</code>
+        . Task exports
+        <code>IMAGE_TAG</code>
+        into the environment and
+        <code>docker compose</code>
+        interpolates it. Nothing else is involved.
+      </p>
+      <p>
+        <strong>Through the CI workflow under
+        <code>act</code></strong>
+        , via
+        <span class="file-ref">Taskfile.CI.yml</span>
+        . Here the value has to cross into a container, which needs an explicit
+        flag:
+      </p>
+      <pre><code>./scripts/ci/run-ci-workflow.sh --env-file .env -j docker-build --env IMAGE_TAG="${IMAGE_TAG}"</code></pre>
+      <p>
+        <code>--env</code>
+        sets a real environment variable in the job's shell, and works even
+        though
+        <span class="file-ref">.github/workflows/ci.yml</span>
+        does not declare
+        <code>IMAGE_TAG</code>
+        in its
+        <code>env:</code>
+        block.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">
+          <code>--env</code>
+          , not
+          <code>-s</code>
+        </span>
+        <p>
+          <code>-s</code>
+          passes a
+          <em>secret</em>
+          , reachable only as
+          <code>${{ secrets.IMAGE_TAG }}</code>
+          inside the workflow YAML. It is never exported to the job's shell, so
+          <code>docker compose</code>
+          sees nothing and the build fails with
+          <code>required variable IMAGE_TAG is missing a value</code>
+          . The two flags look interchangeable and are not.
+        </p>
+      </div>
+      <p>
+        <code>DOCKER_USERNAME</code>
+        travels a different route: a gitignored root
+        <span class="file-ref">.env</span>
+        , passed with
+        <code>--env-file</code>
+        . In GitHub Actions it comes from the
+        <code>DOCKERHUB_USERNAME</code>
+        secret instead.
+      </p>
+
+      <h3>On a real GitHub runner</h3>
+      <p>
+        There is no
+        <code>--env</code>
+        flag on GitHub Actions, so
+        <code>IMAGE_TAG</code>
+        must be declared in the workflow. The
+        <code>docker-build</code>
+        job in
+        <span class="file-ref">.github/workflows/ci.yml</span>
+        currently sets only
+        <code>DOCKER_USERNAME</code>
+        and
+        <code>COMMIT_SHA</code>
+        , so a pushed run will fail the same way the local run did until an
+        <code>IMAGE_TAG</code>
+        entry is added there.
+      </p>
+
+      <h2>Running the image build locally</h2>
+      <p>
+        To exercise only the container build, go straight at it:
+      </p>
+      <pre><code>task docker:build:app     # or docker:build:api / docker:build:nginx</code></pre>
+      <p>
+        <code>task ci:act-build-images</code>
+        looks like the equivalent but is not.
+        <code>-j docker-build</code>
+        does not run that job alone —
+        <code>docker-build</code>
+        declares
+        <code>needs: [backend-test, frontend-test]</code>
+        , and
+        <code>act</code>
+        honours it, so the whole test suite runs first. Use it to rehearse the
+        full CI chain, not to check an image build.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Two things that will bite</span>
+        <p>
+          Running the full chain locally can end in
+          <code>exitcode '137'</code>
+          — SIGKILL, the container being killed for running out of memory,
+          usually while the .NET SDK unpacks or builds. It surfaces as a test
+          failure but is not one; give Docker more memory.
+        </p>
+        <p>
+          <span class="file-ref">scripts/ci/run-ci-workflow.sh</span>
+          pipes through
+          <code>tee /dev/tty</code>
+          , which fails with
+          <code>No such device or address</code>
+          when there is no terminal — so the script cannot currently be run from
+          a non-interactive context.
+        </p>
+      </div>
+
+      <h2>Bumping a version</h2>
+      <ul>
+        <li>
+          <strong>Frontend changed</strong>
+          — edit
+          <code>version</code>
+          in
+          <span class="file-ref">frontend/package.json</span>
+          .
+        </li>
+        <li>
+          <strong>Backend changed</strong>
+          — edit
+          <code>BackendVersion</code>
+          in
+          <span class="file-ref">backend/Api/Program.fs</span>
+          .
+        </li>
+        <li>
+          <strong>Both changed</strong>
+          — edit both, independently. They are not meant to match.
+        </li>
+      </ul>
+      <p>
+        Neither bump affects the image tag today, since
+        <code>load-image-version.sh</code>
+        ignores both.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/package.json</span>
+        holds the frontend version;
+        <span class="file-ref">frontend/vite.config.ts</span>
+        injects it and
+        <span class="file-ref">frontend/src/app-version.test.ts</span>
+        asserts it.
+        <span class="file-ref">backend/Api/Program.fs</span>
+        holds the backend version and serves it at
+        <code>/api/version</code>
+        .
+      </p>
+      <p>
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        produces the image tag,
+        <span class="file-ref">Taskfile.yml</span>
+        and
+        <span class="file-ref">Taskfile.Docker.yml</span>
+        export it,
+        <span class="file-ref">Taskfile.CI.yml</span>
+        forwards it into
+        <code>act</code>
+        , and
+        <span class="file-ref">build/docker-compose.build.yml</span>
+        consumes it.
+      </p>
+      <p>
+        <a href="../frontend-release/index.html">Frontend release</a>
+        covers how the frontend version becomes a published artifact.
+      </p>
+    </main>
+  </body>
+</html>
