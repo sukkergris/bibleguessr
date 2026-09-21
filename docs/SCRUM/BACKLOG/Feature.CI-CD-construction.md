@@ -144,6 +144,48 @@ Revisit if arm64 runner images improve.
 executable. This also forces the backend to acquire a machine-readable version,
 which is a prerequisite for ever releasing it the way the frontend is released.
 
+### D6 — What actually got built diverged from this plan
+
+A separate, unplanned round of CI/CD work — publishing the backend to Docker
+Hub — landed before most of this feature did, and it solved several problems
+this document also names, by different means than the ones proposed above. It
+is recorded here so the acceptance criteria below can be checked against
+reality rather than against the plan:
+
+- **Workflow duplication was solved with `workflow_call`, not named here at
+  all.** `backend-test` and `frontend-build` were duplicated verbatim between
+  `ci.yml` and `main.yml`. `ci.yml` gained an `on: workflow_call:` trigger,
+  and `main.yml` now has a single `ci:` job with `uses: ./.github/workflows/ci.yml`
+  in place of the two duplicated jobs. This addresses the same
+  "does the release work only by pushing and watching" complaint from
+  **Motivation**, for the test/build stage specifically, without touching
+  `release:tag` or `release:publish`.
+- **Docker Hub publishing exists now**, via `task docker:build:app` /
+  `task docker:publish:app` (`Taskfile.Docker.yml`) and a `docker-publish` job
+  in `main.yml`. This is `docker:build`, D2's third line, built — but as three
+  service-specific tasks (`build:api`, `build:nginx`, `build:app`) under a
+  `docker:` namespace, not the single `docker:build` task named in **Scope**
+  and acceptance criterion 5.
+- **Credentials load through `dotenv: ['.env']` in the root `Taskfile.yml`**,
+  not through any mechanism this document anticipated. This was arrived at
+  after a task that tried to `source .env` inside its own `cmds:` block,
+  which cannot work — each `cmds:` entry is its own subshell, so anything
+  sourced there is gone before the task's own next line runs. `dotenv:` is
+  the one place in Task's process tree that can actually export into
+  everything started afterward; it must live in the root taskfile, since Task
+  refuses it in an included one.
+- **`--secret-file`, not `--env-file`, is what gets real secrets to `act`.**
+  `--env-file` only fills the environment; it never fills the `secrets.*`
+  context that `uses:` steps like `docker/login-action` read. This was proven
+  against a minimal probe workflow before being relied on:
+  `--env-file` alone left `${{ secrets.X }}` empty in both a login step and a
+  plain `run:` step; `--secret-file` filled it in both. `run-ci-workflow.sh`
+  and `run-main-workflow.sh` now pass secrets this way.
+
+None of this closes acceptance criteria 2, 3, 4, 6, or 9 below — the `.fsx`
+scripts, `Common.fsx`'s path handling, and the backend version property are
+untouched by it. See **What remains**.
+
 ## Scope
 
 In scope:
@@ -160,10 +202,12 @@ In scope:
 
 Out of scope:
 
-- Publishing the backend to Docker Hub. That is
-  `Feature.BuildBackendAndPublishToDockerhub.md` — currently an empty file. This
-  feature makes that work possible (backend version, `docker:build`) but does not
-  do it.
+- Publishing the backend to Docker Hub. That was
+  `Feature.BuildBackendAndPublishToDockerhub.md` — empty when this document
+  was written, and since built and moved to `docs/SCRUM/DONE/`. It landed
+  without waiting on this feature's `docker:build` or backend-version work
+  (D6, above), rather than being made possible by them as originally
+  planned.
 - Deployment. Nothing here deploys anything; the pipeline ends at a draft
   release and a built image.
 - Any Bible translation data. Per the licensing rules in `CLAUDE.md`, no
@@ -201,131 +245,216 @@ The artifact path stays under `/tmp` so `.gitignore` needs no new entry.
 
 ## Acceptance criteria
 
-### 1. The layering rule is real (D1)
+### 1. The layering rule is real (D1) — one violation left
 
-- [ ] No `.github/workflows/` step does work directly; every step is
-      `uses:` (checkout, setup) or `run: task <something>`.
-- [ ] Every pipeline step can be run from a developer shell by typing a `task`
-      command.
+- [ ] One step still does work directly: `main.yml`'s `bundle` job runs
+      `gh release create "${{ github.ref_name }}" artifacts/*.zip --draft`
+      inline, rather than through a task. Every other step across both
+      `ci.yml` and `main.yml` — verified by walking each job — is either
+      `uses:` or `run: task <something>`, including the Docker Hub publish
+      steps that did not exist when this document was written.
+- [x] Every step that *is* task-based can be run from a developer shell the
+      same way: `task dotnet:test`, `task frontend:test`, `task frontend:build`,
+      `task docker:build:app`, `task docker:publish:app`, `task release:bundle`
+      all run standalone.
 
-### 2. `build/fsx/AddGitTag.fsx`
+### 2. `build/fsx/AddGitTag.fsx` — not built
 
-- [ ] Reads the version from `frontend/package.json` and creates the tag
-      `frontend-v<version>`, matching decision **D2** in
-      `Feature.BuildFrontendAndPublishToGithubRelease.md`.
+- [ ] Does not exist on disk. A release still starts with a developer pushing
+      a `frontend-v<version>` tag by hand; none of the four guarantees below
+      have any equivalent today.
 - [ ] Refuses to tag when the working tree is dirty, with a message saying which
       files are dirty.
 - [ ] Refuses to overwrite an existing tag. Re-running is either a safe no-op or
       a clear failure — never a silent force.
 - [ ] Resolves all paths through `RootLoader`, so it works from any CWD.
 
-### 3. `build/fsx/PublishGitHubRelease.fsx`
+### 3. `build/fsx/PublishGitHubRelease.fsx` — not built
 
-- [ ] Creates the release as a **draft** (**D3** in the frontend release
-      feature) for the `frontend-v<version>` tag, and uploads the artifact from
-      `artifacts/`.
-- [ ] Shells out to `gh` rather than calling the REST API (**D3**).
+- [ ] Does not exist on disk. `main.yml`'s `bundle` job creates the draft
+      release with a plain `gh release create ... --draft` step instead —
+      this satisfies the *draft* requirement (D3) but only inside the
+      workflow run, with none of the other three guarantees.
+- [ ] Shells out to `gh` rather than calling the REST API (**D3**) — true of
+      the inline step too, incidentally, but not because this script exists.
 - [ ] Fails clearly and non-zero when `gh` is unauthenticated, rather than
-      appearing to succeed.
-- [ ] Safe to retry after a partial upload.
+      appearing to succeed. Untested either way.
+- [ ] Safe to retry after a partial upload. Untested either way.
 
-### 4. `Common.fsx` is CWD-independent
+### 4. `Common.fsx` is CWD-independent — not built
 
-- [ ] `packageJsonPath` and `distIndexPath` resolve through
-      `RootLoader.findRoot`, not relative strings.
+- [ ] `packageJsonPath` and `distIndexPath` are still
+      `Path.Combine("frontend", ...)` — relative strings, unchanged from the
+      defect this criterion describes. `BundleFrontend.fsx` resolves through
+      `RootLoader`; `Common.fsx`, used by `VerifyFrontendArtifact.fsx`, still
+      does not.
 - [ ] `task release:frontend` succeeds when invoked from a subdirectory.
+      Untested; expected to fail given the above.
 
-### 5. `task ci` (D2)
+### 5. `task ci` (D2) — not built as specified; solved differently for one piece
 
-- [ ] A `ci` task runs backend tests, frontend tests, frontend build, and the
-      docker build.
-- [ ] A `docker:build` task wraps
-      `docker compose -f build/docker-compose.build.yml build`; `ci.yml` calls
-      the task rather than the compose command.
-- [ ] `ci.yml`'s three jobs each call a single task.
-- [ ] `task ci` passes locally in the devcontainer.
+- [ ] No aggregate `ci` task exists. `Taskfile.yml`'s `ci:` entry is a
+      namespace include (`taskfile: ./Taskfile.CI.yml`), not a task — running
+      `task ci` fails with "task not found", not with a passing pipeline.
+- [ ] No bare `docker:build` task exists. Three service-scoped tasks do:
+      `docker:build:api`, `docker:build:nginx`, `docker:build:app` — and
+      `ci.yml`'s `docker-build` job calls `task docker:build:app`, so the
+      "call the task, not the compose command" half of this line is met, just
+      under a different name than specified.
+- [x] `ci.yml`'s three jobs (`backend-test`, `frontend-build`, `docker-build`)
+      each call a single task per meaningful step — verified by listing every
+      step in the workflow.
+- [ ] `task ci` passes locally in the devcontainer. Cannot pass; the task does
+      not exist.
 
-### 6. `main.yml` uses the release tasks
+### 6. `main.yml` uses the release tasks — not built
 
-- [ ] The inline `gh release create` step is replaced by
-      `- run: task release:publish`.
-- [ ] `permissions: contents: write` is retained and `GH_TOKEN` is passed
-      through to the task.
-- [ ] Nothing in `main.yml` does work that `task release:*` cannot do.
+- [ ] The inline `gh release create` step (`main.yml`, `bundle` job) is still
+      inline; `task release:publish` does not exist to replace it with.
+- [x] `permissions: contents: write` is retained on the `bundle` job, and
+      `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` is passed to the `gh` step —
+      true of the step as it exists today, independent of whether a task ever
+      wraps it.
+- [ ] Nothing in `main.yml` does work that `task release:*` cannot do. Not
+      met: the draft-release creation is work `task release:*` cannot
+      currently do, because no such task exists.
 
-### 7. `act` (D4)
+### 7. `act` (D4) — partially done
 
-- [ ] `.actrc` pins the runner image and sets the container architecture.
-- [ ] `scripts/ci/run-act.sh` sources `lib-bash/header.sh` and uses `log::*`,
-      matching the other scripts in `scripts/`.
-- [ ] The script passes a token through via `gh auth token`, and fails with a
-      clear message when `gh` is not authenticated.
-- [ ] `task ci:act` runs the workflow locally and reports the job graph.
-- [ ] The documentation states plainly which jobs are expected to fail on arm64
-      and why, so a failure there is not mistaken for a broken workflow.
+- [x] `.actrc` pins the runner image: `-P ubuntu-24.04=catthehacker/ubuntu:act-24.04`.
+- [ ] Does not set `--container-architecture` or `--artifact-server-path`, both
+      specified in **Proposed structure** above. Worth noting: `act` ran
+      correctly without either during this work, which puts weight on
+      revisiting whether they were actually needed rather than only on adding
+      them.
+- [ ] The scripts are named `run-ci-workflow.sh` and `run-main-workflow.sh`,
+      not `run-act.sh` as specified — but both do source `lib-bash/header.sh`
+      and use `log::*`, matching the rest of `scripts/`, which is the
+      substance of this line even though the name differs.
+- [ ] No `gh auth token` passthrough exists in either script.
+- [x] `task ci:act-main` and `task ci:act-ci` run the respective workflow
+      locally and reach job scheduling — used directly during this work,
+      including running `docker-publish` under `act` end to end.
+- [ ] Nothing states which jobs are expected to fail on arm64 and why.
 
-### 8. Linting
+### 8. Linting — half done
 
-- [ ] `task ci:lint` runs `actionlint` over `.github/workflows/`.
-- [ ] `actionlint` passes on both workflow files.
-- [ ] A `scripts/programs/` installer adds `shellcheck` to the devcontainer, and
-      `task ci:lint` runs it over `lib-bash/` and `scripts/`.
-- [ ] Existing `# shellcheck disable=` directives are either justified or
-      removed — a disable comment for a linter that never ran proves nothing.
+- [x] `task ci:lint` exists and runs `actionlint` over `.github/workflows/`.
+- [x] `actionlint` passes on both workflow files — verified directly,
+      `0 errors` on `ci.yml` and `main.yml`.
+- [ ] `shellcheck` is not installed; no `scripts/programs/` installer for it
+      exists, and `task ci:lint` does not run it over `lib-bash/` or
+      `scripts/`.
+- [ ] Existing `# shellcheck disable=` directives remain unexamined — the
+      linter they reference has still never run.
 
-### 9. Backend version (D5)
+### 9. Backend version (D5) — not built
 
-- [ ] `backend/Api/*.csproj` gains a `<Version>` property, and
-      `Program.fs`'s `BackendVersion` derives from it rather than repeating the
-      literal.
-- [ ] `task release:version -- <frontend|backend> <major|minor|patch>` bumps the
-      named application's version in its authoritative location.
-- [ ] The task refuses an unknown application name or bump level.
+- [ ] No `<Version>` property exists in `backend/Api/BibleGuessr.Api.fsproj`;
+      `Program.fs`'s `BackendVersion = "0.5.3"` is still a bare literal.
+- [ ] `task release:version` does not exist.
+- [ ] N/A — the task to refuse invalid input does not exist.
 
-### 10. Documentation
+### 10. Documentation — partially done
 
-- [ ] `docs/web/build-pipeline/index.html` documents the layering rule (**D1**),
-      `task ci`, and the `act` workflow — HTML/JS/CSS, own folder, per
-      `CLAUDE.md`.
-- [ ] `docs/web/frontend-release/index.html` is corrected; it currently
-      describes `release:tag` and `release:publish` as working.
-- [ ] `README.md` gains `task ci`, `task ci:act`, `task ci:lint` in its task
-      table, and stays minimal and developer-facing.
+- [ ] `docs/web/build-pipeline/index.html` does not exist; the layering rule
+      and `act` workflow are undocumented in `docs/web`.
+- [x] `docs/web/frontend-release/index.html` was corrected — it no longer
+      describes `release:tag` or `release:publish` as working; see the
+      acceptance-criteria updates in
+      `Feature.BuildFrontendAndPublishToGithubRelease.md`.
+- [ ] `README.md`'s task table does not mention `ci:lint`, `ci:act-main`,
+      `ci:act-ci`, `docker:build:app`, or `docker:publish:app`.
 
-### 11. Versioning
+### 11. Versioning — not applicable yet
 
-- [ ] Per `CLAUDE.md`, both applications' versions are bumped — this feature
-      touches the backend (version property) and the frontend (release chain).
+- [ ] Per `CLAUDE.md`, a version bump applies once a feature changes an
+      application. Criterion 9 (the backend version property) is what would
+      have given the backend something to bump here, and it was not built —
+      so there is nothing to increment yet. The frontend's own version bump is
+      tracked under `Feature.BuildFrontendAndPublishToGithubRelease.md`,
+      separately from this feature's scope.
+
+## What remains
+
+- **`AddGitTag.fsx` and `PublishGitHubRelease.fsx` (criteria 2, 3).** Neither
+  exists. A release today starts with a developer pushing a tag by hand and
+  ends with an inline `gh release create` step; none of the dirty-tree,
+  existing-tag, or unauthenticated-`gh` guards these scripts were meant to
+  provide exist anywhere.
+- **`Common.fsx`'s relative paths (criterion 4).** Still
+  `Path.Combine("frontend", ...)`. Will break the moment
+  `release:frontend`/`VerifyFrontendArtifact.fsx` is invoked from anywhere but
+  the repo root, including from inside an `act` container — the exact failure
+  mode this criterion was written to close.
+- **No `task ci` aggregate, no bare `task docker:build` (criterion 5).** The
+  Docker Hub work built `docker:build:api` / `:nginx` / `:app` instead — real
+  and in use, but not the single name this criterion specifies, and there is
+  still no one command that runs the whole local pipeline sequentially the
+  way `ci.yml` runs it in parallel.
+- **`main.yml`'s release step is still inline (criterion 6).** Directly
+  downstream of criterion 3 not existing; there is no `task release:publish`
+  to call instead.
+- **`shellcheck` (criterion 8).** Not installed, not run, and the existing
+  `# shellcheck disable=` comments in `lib-bash/` still reference a linter
+  that has never executed against them.
+- **Backend version property (criterion 9).** No `<Version>` in the `.fsproj`;
+  `BackendVersion` in `Program.fs` is still a hand-edited literal with no
+  build-time source, and no `task release:version` exists to bump it or the
+  frontend's.
+- **`docs/web/build-pipeline/` (criterion 10).** Does not exist. The layering
+  rule (D1) and the `act` workflow have no developer-facing documentation
+  anywhere; this document is currently the only place either is written down.
+- **`act`'s arm64 caveats are undocumented (criterion 7).** Nothing states
+  which jobs are expected to fail under `act` on this architecture, so a
+  failure there still reads as a broken workflow rather than a known limit.
 
 ## Verification
 
 Per the testing rules in `CLAUDE.md`, a guard must be proven to fire. Break the
-thing it protects, confirm it fails, restore it, confirm it passes. Applied
-here:
+thing it protects, confirm it fails, restore it, confirm it passes. Most of
+this cannot be attempted yet, because the guards themselves were never built:
 
-1. **`AddGitTag` refuses a dirty tree.** Dirty a file, run it, confirm non-zero
-   and no tag created. Clean, re-run, confirm the tag appears.
-2. **`AddGitTag` refuses an existing tag.** Run it twice; confirm the second run
-   does not move or replace the tag.
-3. **`PublishGitHubRelease` fails unauthenticated.** Run with `gh` logged out,
-   confirm a clear non-zero failure rather than a silent success.
-4. **`Common.fsx` is CWD-independent.** Run `task release:frontend` from
-   `frontend/` and from `/`; confirm identical results. Before the fix, confirm
-   the subdirectory run fails — otherwise the change is untested.
-5. **`task ci` catches a real break.** Introduce a failing backend test and a
-   TypeScript error in turn; confirm `task ci` fails on each.
-6. **`act` reports the job graph.** Confirm `task ci:act` reaches the point of
-   scheduling jobs, and that `needs: [backend-test, frontend-test]` is honoured.
+1. **`AddGitTag` refuses a dirty tree / an existing tag.** Cannot be
+   verified — the script does not exist.
+2. **`PublishGitHubRelease` fails unauthenticated.** Cannot be verified —
+   the script does not exist. (The inline `gh release create` step's own
+   unauthenticated behavior has not been deliberately exercised either.)
+3. **`Common.fsx` is CWD-independent.** Cannot be verified as passing; can be
+   verified as still broken — `release:frontend` invoked from a subdirectory
+   is expected to fail today, matching the precondition this criterion
+   describes.
+4. **`task ci` catches a real break.** Cannot be verified — the task does not
+   exist. What *was* verified: `act -W .github/workflows/main.yml -j ci` runs
+   the reusable `ci.yml` and its `backend-test` / `frontend-build` jobs
+   directly, so the underlying test/build steps are exercisable through
+   `act`, just not yet through one local `task` command.
+5. **`act` reports the job graph.** Verified, though against the tasks and
+   job names that actually exist rather than the ones originally planned:
+   `act -W .github/workflows/main.yml -l` was used to confirm `ci` →
+   `docker-publish` and `ci` → `bundle` run in parallel, both depending only
+   on `ci` rather than on each other — and `act -j ci` was run far enough to
+   confirm `needs:` ordering inside the reusable workflow is honored.
+6. **Secrets actually reach `act`.** Verified directly, and only after first
+   getting it wrong: a probe workflow showed `--env-file` leaves
+   `${{ secrets.X }}` empty in both a `docker/login-action` step and a plain
+   `run:` step, while `--secret-file` fills it in both. This was not one of
+   the criteria as originally written, but it was the actual blocker
+   encountered while trying to satisfy criterion 7.
 
 ## Open questions
 
-- **Docker-in-devcontainer under `act`.** `docker` works in the devcontainer,
-  but it is unverified whether `act` can bind-mount the workspace through it. If
-  not, the `docker-build` job cannot run under `act` at all — which is tolerable
-  under **D4**, but should be stated rather than discovered.
-- **Whether `AddGitTag.fsx` and `PublishGitHubRelease.fsx` ever existed.** Git
-  history shows the tasks being added but never the scripts. If they were
-  written and lost, recovering them may be cheaper than rewriting.
-- **Whether `docker:build` belongs in a `Taskfile.Docker.yml` or in the root
-  `Taskfile.yml`.** One task does not obviously justify a file; a Docker Hub
-  publish feature would.
+- **Docker-in-devcontainer under `act` — answered.** It works. `act -j ci`
+  and `act -j docker-publish` (under `main.yml`) were both run directly in
+  this devcontainer and reached real `docker build` / `docker push` steps
+  against Docker Hub, including a login failure that was traced all the way
+  to an incorrect credential rather than to any Docker-in-Docker limitation.
+- **Whether `AddGitTag.fsx` and `PublishGitHubRelease.fsx` ever existed —
+  still open.** Nothing in this round of work bears on it either way.
+- **Whether `docker:build` belongs in a `Taskfile.Docker.yml` or the root
+  `Taskfile.yml` — answered, provisionally.** It landed in
+  `Taskfile.Docker.yml`, as three tasks rather than one, once the Docker Hub
+  publish feature actually existed to justify the file. The single-task name
+  from **Scope** and criterion 5 was not the one that got built; whether to
+  rename `docker:build:app` to match, or to update this document instead,
+  is unresolved.

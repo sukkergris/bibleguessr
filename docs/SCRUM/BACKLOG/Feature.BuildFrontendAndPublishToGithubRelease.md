@@ -4,8 +4,11 @@ Produce a versioned, self-contained tarball of the production frontend build and
 attach it to a GitHub release, so a deployment can be installed by downloading
 one file instead of building from source.
 
-The work is driven from `Taskfile.Release.yml`, whose four tasks are currently
-placeholders (`TODO`). This feature fills them in.
+The work is driven from `Taskfile.Release.yml`. Two of the tasks this feature
+originally scoped (`release:add-git-tag`, `release:publish-to-github-release`)
+were superseded during implementation by a simpler mechanism — see
+**Decisions**, D5 below — so `Taskfile.Release.yml` now holds two tasks, not
+four.
 
 ## Motivation
 
@@ -34,8 +37,9 @@ repository unreachable:
 task: No Taskfile found at "/xyz/Taksfile.Relsease.yml"
 ```
 
-This has been corrected. `task --list-all` now succeeds and lists all four
-release tasks alongside the existing frontend, dotnet, and certs tasks.
+This has been corrected. `task --list-all` now succeeds and lists the release
+tasks alongside the existing frontend, dotnet, and certs tasks — two tasks
+today (`frontend`, `bundle`), not the four originally planned; see D5.
 
 ### The frontend version is ambiguous
 
@@ -75,14 +79,15 @@ hand-maintained copy.
 This was chosen over keeping both in sync by hand because it removes the cause
 rather than guarding the symptom: once the tag is generated, `0.8.3` vs `0.7.2`
 cannot happen again. There is one place to edit, and everything downstream
-derives from it:
+derives from it. This was the plan as originally written; D5 records how the
+last of the three arrows below actually ended up wired:
 
 ```
 frontend/package.json  "version": "0.8.3"    <- the only place edited by hand
         |
         +-- vite build -> index.html meta tag -> Nerd tab shows 0.8.3
-        +-- release:bundle -> bibleguessr-frontend-0.8.3.tar.gz
-        +-- release:add-git-tag -> frontend-v0.8.3
+        +-- release:bundle -> bibleguessr-frontend-0.8.3.zip
+        +-- a manually pushed git tag -> frontend-v0.8.3 (see D5)
 ```
 
 The backend keeps its own version in `backend/Api/Program.fs` and is unaffected.
@@ -127,128 +132,199 @@ No generated deployment README: the documentation in `docs/web` covers how to
 serve the bundle, and a second copy inside the tarball would be one more thing
 to keep in sync.
 
+### D5 — Tagging and publishing moved into the release workflow, not `.fsx` scripts
+
+The original plan was two more `.fsx` scripts, `AddGitTag.fsx` and
+`PublishGitHubRelease.fsx`, each backing its own Task command. Neither was
+written. Instead, `.github/workflows/main.yml`'s `bundle` job creates the
+draft release inline, with a plain `gh release create "${{ github.ref_name }}"
+artifacts/*.zip --draft` step gated on `startsWith(github.ref,
+'refs/tags/')`. Tagging itself is not a Task command at all — a release is
+started by pushing a `frontend-v<version>` tag by hand, which is what
+triggers the workflow.
+
+This was not a deliberate simplification decided up front; it is what
+actually got built, and it is documented here so the acceptance criteria
+below describe the real mechanism instead of the abandoned one. It means
+none of D3's requirements (draft creation, idempotent retry, clear failure
+when unauthenticated) currently have a local, Task-driven equivalent — they
+only exist inside the GitHub Actions run. See **What remains**.
+
 ## Scope
 
 In scope:
 
 - Building the production frontend bundle.
-- Packaging it as a `.tar.gz` tarball with a checksum.
+- Packaging it as an archive, with a checksum.
 - Tagging the release commit in git.
-- Uploading the tarball and checksum as GitHub release assets.
+- Uploading the archive and checksum as GitHub release assets.
 
 Out of scope:
 
 - The backend. It is published to Docker Hub, covered by
   `Feature.BuildBackendAndPublishToDockerhub.md`.
-- Automated CI. The repository has no `.github/workflows/`, and this feature
-  does not add one; the tasks are run locally. Moving them into CI later should
-  require no change to the tasks themselves.
 - Any Bible translation data. See the licensing rules in `CLAUDE.md` — the
-  tarball contains build output only.
+  archive contains build output only.
+
+Superseded, not out of scope: the plan to keep CI out of this repository and
+run every task by hand. `.github/workflows/main.yml` and `.github/workflows/ci.yml`
+now exist and drive this exact release chain — see
+`Feature.CI-CD-construction.md`. `main.yml`'s `bundle` job calls
+`task release:bundle` rather than reimplementing the build, so the `task
+release:*` commands remain the one description of how the frontend build is
+produced and verified; only tagging and publishing moved out of Task and into
+the workflow directly (D5, above).
 
 ## Acceptance criteria
 
 ### 1. `task` works again — done
 
 - [x] `Taskfile.yml` includes `./Taskfile.Release.yml`, spelled correctly.
-- [x] `task --list-all` succeeds and lists the four release tasks.
+- [x] `task --list-all` succeeds and lists the release tasks — `frontend` and
+      `bundle` today, not the four originally planned; see D5.
 
-### 2. A single authoritative frontend version (D1)
+### 2. A single authoritative frontend version (D1) — done
 
-- [ ] Vite injects `frontend/package.json`'s version into the
+- [x] Vite injects `frontend/package.json`'s version into the
       `<meta name="application-version">` tag at build time, via
       `transformIndexHtml` in `vite.config.ts`.
-- [ ] The version is no longer hand-written in `frontend/index.html`; the
-      current literal `0.7.2` is replaced by the injected value.
-- [ ] The Nerd tab shows the injected version in both `vite dev` and a
-      production build. `nerd-panel.ts:86` reads the meta tag and needs no
-      change, but must keep working in both modes.
-- [ ] A unit test asserts the served meta tag matches `package.json`. Without
-      it nothing stops the next silent drift — the current `0.8.3` vs `0.7.2`
-      gap exists precisely because no test covers this.
-- [ ] The release tag, the tarball filename, and the displayed version all
-      derive from `package.json`, so they cannot disagree.
+- [x] The version is no longer hand-written in `frontend/index.html`; it holds
+      only the placeholder `0.0.0`, which never survives a build.
+- [x] The Nerd tab shows the injected version in both `vite dev` and a
+      production build — the plugin runs `transformIndexHtml` for both.
+- [x] `frontend/src/app-version.test.ts` builds the frontend and asserts the
+      served meta tag matches `package.json`, specifically to catch the drift
+      this feature was written to fix.
+- [x] The release tag, the archive filename, and the displayed version all
+      derive from `package.json` (`packageVersion()` in `build/fsx/lib/Common.fsx`),
+      so they cannot disagree.
 
-### 3. `task release:build-frontend`
+### 3. `task release:frontend` (originally named `release:build-frontend`) — done
 
-- [ ] Runs the production build, reusing `frontend:build` rather than
-      duplicating the `npm run build` invocation. Note that script is
-      `tsc && vite build`, so a type error fails the release.
-- [ ] Fails loudly if the build fails; no stale `dist/` is ever packaged.
-- [ ] The build is verified before packaging: unit tests
-      (`task frontend:test`) must pass.
+- [x] Runs the production build via the existing `frontend:test` and
+      `frontend:build` tasks (`deps:` in `Taskfile.Release.yml`), rather than
+      duplicating either invocation.
+- [x] Fails loudly if the build fails — a fsi script exception is a non-zero
+      exit, and Task stops the chain.
+- [x] `build/fsx/VerifyFrontendArtifact.fsx` verifies the built artifact
+      before anything downstream trusts it, distinguishing four failure
+      modes: no `dist/index.html`, no meta tag, still the placeholder, and a
+      version mismatch against a stale `dist/`.
 
-### 4. `task release:bundle`
+The task ended up named `release:frontend`, not `release:build-frontend` as
+originally specified — a naming drift worth knowing about, not a missing
+feature.
 
-- [ ] Produces `bibleguessr-frontend-<version>.tar.gz` from `frontend/dist/`.
-- [ ] The archive unpacks into a **single top-level directory**, not loose
-      files in the current directory. This is deliberate: the Task tarball
-      consumed by `scripts/programs/task.arm.installer.sh` unpacks loose, which
-      is why that script has to `rm -rf ... README.md LICENSE` afterwards to
-      clean up. Extracting our own asset must never be able to overwrite a
-      file in the directory it is unpacked into.
-- [ ] Emits a `sha256` checksum file alongside the tarball, so a consumer can
-      verify the download the way `task_checksums.txt` allows.
-- [ ] The tarball contains no source, no `node_modules`, no `.env`, and no
-      Bible text beyond what the production build legitimately bundles.
-- [ ] Build artifacts are written somewhere gitignored and are never committed.
+### 4. `task release:bundle` — partially done
 
-### 5. `task release:add-git-tag`
+- [x] Produces `bibleguessr-frontend-<version>` from `frontend/dist/`, plus
+      `LICENSE` and `NOTICE.md` from the repo root (D4).
+- [x] Contains no source, no `node_modules`, no `.env` — only the production
+      build output and the two license files.
+- [x] Written to `artifacts/`, which is gitignored; a bundle never reaches a
+      commit.
+- [ ] **Format is `.zip`, not `.tar.gz`.** `build/fsx/BundleFrontend.fsx` uses
+      `ZipFile.CreateFromDirectory`. Not necessarily wrong, but a deviation
+      from what this criterion and the Scope section above specify, and
+      nothing has revisited that choice explicitly.
+- [ ] **No top-level directory.** The archive's entries sit at its root — the
+      opposite of what this criterion requires. `docs/web/frontend-release/index.html`
+      documents this as a known, deliberate trade (a predictable path for the
+      image build) and requires `unzip -d <dest>` as the mitigation, but the
+      "never able to overwrite a file in the directory it is unpacked into"
+      guarantee this criterion asks for does not hold as shipped.
+- [ ] **No checksum file.** Nothing in `build/fsx/` or `scripts/` computes or
+      emits one; a consumer has no way to verify a download.
 
-- [ ] Reads the version from `frontend/package.json` (**D1**) and creates the
-      tag `frontend-v<version>` (**D2**).
-- [ ] The task's `desc` is corrected: it currently reads "Add tag to git from
-      .env", which is wrong on two counts — `.env` is gitignored
-      (`.gitignore:288`) and no root `.env` exists, and `build/.env` holds
-      `IMAGE_TAG`, the _backend_ image tag. A gitignored, backend-scoped file
-      must not be the source of a frontend release tag.
-- [ ] Refuses to tag if the working tree is dirty.
-- [ ] Refuses to overwrite an existing tag; re-running is either a safe no-op
-      or a clear failure, never a silent force-push.
+### 5. Tagging a release — done, by a different mechanism than originally specified (D5)
 
-### 6. `task release:publish-to-github-release`
+- [x] A tag matching `frontend-v<version>` (D2) triggers the release, per
+      `.github/workflows/main.yml`'s `on: push: tags:`.
+- [ ] ~~`task release:add-git-tag`~~ — does not exist; superseded by pushing
+      the tag directly. See D5.
+- [ ] Nothing refuses a dirty working tree or an existing tag before the
+      workflow runs — the guard this criterion originally asked for has no
+      equivalent today. A tag push that turns out to be wrong is fixed by
+      deleting the tag and the draft release, not by a refusal up front.
 
-- [ ] Creates the GitHub release **as a draft** (**D3**) for the
-      `frontend-v<version>` tag, and uploads both the tarball and the checksum
-      file as assets. Publishing the draft stays a manual step.
-- [ ] Uses the `gh` CLI (already available in this environment).
-- [ ] Fails clearly when not authenticated, rather than appearing to succeed.
-- [ ] Is idempotent enough to be safe to retry after a partial upload.
+### 6. Publishing to GitHub — done, by a different mechanism than originally specified (D5)
 
-### 7. Documentation
+- [x] The release is created as a draft (D3) — `gh release create ... --draft`
+      in `main.yml`'s `bundle` job.
+- [x] Uses the `gh` CLI, as specified.
+- [ ] ~~`task release:publish-to-github-release`~~ — does not exist;
+      superseded by the inline workflow step. See D5.
+- [ ] No local, Task-driven equivalent exists — publishing only happens
+      inside a GitHub Actions run, not from a developer's own `gh auth`.
+- [ ] Failure-when-unauthenticated and safe-retry-after-partial-upload are
+      untested; they depend on `gh`'s own behavior inside the workflow step,
+      which nothing here has exercised deliberately.
 
-- [ ] The release procedure is documented per the rules in `CLAUDE.md`:
-      feature documentation goes in `docs/web` (HTML/JS/CSS, own folder,
-      own file), with `README.md` kept minimal and developer-facing.
-- [ ] The documentation states how to verify a downloaded asset's checksum
-      and how to extract it safely.
+### 7. Documentation — mostly done
 
-### 8. Versioning
+- [x] `docs/web/frontend-release/index.html` exists, in `docs/web`, as its
+      own file, following `CLAUDE.md`'s placement rules.
+- [ ] Cannot state how to verify a checksum, because none is produced (see
+      criterion 4). Extraction safety is documented (the `-d` requirement),
+      but only as a workaround for the missing top-level directory, not as
+      the guarantee this criterion originally asked for.
 
-- [ ] Per `CLAUDE.md`, the frontend version is incremented for this feature.
-      The backend is untouched, so its version stays at `0.5.3`.
+### 8. Versioning — done
+
+- [x] Per `CLAUDE.md`, the frontend version was incremented across this
+      feature's work; `frontend/package.json` now reads `0.8.3`. The backend
+      is untouched.
+
+## What remains
+
+- **No checksum.** `task release:bundle` produces an archive with nothing to
+  verify it against. This is the one gap that blocks criterion 4 outright,
+  independent of the `.zip` vs `.tar.gz` question.
+- **No safe top-level directory.** The archive unpacks loose at its root.
+  Living with this (via a documented, mandatory `unzip -d`) was an accepted
+  trade, not a fix — the guarantee criterion 4 originally asked for still
+  does not hold.
+- **No dirty-tree or existing-tag guard before a release tag is pushed.**
+  Criterion 5's safety checks have no equivalent in the mechanism that
+  replaced `release:add-git-tag` (D5). A bad release today is corrected after
+  the fact — delete the tag, delete the draft — not prevented before it.
+- **No local publish path.** Criterion 6's `gh`-based publishing only runs
+  inside the GitHub Actions workflow. A developer cannot reproduce or retry a
+  publish from their own machine the way they can reproduce a build.
+- **`.zip` vs `.tar.gz` was never revisited as a decision.** It is simply
+  what got implemented. Worth a deliberate D6 one way or the other, since the
+  Scope section and criterion 4 still specify the other format.
 
 ## Verification
 
 Per the testing rules in `CLAUDE.md`, a test covering a fix must be proven to
 catch the bug — break the fix, confirm the test fails, restore it, confirm it
-passes. Applied here:
+passes. This is what was actually verified, and what still cannot be until
+**What remains** is addressed:
 
-1. **Round-trip the artifact.** Unpack the produced tarball into a directory
-   that already contains a file named like one in the archive, and confirm
-   nothing outside the archive's own top-level directory is touched.
-2. **Verify the checksum.** Confirm the emitted checksum matches the tarball,
-   and confirm that altering a single byte makes verification fail.
-3. **Serve the unpacked build.** The extracted bundle must load and run, not
-   merely exist.
-4. **Prove the guards fire.** Confirm `add-git-tag` actually refuses a dirty
-   tree and an existing tag, rather than assuming the checks work.
+1. **Version injection is proven, not assumed.** `app-version.test.ts` builds
+   the frontend and checks the served meta tag against `package.json`; the
+   comment in that file records that this exists because the two once
+   disagreed silently. `VerifyFrontendArtifact.fsx` distinguishes four
+   distinct failure modes rather than a single pass/fail.
+2. **Round-trip the artifact.** Not yet done as a repeatable check. Manually
+   confirmed the archive extracts loose at its root, which is why the
+   deployment docs require `unzip -d <dest>` — but nothing automated proves
+   an extraction into a populated directory stays safe.
+3. **Verify the checksum.** Cannot be verified; none is produced. Blocked on
+   criterion 4.
+4. **Serve the unpacked build.** Not yet exercised as part of this feature's
+   own verification.
+5. **Prove the tagging/publishing guards fire.** Cannot be verified as
+   originally scoped — the dirty-tree and existing-tag refusals this
+   criterion asked for were never built (see D5, criterion 5).
 
 ## Refinement notes
 
 The four questions this document originally left open are resolved in
-**Decisions** above (D1–D4). No blocking unknowns remain; the criteria can be
-worked through in order.
+**Decisions** above (D1–D4). A fifth decision, D5, was added after the fact
+to record where implementation diverged from the plan — not a question that
+was open, but one that turned out to have been silently re-answered.
 
 One consequence worth stating plainly: **D1 changes user-visible behaviour
 before any release exists.** Injecting the version moves the Nerd tab from
