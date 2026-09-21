@@ -41,4 +41,8 @@ jobs:
       COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose -f build/docker-compose.build.yml build
+      - uses: arduino/setup-task@v2
+        with:
+          version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task docker:build:app

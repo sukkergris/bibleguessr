@@ -1,5 +1,7 @@
 version: "3"
 
+dotenv: ['.env']
+
 env:
   IMAGE_TAG:
     sh: ./scripts/ci/load-image-version.sh

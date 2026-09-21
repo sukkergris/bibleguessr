@@ -5,18 +5,9 @@ env:
     sh: ./scripts/ci/load-image-version.sh
 
 tasks:
-  load:env:
-    silent: true
-    cmds:
-      - |
-        set -a
-        source .env
-        set +a
 
   build:api:
     desc: Build the api only
-    deps:
-      - load:env
     dir: .
     env:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
@@ -26,8 +17,6 @@ tasks:
 
   build:nginx:
     desc: Build nginx only
-    deps:
-      - task: load:versiony
     dir: .
     env:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
@@ -37,11 +26,18 @@ tasks:
 
   build:app:
     desc: Build the entiry
-    deps:
-      - task: load:versione app
     dir: .
     env:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
       DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build
+
+  publish:app:
+    desc: Build the entiry
+    dir: .
+    env:
+      IMAGE_TAG: '{{.IMAGE_TAG}}'
+      DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+    cmds:
+      - docker compose -f build/docker-compose.build.yml push
