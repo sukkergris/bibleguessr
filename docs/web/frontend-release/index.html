@@ -247,21 +247,31 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
       <h2>Cutting a release</h2>
       <p>
         First update the frontend version when the frontend changed, and update
-        the backend version when the backend changed. Commit and push those
-        version changes before creating a tag whose version matches
+        the backend version when the backend changed. Then update
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        's returned value — unlike the two application versions, this one is
+        not conditional: both Docker images are rebuilt and republished on
+        every tag push, so it needs a new value every release regardless of
+        what changed. See
+        <a href="../versioning/index.html#bumping">Versioning</a>
+        for the full reasoning. Commit and push all changed version files
+        before creating a tag whose version matches
         <code>frontend/package.json</code>:
       </p>
       <pre><code>task release:bundle
-git add frontend/package.json backend/Api/Program.fs
+git add frontend/package.json backend/Api/Program.fs scripts/ci/load-image-version.sh
 git commit -m "release: frontend v0.8.3"
 git push origin main
 git tag frontend-v0.8.3
 git push origin frontend-v0.8.3
 gh run watch</code></pre>
       <p>
-        Omit unchanged version files from the commit. The tag is the release
-        trigger, so it must point at the already-pushed commit that is intended
-        to ship. When the run finishes, the draft appears under
+        Omit the two application-version files from the commit if their
+        application didn't change —
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        stays in either way. The tag is the release trigger, so it must point
+        at the already-pushed commit that is intended to ship. When the run
+        finishes, the draft appears under
         <strong>Releases</strong>
         with the zip attached.
       </p>

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cutting a release — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Procedure</span>
+      <h1>Cutting a release</h1>
+      <p class="subtitle">
+        The checklist for shipping a release: which of three version values
+        to edit, in what order, and the one edit that's easy to forget
+        because it doesn't follow the same rule as the other two.
+      </p>
+
+      <div class="callout">
+        <span class="callout-title">Scope</span>
+        <p>
+          This is the practical checklist — what to touch and in what order.
+          <a href="../versioning/index.html">Versioning</a>
+          explains why the three values are independent and never meant to
+          match each other, and
+          <a href="../frontend-release/index.html">Application release</a>
+          covers what the release workflow itself does once the tag lands.
+          Read this one first if you just want to ship.
+        </p>
+      </div>
+
+      <h2>Three values, one release</h2>
+      <p>
+        A release touches up to three separately-edited values, and only one
+        of them is required every time:
+      </p>
+      <ul>
+        <li>
+          <strong><code>frontend/package.json</code>'s <code>version</code></strong>
+          — edit only if the frontend changed.
+        </li>
+        <li>
+          <strong>
+            <code>BackendVersion</code>
+            in
+            <span class="file-ref">backend/Api/Program.fs</span>
+          </strong>
+          — edit only if the backend changed.
+        </li>
+        <li>
+          <strong>
+            the returned value in
+            <span class="file-ref">scripts/ci/load-image-version.sh</span>
+          </strong>
+          — edit <em>every</em> release, whether or not either application
+          changed.
+        </li>
+      </ul>
+      <div class="callout limitation">
+        <span class="callout-title">The third one isn't optional</span>
+        <p>
+          Both Docker images are rebuilt and republished on every tag push,
+          regardless of what triggered the release. Skipping the
+          <code>load-image-version.sh</code>
+          edit doesn't skip the publish — it just means the new images
+          silently overwrite whatever tag the script last returned, instead
+          of publishing under their own. This is the mistake this checklist
+          exists to prevent.
+        </p>
+      </div>
+
+      <h2>The checklist</h2>
+      <ol class="flow">
+        <li>
+          Test the change thoroughly first. Nothing below should happen
+          before you're confident the commit you're about to tag is the one
+          you want to ship.
+        </li>
+        <li>
+          If the frontend changed, bump
+          <code>version</code>
+          in
+          <span class="file-ref">frontend/package.json</span>
+          .
+        </li>
+        <li>
+          If the backend changed, bump
+          <code>BackendVersion</code>
+          in
+          <span class="file-ref">backend/Api/Program.fs</span>
+          .
+        </li>
+        <li>
+          Every time, regardless of the two steps above: edit the returned
+          value in
+          <span class="file-ref">scripts/ci/load-image-version.sh</span>
+          to something new, following the project's
+          <code>n.n.n</code>
+          form (e.g.
+          <code>1.1.0</code>
+          ).
+        </li>
+        <li>
+          Commit and push whichever of the three files you actually changed
+          — the two application-version files are omitted if their
+          application didn't change, but
+          <span class="file-ref">scripts/ci/load-image-version.sh</span>
+          is always in the commit.
+        </li>
+        <li>
+          Tag the pushed commit
+          <code>frontend-v&lt;version&gt;</code>
+          , matching
+          <span class="file-ref">frontend/package.json</span>
+          , and push the tag. The tag is the release trigger — see
+          <a href="../frontend-release/index.html">Application release</a>
+          for what runs afterward and how to watch it.
+        </li>
+      </ol>
+
+      <h2>Why the third value works differently</h2>
+      <p>
+        <code>frontend/package.json</code>
+        's version and
+        <code>BackendVersion</code>
+        are each their application's own semantic version — they change when
+        that application's behavior changes, and nothing else. The value
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        returns is a different kind of thing: a deployment coordinate for
+        the pair of Docker images built from this commit, not either
+        application's version. It doesn't need to match either bump above,
+        or follow any particular scheme beyond being new — but it does need
+        to actually be new, every time, because both images publish under it
+        unconditionally.
+      </p>
+      <p>
+        See
+        <a href="../versioning/index.html#bumping">Versioning: Bumping a version</a>
+        for the full reasoning behind keeping the three values independent.
+      </p>
+
+      <h2>A worked example</h2>
+      <pre><code>task release:bundle
+git add frontend/package.json backend/Api/Program.fs scripts/ci/load-image-version.sh
+git commit -m "release: frontend v0.8.3"
+git push origin main
+git tag frontend-v0.8.3
+git push origin frontend-v0.8.3
+gh run watch</code></pre>
+      <p>
+        Omit the two application-version files from
+        <code>git add</code>
+        if their application didn't change this time —
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        stays in either way. This is the same example used in
+        <a href="../frontend-release/index.html">Application release</a>
+        ; it's repeated here so the checklist above and the actual commands
+        sit next to each other.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/package.json</span>
+        ,
+        <span class="file-ref">backend/Api/Program.fs</span>
+        and
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        are the three files this checklist edits.
+        <span class="file-ref">.github/workflows/main.yml</span>
+        is what a pushed
+        <code>frontend-v*</code>
+        tag triggers —
+        <a href="../frontend-release/index.html">Application release</a>
+        covers that workflow in full.
+      </p>
+    </main>
+  </body>
+</html>

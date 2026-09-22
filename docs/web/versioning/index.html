@@ -157,16 +157,25 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
       </p>
       <pre><code>echo '0.0.1'</code></pre>
       <p>
-        The script currently returns one fixed value, regardless of the source
-        commit or either application version.
+        Its output is the whole mechanism: a hand-edited literal, the same way
+        <code>frontend/package.json</code>
+        's
+        <code>version</code>
+        field is. Nothing derives it from a commit or either application
+        version, and nothing is meant to — it is a third, independent value,
+        edited as its own step in a release.
       </p>
       <div class="callout limitation">
-        <span class="callout-title">Image tags are not release identifiers</span>
+        <span class="callout-title">The tag is only as reliable as the edit</span>
         <p>
-          Every publish overwrites the <code>0.0.1</code> tag. Do not use it to
-          pin a deployment or infer which application version it contains. A
-          future image-versioning change must give this script a meaningful,
-          immutable source.
+          Nothing enforces that
+          <code>load-image-version.sh</code>
+          is bumped before a tag is pushed — it is a manual step, same as the
+          two application versions. Forgetting it means the new images
+          silently overwrite whatever the script last returned, rather than
+          publishing under their own tag. See
+          <a href="#bumping">Bumping a version</a>
+          for the full checklist a release goes through.
         </p>
       </div>
 
@@ -217,9 +226,11 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
 
       <h3>On a real GitHub runner</h3>
       <p>
-        Both GitHub Actions workflows run the same tag script through Task, so
-        they publish the same fixed <code>0.0.1</code> image tag. No separate
-        <code>IMAGE_TAG</code> workflow variable is necessary.
+        Both GitHub Actions workflows run the same script through Task, so
+        they publish under whatever value it currently returns — the same one
+        a local build would produce from the same checkout. No separate
+        <code>IMAGE_TAG</code> workflow variable is necessary; the script is
+        the single source, checked in like any other file.
       </p>
 
       <h2>Running the image build locally</h2>
@@ -258,7 +269,7 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         </p>
       </div>
 
-      <h2>Bumping a version</h2>
+      <h2 id="bumping">Bumping a version</h2>
       <ul>
         <li>
           <strong>Frontend changed</strong>
@@ -280,11 +291,22 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
           <strong>Both changed</strong>
           — edit both, independently. They are not meant to match.
         </li>
+        <li>
+          <strong>Every release, regardless of what changed</strong>
+          — edit the returned value in
+          <span class="file-ref">scripts/ci/load-image-version.sh</span>
+          . Both Docker images are rebuilt and republished on every tag push,
+          so this is not conditional on the frontend or backend bump above —
+          skipping it means the new images overwrite whatever tag the script
+          last returned instead of publishing under their own.
+        </li>
       </ul>
       <p>
-        Neither bump affects the image tag today, since
-        <code>load-image-version.sh</code>
-        ignores both.
+        <code>IMAGE_TAG</code>
+        is independent of the other two on purpose — it is a deployment
+        coordinate for the image pair, not either application's version. Its
+        value does not need to match either bump above, or follow any
+        particular scheme beyond being new.
       </p>
 
       <h2>Implementation</h2>
