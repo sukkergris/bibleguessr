@@ -18,6 +18,8 @@ log::debug "Running in debug mode"
 
 PROJECT_ROOT="$(util::find_project_root)"
 export PROJECT_ROOT
+ROOT_DIR="${PROJECT_ROOT}"
+export ROOT_DIR
 # Standard paths
 export LIB_DIR="${PROJECT_ROOT}/lib-bash"
 export SCRIPTS_DIR="${PROJECT_ROOT}/scripts"

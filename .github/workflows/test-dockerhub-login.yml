@@ -7,6 +7,16 @@ jobs:
   dockerhub-login:
     runs-on: ubuntu-24.04
     steps:
+      - name: Debug Docker Hub inputs
+        run: |
+          echo "GITHUB_SHA=${GITHUB_SHA:-<unset>}"
+          echo "BUILD_CONTEXT=${BUILD_CONTEXT:-<unset>}"
+          echo "DOCKER_USERNAME=${DOCKER_USERNAME:-<unset>}"
+        env:
+          DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+          DOCKERHUB_ACCESSTOKEN_RW: ${{ secrets.DOCKERHUB_ACCESSTOKEN_RW }}
+          BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
+
       - uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKER_USERNAME }}

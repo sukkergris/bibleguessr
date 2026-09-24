@@ -10,8 +10,10 @@ tasks:
     desc: Build the api only
     dir: .
     env:
-      IMAGE_TAG: '{{.IMAGE_TAG}}'
-      DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+      IMAGE_TAG: '{{ .IMAGE_TAG }}'
+      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
+      BUILD_SHA: '{{ .BUILD_SHA }}'
+      BUILD_CONTEXT: '{{ .BUILD_CONTEXT }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build api
 
@@ -19,8 +21,10 @@ tasks:
     desc: Build nginx only
     dir: .
     env:
-      IMAGE_TAG: '{{.IMAGE_TAG}}'
-      DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+      IMAGE_TAG: '{{ .IMAGE_TAG }}'
+      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
+      BUILD_SHA: '{{ .BUILD_SHA }}'
+      BUILD_CONTEXT: '{{ .BUILD_CONTEXT }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build nginx
 
@@ -28,8 +32,10 @@ tasks:
     desc: Build the entiry
     dir: .
     env:
-      IMAGE_TAG: '{{.IMAGE_TAG}}'
-      DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+      IMAGE_TAG: '{{ .IMAGE_TAG }}'
+      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
+      BUILD_SHA: '{{.BUILD_SHA}}'
+      BUILD_CONTEXT: '{{ .BUILD_CONTEXT }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build
 
@@ -37,7 +43,7 @@ tasks:
     desc: Build the entiry
     dir: .
     env:
-      IMAGE_TAG: '{{.IMAGE_TAG}}'
-      DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+      IMAGE_TAG: '{{ .IMAGE_TAG }}'
+      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml push

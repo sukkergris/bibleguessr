@@ -1,5 +1,14 @@
 version: '3'
 
+env:
+  IMAGE_TAG:
+    sh: ./scripts/ci/load-image-version.sh
+
+vars:
+  github_workflows: .github/workflows
+  github_vars_file: '{{.github_workflows}}/.vars'
+  github_secrets_file: '{{.github_workflows}}/.secrets'
+
 tasks:
   lint:
     desc: Lint the GitHub Actions workflow files
@@ -9,7 +18,7 @@ tasks:
   act:
     desc: Run the CI workflow locally in containers
     cmds:
-      - ./scripts/ci/run-ci-workflow.sh {{.CLI_ARGS}}
+      - ./scripts/ci/run-workflow.sh {{.CLI_ARGS}}
 
   act-ci:
     desc: Run only build of images
@@ -17,7 +26,7 @@ tasks:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
     cmds:
       - 'echo "IMAGE_TAG: ${IMAGE_TAG}"'
-      - ./scripts/ci/run-ci-workflow.sh --env-file .env --env IMAGE_TAG="${IMAGE_TAG}"
+      - ./scripts/ci/run-workflow.sh ci --var-file "{{.github_vars_file}}" --secret-file "{{.github_secrets_file}}" --env IMAGE_TAG="${IMAGE_TAG}"
 
   act-main:
     desc: Run only build of images
@@ -25,5 +34,5 @@ tasks:
       IMAGE_TAG: '{{.IMAGE_TAG}}'
     cmds:
       - 'echo "IMAGE_TAG: ${IMAGE_TAG}"'
-      - ./scripts/ci/run-main-workflow.sh --env-file .env --secret-file .secrets --env IMAGE_TAG="${IMAGE_TAG}"
+      - ./scripts/ci/run-workflow.sh main --var-file "{{.github_vars_file}}" --secret-file "{{.github_secrets_file}}" --env IMAGE_TAG="${IMAGE_TAG}"
 

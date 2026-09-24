@@ -5,10 +5,16 @@ services:
     build:
       context: ..
       dockerfile: build/Dockerfile.api
+      args:
+        BUILD_SHA: ${BUILD_SHA:?BUILD_SHA must be set}
+        BUILD_CONTEXT: ${BUILD_CONTEXT:?BUILD_CONTEXT must be set}
     image: ${DOCKER_USERNAME:?}/bibleguessr-api:${IMAGE_TAG:?}
 
   nginx:
     build:
       context: ..
       dockerfile: build/Dockerfile.nginx
+      args:
+        BUILD_SHA: ${BUILD_SHA:?BUILD_SHA must be set}
+        BUILD_CONTEXT: ${BUILD_CONTEXT:?BUILD_CONTEXT must be set}
     image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}

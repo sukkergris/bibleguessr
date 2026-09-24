@@ -19,6 +19,8 @@ RUN dotnet publish backend/Api/BibleGuessr.Api.fsproj \
     --configuration Release \
     --output /app/publish
 
+
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
@@ -29,7 +31,13 @@ USER apiuser
 
 COPY --from=build --chown=apiuser /app/publish .
 
-ENV ASPNETCORE_URLS=http://+:8080
+ARG BUILD_SHA
+ARG BUILD_CONTEXT
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    BUILD_SHA="${BUILD_SHA}" \
+    BUILD_CONTEXT="${BUILD_CONTEXT}"
+
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "BibleGuessr.Api.dll"]

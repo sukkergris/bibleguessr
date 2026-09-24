@@ -1,6 +1,6 @@
 version: "3"
 
-dotenv: ['.env']
+dotenv: ['.github/workflows/.vars']
 
 env:
   IMAGE_TAG:
@@ -25,7 +25,9 @@ includes:
   docker:
     taskfile: ./Taskfile.Docker.yml
     dir: .
-
+  test:
+    taskfile: ./Taskfile.Test.yml
+    dir: .
 tasks:
   default:
     desc: List all available tasks

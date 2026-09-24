@@ -21,6 +21,11 @@ COPY ["frontend/", "."]
 
 RUN npm run build
 
+ARG BUILD_SHA
+RUN echo "$BUILD_SHA" > dist/build-sha.txt
+ARG BUILD_CONTEXT
+RUN echo "${BUILD_CONTEXT}" > dist/build-context.txt
+
 # Pin to a specific nginx release on Alpine instead of the moving `alpine`
 # tag, so the base image only changes when we bump it here. The njs module
 # ships with this image as a dynamic module; nginx.conf loads it.

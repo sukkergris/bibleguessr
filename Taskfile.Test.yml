@@ -1,0 +1,18 @@
+version: '3'
+
+env:
+  IMAGE_TAG:
+    sh: ./scripts/ci/load-image-version.sh
+
+vars:
+  LOCAL_VALUE: "I'm a local value"
+
+tasks:
+  echo:
+    desc: Echo.. echo..
+    env:
+      IMAGE_TAG: '{{.IMAGE_TAG}}'
+    cmds:
+      - 'echo "Task: IMAGE_TAG: ${IMAGE_TAG}"'
+      - 'echo "Task: LOCAL_VALUE: {{ .LOCAL_VALUE }}"'
+      - ./scripts-test/test.sh

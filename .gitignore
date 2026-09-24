@@ -333,3 +333,4 @@ test-results/
 
 .env
 .secrets
+.github/workflows/.vars

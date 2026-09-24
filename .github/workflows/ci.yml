@@ -22,6 +22,9 @@ jobs:
 
   frontend-build:
     runs-on: ubuntu-24.04
+    env:
+      BUILD_SHA: ${{ github.sha }}
+      BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
