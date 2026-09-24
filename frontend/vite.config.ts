@@ -28,6 +28,25 @@ export default defineConfig({
         );
       },
     },
+    {
+      name: 'generate-xyz-file',
+      apply: 'build',
+
+      generateBundle() {
+        const buildSha = process.env.BUILD_SHA?.trim() || '<unset>';
+        const build_context = process.env.BUILD_CONTEXT?.trim() || 'missing';
+        this.emitFile({
+          type: 'asset',
+          fileName: 'build-sha.txt',
+          source: buildSha,
+        });
+        this.emitFile({
+          type: 'asset',
+          fileName: 'build-context.txt',
+          source: build_context,
+        });
+      },
+    },
   ],
   server: {
     // Bind to all interfaces so the dev server is reachable from outside

@@ -2,6 +2,8 @@ name: bibleguessr-development
 
 services:
   dev:
+    env_file:
+      - .env
     # Instructions on how to build the image for this service
     build:
       # Use the current directory (.devcontainer) as the build context
