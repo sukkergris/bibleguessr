@@ -3,47 +3,32 @@ version: '3'
 env:
   IMAGE_TAG:
     sh: ./scripts/ci/load-image-version.sh
+  DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+  BUILD_SHA: '{{.BUILD_SHA}}'
+  BUILD_CONTEXT: '{{.BUILD_CONTEXT}}'
 
 tasks:
 
   build:api:
     desc: Build the api only
     dir: .
-    env:
-      IMAGE_TAG: '{{ .IMAGE_TAG }}'
-      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
-      BUILD_SHA: '{{ .BUILD_SHA }}'
-      BUILD_CONTEXT: '{{ .BUILD_CONTEXT }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build api
 
   build:nginx:
     desc: Build nginx only
     dir: .
-    env:
-      IMAGE_TAG: '{{ .IMAGE_TAG }}'
-      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
-      BUILD_SHA: '{{ .BUILD_SHA }}'
-      BUILD_CONTEXT: '{{ .BUILD_CONTEXT }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build nginx
 
   build:app:
-    desc: Build the entiry
+    desc: Build the entire app
     dir: .
-    env:
-      IMAGE_TAG: '{{ .IMAGE_TAG }}'
-      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
-      BUILD_SHA: '{{.BUILD_SHA}}'
-      BUILD_CONTEXT: '{{ .BUILD_CONTEXT }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml build
 
   publish:app:
-    desc: Build the entiry
+    desc: Publish the entire app
     dir: .
-    env:
-      IMAGE_TAG: '{{ .IMAGE_TAG }}'
-      DOCKER_USERNAME: '{{ .DOCKER_USERNAME }}'
     cmds:
       - docker compose -f build/docker-compose.build.yml push
