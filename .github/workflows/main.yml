@@ -16,6 +16,10 @@ jobs:
   docker-publish:
     needs: [ci]
     runs-on: ubuntu-24.04
+    env:
+      DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
+      BUILD_SHA: ${{ github.sha }}
+      BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-task@v2
