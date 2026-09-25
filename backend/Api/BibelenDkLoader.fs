@@ -1,8 +1,9 @@
 /// Loads verse data from the bibelen-dk source: one HTML file per chapter,
 /// zipped into a single archive under `bibles/bibelen-dk/src/`. That
 /// translation is public domain, so its source files are tracked in git —
-/// only the unzipped working copy at `bibles/bibelen-dk/Bibelen Files/` is
-/// gitignored. This loader reads `src/` at startup if present.
+/// only unpacked copies are gitignored. At startup, BibleArchiveUnpacker
+/// unpacks the archive into a data folder, and `loadFromHtmlDirectory`
+/// reads it from there; `loadFromZip` reads the archive directly.
 ///
 /// File shape:
 ///   <h1>{BookName}[ {ChapterNumber}]</h1>
@@ -24,6 +25,10 @@ open System.IO
 open System.IO.Compression
 open System.Text.RegularExpressions
 open BibleGuessr.Domain
+
+/// The folder the archive is unpacked into under the data directory.
+[<Literal>]
+let TranslationFolder = "bibelen-dk"
 
 [<Literal>]
 let TranslationLabel = "bibelen-dk (1931/1907, offentligt tilgængelig)"
@@ -112,9 +117,19 @@ let normalizeBookNames (verses: Verse list) : Verse list =
 
     verses |> List.map (fun v -> { v with Book = normalize v.Book })
 
+/// Parses (file name, HTML) pairs into verses. Pages that don't parse as a
+/// chapter page (no <h1>/<pre>) are skipped.
+let private parseHtmlPages (pages: (string * string) seq) : Verse list =
+    pages
+    |> Seq.toList
+    |> List.collect (fun (name, html) ->
+        match parseChapterFile name html with
+        | Some verses -> verses
+        | None -> [])
+    |> normalizeBookNames
+
 /// Loads all verses from every `*.html` entry in the zip archive at
-/// `zipPath`. Entries that don't parse as a chapter page (no <h1>/<pre>)
-/// are skipped.
+/// `zipPath`.
 let loadFromZip (zipPath: string) : Verse list =
     if not (File.Exists zipPath) then
         []
@@ -123,22 +138,23 @@ let loadFromZip (zipPath: string) : Verse list =
 
         archive.Entries
         |> Seq.filter (fun entry -> entry.Name.EndsWith(".html"))
-        |> Seq.toList
-        |> List.collect (fun entry ->
+        |> Seq.map (fun entry ->
             use stream = entry.Open()
             use reader = new StreamReader(stream)
-            let html = reader.ReadToEnd()
+            entry.Name, reader.ReadToEnd())
+        |> Seq.toList
+        |> parseHtmlPages
 
-            match parseChapterFile entry.Name html with
-            | Some verses -> verses
-            | None -> [])
-        |> normalizeBookNames
-
-/// Loads all verses from the first `*.zip` file found under `directory`.
-let loadFromDirectory (directory: string) : Verse list =
+/// Loads all verses from every `*.html` file under `directory`, e.g. the
+/// folder BibleArchiveUnpacker unpacked the archive into. Files are read
+/// in ordinal path order, the same order as the archive's entries, so
+/// first-encounter book order (and so book numbers, see
+/// Verse.bookNumbers) matches reading the zip directly.
+let loadFromHtmlDirectory (directory: string) : Verse list =
     if not (Directory.Exists directory) then
         []
     else
-        Directory.GetFiles(directory, "*.zip")
-        |> Array.toList
-        |> List.collect loadFromZip
+        Directory.GetFiles(directory, "*.html", SearchOption.AllDirectories)
+        |> Array.sortWith (fun a b -> String.CompareOrdinal(a, b))
+        |> Seq.map (fun path -> Path.GetFileName path, File.ReadAllText path)
+        |> parseHtmlPages

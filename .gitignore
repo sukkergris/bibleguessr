@@ -317,6 +317,8 @@ env/*
 
 
 bibles/bibelen-dk/Bibelen Files/
+# Local data folder the API unpacks the bundled Bible archive into.
+bibles/.data/
 **/jw.org/*
 !**/jw.org/README.md
 !**/jw.org/.gitkeep

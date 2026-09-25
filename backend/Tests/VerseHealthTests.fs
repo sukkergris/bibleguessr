@@ -3,7 +3,7 @@ module BibleGuessr.Tests.VerseHealthTests
 // Covers VerseHealth.evaluate — the fix for a real bug: the published API
 // image shipped with no Bible data, logged "Verses loaded: 0", and its
 // health endpoint still answered "ok" while every game was unplayable.
-// See docs/SCRUM/BACKLOG/Feature.ShipBibleWithApiImage.md.
+// See docs/SCRUM/DONE/Feature.ShipBibleWithApiImage.md.
 
 open Xunit
 open BibleGuessr.Api.VerseHealth

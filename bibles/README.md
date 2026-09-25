@@ -56,10 +56,13 @@ Once you've confirmed a source is safe to bundle:
 
 1. Create `bibles/<translation-name>/src/` and drop in the original
    file(s) as downloaded (zip, txt, whatever the source provides).
-2. Write a loader (see `backend/Api/BibelenDkLoader.fs` for the pattern)
-   that reads from `src/` — reading straight out of an archive, without
-   unzipping to disk, keeps the working tree clean and avoids untracked
-   generated files.
+2. Write a loader (see `backend/Api/BibelenDkLoader.fs` for the pattern).
+   bibelen-dk's archive is unpacked on startup into a data folder outside
+   the tracked tree (the gitignored `bibles/.data/` locally, a volume in
+   the Docker image) by `backend/Api/BibleArchiveUnpacker.fs`, and loaded
+   from there; see `docs/web/bible-data-volume/`. The image copies each
+   archive explicitly, so a new one also needs its own line in
+   `build/Dockerfile.api`.
 3. Add an entry to [NOTICE.md](../NOTICE.md) recording the translation,
    edition, original source, and why it's redistributable.
 4. Update the table above and the "Currently bundled" list in this file.

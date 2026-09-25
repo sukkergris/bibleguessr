@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bible data volume — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Bible data volume</h1>
+      <p class="subtitle">
+        The API image ships the public-domain bibelen-dk archive and unpacks it into a data folder on startup (a
+        Docker volume in production, a gitignored folder in development) before loading verses from there.
+      </p>
+
+      <h2>Why this exists</h2>
+      <p>
+        The published API image used to contain no Bible data. The API started, logged
+        <code>Verses loaded: 0</code>, answered <code>/api/translations</code> with <code>[]</code>, and still reported
+        itself healthy. The Danish 1931/1907 translation is public domain (see <span class="file-ref">NOTICE.md</span>),
+        so the image now carries it. Unpacking it into a volume lets operators inspect the files on the server.
+      </p>
+
+      <h2>Image layout</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Path in the image</th>
+            <th scope="col">What it is</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/app/bibles/bibelen-dk/src/Bibelen Files.zip</code></td>
+            <td>
+              The shipped archive, copied as a single file. <span class="file-ref">build/Dockerfile.api</span> never
+              copies <code>bibles/</code> as a whole, and <span class="file-ref">.dockerignore</span> excludes
+              <code>jw.org</code> paths as a second guard.
+            </td>
+          </tr>
+          <tr>
+            <td><code>/data/bibles</code></td>
+            <td>
+              The data directory, declared as a <code>VOLUME</code> and owned by the non-root <code>apiuser</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><code>/data/bibles/bibelen-dk/</code></td>
+            <td>The unpacked chapter pages the API loads verses from.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Configuration</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Key</th>
+            <th scope="col">Image default (<code>ENV</code>)</th>
+            <th scope="col"><code>dotnet run</code> default</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Verses:ArchivePath</code></td>
+            <td><code>/app/bibles/bibelen-dk/src/Bibelen Files.zip</code></td>
+            <td><code>../../bibles/bibelen-dk/src/Bibelen Files.zip</code></td>
+          </tr>
+          <tr>
+            <td><code>Verses:DataDirectory</code></td>
+            <td><code>/data/bibles</code></td>
+            <td><code>../../bibles/.data</code> (gitignored)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        As environment variables, use a double underscore: <code>Verses__ArchivePath</code>,
+        <code>Verses__DataDirectory</code>. The image works without setting either. The old
+        <code>Verses:Directory</code> key is no longer read.
+      </p>
+
+      <h2>What happens on startup</h2>
+      <p>
+        <span class="file-ref">backend/Api/BibleArchiveUnpacker.fs</span> runs before verses are loaded. It compares the
+        archive's SHA-256 with a marker file, <code>.archive.sha256</code>, inside the unpacked folder:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Unpacked folder</th>
+            <th scope="col">Action</th>
+            <th scope="col">Log line</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Missing</td>
+            <td>Unpack</td>
+            <td><code>Unpacked Bible archive … (reason: first run …)</code></td>
+          </tr>
+          <tr>
+            <td>Present, no marker</td>
+            <td>Unpack, replacing the contents</td>
+            <td><code>… (reason: the folder has no marker …)</code></td>
+          </tr>
+          <tr>
+            <td>Marker matches the archive</td>
+            <td>Nothing</td>
+            <td><code>Bible archive already unpacked …; skipping unpack</code></td>
+          </tr>
+          <tr>
+            <td>Marker names a different archive (for example, after an image upgrade)</td>
+            <td>Unpack, replacing the contents</td>
+            <td><code>… (reason: archive changed from sha256 … to …)</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>
+          <strong>Atomic.</strong> Extraction goes to <code>.bibelen-dk.tmp-&lt;id&gt;</code> next to the target, and
+          the marker is written into it once extraction completes. Only then is the temp folder renamed into place. The
+          previous folder is moved aside to <code>.bibelen-dk.old-&lt;id&gt;</code> during the swap. Leftover temp and old
+          folders from a crash are deleted on the next start, and a missing target is unpacked again. The data directory
+          itself is never renamed, because it may be a mount point.
+        </li>
+        <li>
+          <strong>Zip-slip safe.</strong> An entry whose path resolves outside the temp folder (such as
+          <code>../evil.html</code>) rejects the whole archive, and nothing is written.
+        </li>
+        <li>
+          <strong>Never fatal.</strong> A missing archive logs a warning and loads whatever is already unpacked. A
+          failed unpack logs an error.
+        </li>
+      </ul>
+
+      <h2>Health when no verses load</h2>
+      <p>
+        If no verses load, the API logs an error, and <code>/api/healthz</code> (and <code>/api/health</code>) answer
+        <code>503</code> with <code>{"status":"unhealthy","versesLoaded":0}</code>, so an empty game never looks
+        healthy. The <a href="../connection-status/index.html">connection panel</a> shows this as an error.
+      </p>
+
+      <h2>Production setup</h2>
+      <p>
+        The production compose file and <code>webapi.env</code> live on the server, outside this repository. Apply
+        these edits there:
+      </p>
+      <pre><code># bibelguessr-server/docker-compose.yml
+services:
+  api:                       # the bibleguessr-api service
+    volumes:
+      - bible-data:/data/bibles
+
+volumes:
+  bible-data:</code></pre>
+      <p>
+        Remove <code>Verses__Directory</code> from <code>webapi.env</code>: the image's defaults are correct, and the
+        key is no longer read.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Bind mounts</span>
+        <p>
+          A fresh named volume inherits <code>apiuser</code>'s ownership of <code>/data/bibles</code> from the image. A
+          bind mount does not: the host folder must be writable by the container user's UID (check it with
+          <code>docker run --rm --entrypoint id bibleguessr-api</code>), or the unpack fails and health reports 503.
+        </p>
+      </div>
+
+      <h2>Tests</h2>
+      <p>
+        <span class="file-ref">backend/Tests/BibleArchiveUnpackerTests.fs</span> covers the unpack decision, first run,
+        restart, changed archive, interrupted unpack, and zip-slip. It also checks that the real archive, once unpacked,
+        loads exactly the same verses in the same order as reading the zip. Order matters because book numbers come
+        from first-encounter order.
+      </p>
+    </main>
+  </body>
+</html>

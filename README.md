@@ -81,7 +81,9 @@ default; a real deployment supplies its own `Smtp:*` config the same way.
 ## Translation sources
 
 `bibles/bibelen-dk/` holds a public-domain Danish translation, loaded and
-served by the backend. Translations the app isn't entitled to redistribute
+served by the backend. On startup the backend unpacks its archive into the
+gitignored `bibles/.data/` (a `/data/bibles` volume in the Docker image);
+see `docs/web/bible-data-volume/`. Translations the app isn't entitled to redistribute
 (e.g. Jehovah's Witnesses' Ny Verden-Oversættelsen) are never loaded
 server-side at all — they only work through "bring your own file" above,
 where the text stays in the player's own browser.

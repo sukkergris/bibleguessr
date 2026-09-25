@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.5.4"
+let BackendVersion = "0.6.0"
 
 [<EntryPoint>]
 let main args =
@@ -124,15 +124,25 @@ let main args =
     // GameHub.fs's PlayerCleanupService.
     builder.Services.AddHostedService<GameHub.PlayerCleanupService>() |> ignore
 
-    // Verse data lives outside the repo, under bibles/bibelen-dk/src/
-    // (tracked in git — public domain, no redistribution concern); loaded
-    // once at startup and served from memory.
-    let versesDirectory =
-        builder.Configuration["Verses:Directory"]
-        |> Option.ofObj
-        |> Option.defaultValue "../../bibles/bibelen-dk/src"
+    // The public-domain bibelen-dk archive (tracked in git under
+    // bibles/bibelen-dk/src/, shipped in the API image) is unpacked into a
+    // data folder on startup — a volume in production, the gitignored
+    // bibles/.data/ in development — then loaded once and served from
+    // memory. See BibleArchiveUnpacker.fs and docs/web/bible-data-volume/.
+    let unpackSettings: BibleArchiveUnpacker.UnpackSettings =
+        { ArchivePath =
+            builder.Configuration["Verses:ArchivePath"]
+            |> Option.ofObj
+            |> Option.defaultValue "../../bibles/bibelen-dk/src/Bibelen Files.zip"
+          DataDirectory =
+            builder.Configuration["Verses:DataDirectory"]
+            |> Option.ofObj
+            |> Option.defaultValue "../../bibles/.data"
+          TranslationFolder = BibelenDkLoader.TranslationFolder }
 
-    let verses = BibelenDkLoader.loadFromDirectory versesDirectory
+    let unpackOutcome = BibleArchiveUnpacker.ensureUnpacked unpackSettings
+    let versesDirectory = BibleArchiveUnpacker.targetDirectory unpackSettings
+    let verses = BibelenDkLoader.loadFromHtmlDirectory versesDirectory
 
     builder.Services.AddSingleton<Verse list>(verses) |> ignore
 
@@ -237,6 +247,34 @@ let main args =
     let app = builder.Build()
 
     let startupLogger = app.Services.GetRequiredService<ILogger<obj>>()
+
+    match unpackOutcome with
+    | BibleArchiveUnpacker.AlreadyUpToDate ->
+        startupLogger.LogInformation(
+            "Bible archive already unpacked in {Directory}; skipping unpack",
+            versesDirectory
+        )
+    | BibleArchiveUnpacker.Unpacked reason ->
+        startupLogger.LogInformation(
+            "Unpacked Bible archive {Archive} into {Directory} (reason: {Reason})",
+            unpackSettings.ArchivePath,
+            versesDirectory,
+            BibleArchiveUnpacker.describeReason reason
+        )
+    | BibleArchiveUnpacker.NoArchive ->
+        startupLogger.LogWarning(
+            "No Bible archive at {Archive}; using whatever is already in {Directory}",
+            unpackSettings.ArchivePath,
+            versesDirectory
+        )
+    | BibleArchiveUnpacker.Failed message ->
+        startupLogger.LogError(
+            "Could not unpack Bible archive {Archive} into {Directory}: {Error}",
+            unpackSettings.ArchivePath,
+            versesDirectory,
+            message
+        )
+
     startupLogger.LogInformation("Verses loaded: {Count}", verses.Length)
 
     let verseHealth = VerseHealth.evaluate verses.Length

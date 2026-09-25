@@ -24,9 +24,13 @@ RUN dotnet publish backend/Api/BibleGuessr.Api.fsproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
-# Run as a non-root user.
+# Run as a non-root user. The data directory is created (and owned by
+# apiuser) before VOLUME below, so a fresh named volume inherits that
+# ownership; a bind mount must instead be writable by apiuser's UID.
 RUN adduser --disabled-password --home /app --gecos '' apiuser \
-    && chown -R apiuser /app
+    && chown -R apiuser /app \
+    && mkdir -p /data/bibles \
+    && chown apiuser /data/bibles
 USER apiuser
 
 COPY --from=build --chown=apiuser /app/publish .
@@ -34,13 +38,18 @@ COPY --from=build --chown=apiuser /app/publish .
 # Ship the public-domain bibelen-dk archive (see NOTICE.md). Copy this one
 # file only — never `bibles/` as a whole, which may hold local-only,
 # copyrighted test data (see "Bible translation licensing" in CLAUDE.md).
+# It is unpacked into the data volume on startup — see
+# backend/Api/BibleArchiveUnpacker.fs and docs/web/bible-data-volume/.
 COPY --chown=apiuser ["bibles/bibelen-dk/src/Bibelen Files.zip", "/app/bibles/bibelen-dk/src/"]
+
+VOLUME /data/bibles
 
 ARG BUILD_SHA
 ARG BUILD_CONTEXT
 
 ENV ASPNETCORE_URLS=http://+:8080 \
-    Verses__Directory=/app/bibles/bibelen-dk/src \
+    Verses__ArchivePath="/app/bibles/bibelen-dk/src/Bibelen Files.zip" \
+    Verses__DataDirectory=/data/bibles \
     BUILD_SHA="${BUILD_SHA}" \
     BUILD_CONTEXT="${BUILD_CONTEXT}"
 

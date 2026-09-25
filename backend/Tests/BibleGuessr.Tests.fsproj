@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="TestPaths.fs" />
     <Compile Include="RoomTests.fs" />
     <Compile Include="ScoringTests.fs" />
     <Compile Include="AbuseReportTests.fs" />
@@ -24,6 +25,7 @@
     <Compile Include="LeaveRoomTests.fs" />
     <Compile Include="RoomStoreConcurrencyTests.fs" />
     <Compile Include="VerseHealthTests.fs" />
+    <Compile Include="BibleArchiveUnpackerTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

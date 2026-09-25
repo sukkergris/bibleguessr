@@ -15,6 +15,8 @@ module BibleGuessr.Tests.BibelenDkLoaderTests
 // corrupted 67-book numbering resolved to Markus instead of its true
 // position, 41.
 
+open System
+open System.IO
 open Xunit
 open BibleGuessr.Domain
 open BibleGuessr.Api.BibelenDkLoader
@@ -73,13 +75,46 @@ let ``the real bibelen-dk data set has exactly 66 distinct books after normaliza
     // bibles/bibelen-dk/src/Bibelen Files.zip — rather than a synthetic
     // sample, so a regression in the real archive (a NEW inconsistent
     // spelling, or this fix silently stopping working) is caught here,
-    // not just against the synthetic cases above. Skipped if the archive
-    // isn't present (e.g. a checkout without the gitignored working copy)
-    // rather than failing outright.
-    let versesDirectory = "../../bibles/bibelen-dk/src"
+    // not just against the synthetic cases above. The archive is tracked
+    // in git, so TestPaths fails loudly if it's missing.
+    let verses = loadFromZip TestPaths.bibelenDkArchive
+    let distinctBooks = verses |> List.map (fun v -> v.Book) |> List.distinct
 
-    if System.IO.Directory.Exists(versesDirectory) then
-        let verses = loadFromDirectory versesDirectory
-        let distinctBooks = verses |> List.map (fun v -> v.Book) |> List.distinct
+    Assert.Equal(66, distinctBooks.Length)
 
-        Assert.Equal(66, distinctBooks.Length)
+// A minimal chapter page in the shape parseChapterFile documents: an <h1>
+// title and a <pre> block of numbered verses, one wrapped across lines.
+let private chapterHtml =
+    """<html><body><h1>Genesis 1</h1>
+<pre>
+  1.  I Begyndelsen skabte Gud
+      Himmelen og Jorden.
+  2.  Og Jorden var øde og tom.
+</pre></body></html>"""
+
+[<Fact>]
+let ``loadFromHtmlDirectory loads the verses of every chapter page in an unpacked folder`` () =
+    let directory = Path.Combine(Path.GetTempPath(), $"bibleguessr-loader-{Guid.NewGuid():N}")
+    Directory.CreateDirectory(Path.Combine(directory, "nested")) |> ignore
+
+    try
+        File.WriteAllText(Path.Combine(directory, "nested", "01_01.html"), chapterHtml)
+        // Front matter with no <h1>/<pre> pair is skipped, as in loadFromZip.
+        File.WriteAllText(Path.Combine(directory, "0001.html"), "<html><body>Indhold</body></html>")
+        File.WriteAllText(Path.Combine(directory, "notes.txt"), chapterHtml)
+
+        let verses = loadFromHtmlDirectory directory
+
+        Assert.Equal<(string * int * int * string) list>(
+            [ "Genesis", 1, 1, "I Begyndelsen skabte Gud Himmelen og Jorden."
+              "Genesis", 1, 2, "Og Jorden var øde og tom." ],
+            verses |> List.map (fun v -> v.Book, v.Chapter, v.VerseNumber, v.Text)
+        )
+    finally
+        Directory.Delete(directory, true)
+
+[<Fact>]
+let ``loadFromHtmlDirectory returns no verses for a missing folder`` () =
+    let missing = Path.Combine(Path.GetTempPath(), $"bibleguessr-missing-{Guid.NewGuid():N}")
+
+    Assert.Empty(loadFromHtmlDirectory missing)
