@@ -46,6 +46,11 @@
         The endpoint was renamed from <code>/api/health</code> to <code>/api/healthz</code>; the old path still
         responds, so anything already polling it keeps working.
       </p>
+      <p>
+        Both paths answer <code>503 Service Unavailable</code> with <code>{"status":"unhealthy","versesLoaded":0}</code>
+        when the API loaded no verses (for example, a missing Bible archive). The API is up, but the game is
+        unplayable, so the row shows an error rather than a healthy latency.
+      </p>
 
       <h2>How the rows and the dot relate</h2>
       <p>

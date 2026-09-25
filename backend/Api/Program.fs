@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.5.3"
+let BackendVersion = "0.5.4"
 
 [<EntryPoint>]
 let main args =
@@ -238,6 +238,15 @@ let main args =
 
     let startupLogger = app.Services.GetRequiredService<ILogger<obj>>()
     startupLogger.LogInformation("Verses loaded: {Count}", verses.Length)
+
+    let verseHealth = VerseHealth.evaluate verses.Length
+
+    if verseHealth = VerseHealth.NoVerses then
+        startupLogger.LogError(
+            "No verses loaded from {Directory}; the game is unplayable and /api/healthz will report unhealthy",
+            versesDirectory
+        )
+
     startupLogger.LogInformation("SMTP host for bug reports: {Host}:{Port}", smtpSettings.Host, smtpSettings.Port)
 
     app.UseHttpLogging() |> ignore
@@ -249,7 +258,18 @@ let main args =
     // /api/health stays mapped to the same handler: anything already
     // pointing at it (a script, a container probe, a bookmark) keeps
     // working. Renaming a health check is not worth breaking a probe over.
-    let healthResponse = Func<_>(fun () -> {| status = "ok"; versesLoaded = verses.Length |})
+    //
+    // No verses answers 503, not "ok": an API serving an empty game must
+    // not look healthy (the connection panel shows any non-2xx as an error).
+    let healthResponse =
+        Func<IResult>(fun () ->
+            match verseHealth with
+            | VerseHealth.Healthy count -> Results.Json({| status = "ok"; versesLoaded = count |})
+            | VerseHealth.NoVerses ->
+                Results.Json(
+                    {| status = "unhealthy"; versesLoaded = 0 |},
+                    statusCode = StatusCodes.Status503ServiceUnavailable
+                ))
 
     app.MapGet("/api/healthz", healthResponse) |> ignore
     app.MapGet("/api/health", healthResponse) |> ignore

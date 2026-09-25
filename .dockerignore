@@ -5,3 +5,8 @@ frontend/**/wwwroot
 
 # Dockerfile.api-cs
 appsettings.*.json
+
+# Copyrighted, local-only Bible files must never reach an image — a second
+# guard behind Dockerfile.api copying only the bibelen-dk archive.
+bibles/jw.org
+**/jw.org

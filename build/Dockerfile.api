@@ -31,10 +31,16 @@ USER apiuser
 
 COPY --from=build --chown=apiuser /app/publish .
 
+# Ship the public-domain bibelen-dk archive (see NOTICE.md). Copy this one
+# file only — never `bibles/` as a whole, which may hold local-only,
+# copyrighted test data (see "Bible translation licensing" in CLAUDE.md).
+COPY --chown=apiuser ["bibles/bibelen-dk/src/Bibelen Files.zip", "/app/bibles/bibelen-dk/src/"]
+
 ARG BUILD_SHA
 ARG BUILD_CONTEXT
 
 ENV ASPNETCORE_URLS=http://+:8080 \
+    Verses__Directory=/app/bibles/bibelen-dk/src \
     BUILD_SHA="${BUILD_SHA}" \
     BUILD_CONTEXT="${BUILD_CONTEXT}"
 

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <Compile Include="BibelenDkLoader.fs" />
+    <Compile Include="VerseHealth.fs" />
     <Compile Include="GameHub.fs" />
     <Compile Include="MailSender.fs" />
     <Compile Include="Program.fs" />

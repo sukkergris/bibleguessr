@@ -23,6 +23,7 @@
     <Compile Include="UniquePlayerNameTests.fs" />
     <Compile Include="LeaveRoomTests.fs" />
     <Compile Include="RoomStoreConcurrencyTests.fs" />
+    <Compile Include="VerseHealthTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
