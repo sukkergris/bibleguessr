@@ -203,7 +203,7 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
 
       <h2>Running it in CI</h2>
       <p>
-        <span class="file-ref">.github/workflows/main.yml</span>
+        <span class="file-ref">.github/workflows/release.yml</span>
         first runs backend and frontend tests, then builds and publishes the
         Docker images, and finally calls <code>task release:bundle</code>. The
         frontend build remains defined once in the Taskfile rather than being
@@ -312,7 +312,7 @@ git tag -d frontend-v0.8.3                             # local tag</code></pre>
         asserts that it matches.
       </p>
       <p>
-        <span class="file-ref">.github/workflows/main.yml</span>
+        <span class="file-ref">.github/workflows/release.yml</span>
         runs the chain in CI, and
         <span class="file-ref">.github/README.md</span>
         covers the workflow mechanics — how to watch a run, read the step icons,

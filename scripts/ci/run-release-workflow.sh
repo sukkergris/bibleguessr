@@ -3,7 +3,7 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib-bash/header.sh"
 
-log::info "Running main.yml under act"
+log::info "Running release.yml under act"
 
 status=0
 
@@ -18,10 +18,10 @@ else
   exit 1
 fi
 
-output="$(act -W .github/workflows/main.yml --secret-file "${PROJECT_ROOT}/.secrets" --var-file "${PROJECT_ROOT}/.env" "$@" 2>&1 | tee /dev/tty)" || status=$?
+output="$(act -W .github/workflows/release.yml --secret-file "${PROJECT_ROOT}/.secrets" --var-file "${PROJECT_ROOT}/.env" "$@" 2>&1 | tee /dev/tty)" || status=$?
 
 if grep -q "Skipping unsupported platform" <<<"$output"; then
-    log::error "A job was skipped — .actrc is out of sync with runs-on in main.yml"
+    log::error "A job was skipped — .actrc is out of sync with runs-on in release.yml"
     exit 1
 fi
 

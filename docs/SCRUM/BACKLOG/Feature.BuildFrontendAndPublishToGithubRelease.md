@@ -136,7 +136,7 @@ to keep in sync.
 
 The original plan was two more `.fsx` scripts, `AddGitTag.fsx` and
 `PublishGitHubRelease.fsx`, each backing its own Task command. Neither was
-written. Instead, `.github/workflows/main.yml`'s `bundle` job creates the
+written. Instead, `.github/workflows/release.yml`'s `bundle` job creates the
 draft release inline, with a plain `gh release create "${{ github.ref_name }}"
 artifacts/*.zip --draft` step gated on `startsWith(github.ref,
 'refs/tags/')`. Tagging itself is not a Task command at all — a release is
@@ -167,9 +167,9 @@ Out of scope:
   archive contains build output only.
 
 Superseded, not out of scope: the plan to keep CI out of this repository and
-run every task by hand. `.github/workflows/main.yml` and `.github/workflows/ci.yml`
+run every task by hand. `.github/workflows/release.yml` and `.github/workflows/ci.yml`
 now exist and drive this exact release chain — see
-`Feature.CI-CD-construction.md`. `main.yml`'s `bundle` job calls
+`Feature.CI-CD-construction.md`. `release.yml`'s `bundle` job calls
 `task release:bundle` rather than reimplementing the build, so the `task
 release:*` commands remain the one description of how the frontend build is
 produced and verified; only tagging and publishing moved out of Task and into
@@ -239,7 +239,7 @@ feature.
 ### 5. Tagging a release — done, by a different mechanism than originally specified (D5)
 
 - [x] A tag matching `frontend-v<version>` (D2) triggers the release, per
-      `.github/workflows/main.yml`'s `on: push: tags:`.
+      `.github/workflows/release.yml`'s `on: push: tags:`.
 - [ ] ~~`task release:add-git-tag`~~ — does not exist; superseded by pushing
       the tag directly. See D5.
 - [ ] Nothing refuses a dirty working tree or an existing tag before the
@@ -250,7 +250,7 @@ feature.
 ### 6. Publishing to GitHub — done, by a different mechanism than originally specified (D5)
 
 - [x] The release is created as a draft (D3) — `gh release create ... --draft`
-      in `main.yml`'s `bundle` job.
+      in `release.yml`'s `bundle` job.
 - [x] Uses the `gh` CLI, as specified.
 - [ ] ~~`task release:publish-to-github-release`~~ — does not exist;
       superseded by the inline workflow step. See D5.

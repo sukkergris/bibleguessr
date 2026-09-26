@@ -52,7 +52,7 @@ files across a few commits (say: a Dockerfile `ARG`, a matching
 `docker-compose.build.yml` change, an F# read of the resulting env var, a
 frontend fetch to display it) will have intermediate commits that don't
 build cleanly yet. Each one pushed straight to `main` is a red run — not
-dangerous (`ci.yml` publishes nothing; only the tag-triggered `main.yml`
+dangerous (`ci.yml` publishes nothing; only the tag-triggered `release.yml`
 does), but it burns the one clear "is `main` currently healthy?" signal you
 have, and after the third red run in a row from your own known-incomplete
 work, you stop looking at it.
@@ -127,6 +127,6 @@ task docker:build:app
 | Topic | Where |
 | --- | --- |
 | What triggers on `main` | `.github/workflows/ci.yml` |
-| What triggers on a tag | `.github/workflows/main.yml` |
+| What triggers on a tag | `.github/workflows/release.yml` |
 | The release checklist (why some edits are unconditional) | `docs/web/cutting-a-release/index.html` |
 | The commit that motivated this note | `3f6512c` — two unrelated changes in one message; worth avoiding regardless of branch or squash |

@@ -20,7 +20,7 @@ Instead, `load-image-version.sh` stays exactly as small as it is — its
 `frontend/package.json`'s `version` field is. No new file, no derivation
 logic, no per-workflow source to choose between: Task's root `env:` block
 already exports whatever the script returns to every `docker:*` task, so
-one edit reaches both `ci.yml` and `main.yml` identically.
+one edit reaches both `ci.yml` and `release.yml` identically.
 
 This means `IMAGE_TAG` bumps **every release, unconditionally** — unlike
 the frontend/backend versions, which are conditional on what changed. Both

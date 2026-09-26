@@ -1,6 +1,6 @@
 # Write `build/fsx/PublishGitHubRelease.fsx`
 
-`main.yml`'s `bundle` job creates the draft release with a plain
+`release.yml`'s `bundle` job creates the draft release with a plain
 `gh release create "${{ github.ref_name }}" artifacts/*.zip --draft` step,
 written directly in the workflow YAML. This is the one piece of release
 logic that cannot currently be run or reproduced from a developer's own
@@ -25,7 +25,7 @@ exercised.
 - Safe to retry after a partial upload (e.g. the release was created but the
   asset upload failed).
 - A `release:publish` task in `Taskfile.Release.yml` calls it.
-- `main.yml`'s `bundle` job is updated to call `task release:publish`
+- `release.yml`'s `bundle` job is updated to call `task release:publish`
   instead of the inline `gh release create` step. `permissions: contents:
   write` stays on the job, and `GH_TOKEN` is passed through to the task.
 

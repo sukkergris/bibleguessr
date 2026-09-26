@@ -19,7 +19,7 @@ appears. Pushing it to a feature branch is not enough.
 Adding everything at once means debugging several things at the same time in a
 CI log. Adding one piece at a time means each failure has one cause.
 
-The order used for `main.yml`:
+The order used for `release.yml`:
 
 1. **Checkout and toolchain only.** Prove the runner can install Node, .NET and
    Task. No release, no upload.
@@ -38,7 +38,7 @@ transient reason.
 
 ```sh
 gh workflow list                  # workflows GitHub can see
-gh workflow run main.yml          # start a workflow_dispatch run
+gh workflow run release.yml          # start a workflow_dispatch run
 gh run watch                      # follow the active run live in the terminal
 gh run list --limit 5             # recent runs with status
 gh run view <run-id> --log-failed # only the steps that failed

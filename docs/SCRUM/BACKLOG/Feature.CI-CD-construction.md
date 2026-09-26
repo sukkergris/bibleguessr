@@ -15,7 +15,7 @@ branching; `lib-bash/` handles host-level work. That layering emerged on its own
 and it is the right one. `.github/workflows/ci.yml` already respects it — every
 step is `run: task ...`.
 
-`.github/workflows/main.yml` does not. It hand-rolls `gh release create` in
+`.github/workflows/release.yml` does not. It hand-rolls `gh release create` in
 YAML, which is the one piece of release logic that cannot be run or tested
 locally, and it duplicates what `PublishGitHubRelease.fsx` was meant to do.
 
@@ -44,7 +44,7 @@ added the tasks; no later commit added the two scripts.
 `docs/web/frontend-release/index.html` documents all four steps as if they work,
 so the documentation is currently wrong.
 
-### `main.yml` bypasses the release tasks
+### `release.yml` bypasses the release tasks
 
 The workflow runs `task release:bundle`, then creates the GitHub release with an
 inline `gh release create` step. The `release:publish` task — the thing that is
@@ -154,15 +154,15 @@ reality rather than against the plan:
 
 - **Workflow duplication was solved with `workflow_call`, not named here at
   all.** `backend-test` and `frontend-build` were duplicated verbatim between
-  `ci.yml` and `main.yml`. `ci.yml` gained an `on: workflow_call:` trigger,
-  and `main.yml` now has a single `ci:` job with `uses: ./.github/workflows/ci.yml`
+  `ci.yml` and `release.yml`. `ci.yml` gained an `on: workflow_call:` trigger,
+  and `release.yml` now has a single `ci:` job with `uses: ./.github/workflows/ci.yml`
   in place of the two duplicated jobs. This addresses the same
   "does the release work only by pushing and watching" complaint from
   **Motivation**, for the test/build stage specifically, without touching
   `release:tag` or `release:publish`.
 - **Docker Hub publishing exists now**, via `task docker:build:app` /
   `task docker:publish:app` (`Taskfile.Docker.yml`) and a `docker-publish` job
-  in `main.yml`. This is `docker:build`, D2's third line, built — but as three
+  in `release.yml`. This is `docker:build`, D2's third line, built — but as three
   service-specific tasks (`build:api`, `build:nginx`, `build:app`) under a
   `docker:` namespace, not the single `docker:build` task named in **Scope**
   and acceptance criterion 5.
@@ -194,7 +194,7 @@ In scope:
 - A `task ci` aggregate and a `docker:build` task.
 - `Taskfile.CI.yml` with `act` and lint wrappers.
 - `.actrc` and `scripts/ci/run-act.sh`.
-- Rewriting `main.yml` to call `task release:publish`.
+- Rewriting `release.yml` to call `task release:publish`.
 - Moving `Common.fsx` onto `RootLoader`.
 - A backend version property, and `task release:version`.
 - Documentation in `docs/web/build-pipeline/`, and correcting
@@ -247,10 +247,10 @@ The artifact path stays under `/tmp` so `.gitignore` needs no new entry.
 
 ### 1. The layering rule is real (D1) — one violation left
 
-- [ ] One step still does work directly: `main.yml`'s `bundle` job runs
+- [ ] One step still does work directly: `release.yml`'s `bundle` job runs
       `gh release create "${{ github.ref_name }}" artifacts/*.zip --draft`
       inline, rather than through a task. Every other step across both
-      `ci.yml` and `main.yml` — verified by walking each job — is either
+      `ci.yml` and `release.yml` — verified by walking each job — is either
       `uses:` or `run: task <something>`, including the Docker Hub publish
       steps that did not exist when this document was written.
 - [x] Every step that *is* task-based can be run from a developer shell the
@@ -271,7 +271,7 @@ The artifact path stays under `/tmp` so `.gitignore` needs no new entry.
 
 ### 3. `build/fsx/PublishGitHubRelease.fsx` — not built
 
-- [ ] Does not exist on disk. `main.yml`'s `bundle` job creates the draft
+- [ ] Does not exist on disk. `release.yml`'s `bundle` job creates the draft
       release with a plain `gh release create ... --draft` step instead —
       this satisfies the *draft* requirement (D3) but only inside the
       workflow run, with none of the other three guarantees.
@@ -307,15 +307,15 @@ The artifact path stays under `/tmp` so `.gitignore` needs no new entry.
 - [ ] `task ci` passes locally in the devcontainer. Cannot pass; the task does
       not exist.
 
-### 6. `main.yml` uses the release tasks — not built
+### 6. `release.yml` uses the release tasks — not built
 
-- [ ] The inline `gh release create` step (`main.yml`, `bundle` job) is still
+- [ ] The inline `gh release create` step (`release.yml`, `bundle` job) is still
       inline; `task release:publish` does not exist to replace it with.
 - [x] `permissions: contents: write` is retained on the `bundle` job, and
       `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` is passed to the `gh` step —
       true of the step as it exists today, independent of whether a task ever
       wraps it.
-- [ ] Nothing in `main.yml` does work that `task release:*` cannot do. Not
+- [ ] Nothing in `release.yml` does work that `task release:*` cannot do. Not
       met: the draft-release creation is work `task release:*` cannot
       currently do, because no such task exists.
 
@@ -341,7 +341,7 @@ The artifact path stays under `/tmp` so `.gitignore` needs no new entry.
 
 - [x] `task ci:lint` exists and runs `actionlint` over `.github/workflows/`.
 - [x] `actionlint` passes on both workflow files — verified directly,
-      `0 errors` on `ci.yml` and `main.yml`.
+      `0 errors` on `ci.yml` and `release.yml`.
 - [ ] `shellcheck` is not installed; no `scripts/programs/` installer for it
       exists, and `task ci:lint` does not run it over `lib-bash/` or
       `scripts/`.
@@ -392,7 +392,7 @@ The artifact path stays under `/tmp` so `.gitignore` needs no new entry.
   and in use, but not the single name this criterion specifies, and there is
   still no one command that runs the whole local pipeline sequentially the
   way `ci.yml` runs it in parallel.
-- **`main.yml`'s release step is still inline (criterion 6).** Directly
+- **`release.yml`'s release step is still inline (criterion 6).** Directly
   downstream of criterion 3 not existing; there is no `task release:publish`
   to call instead.
 - **`shellcheck` (criterion 8).** Not installed, not run, and the existing
