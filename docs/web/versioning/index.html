@@ -252,20 +252,16 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         <code>DOCKERHUB_ACCESSTOKEN_RW</code> repository secret.
       </p>
 
-      <h3>Docker Hub login for local release runs</h3>
-      <p>
-        The main release workflow publishes Docker images. Before running it
-        locally with <code>act</code>, authenticate Docker Hub from the dev
-        container:
-      </p>
-      <pre><code>docker login -u "$DOCKER_USERNAME"</code></pre>
-      <p>
-        Enter a Docker Hub personal access token with Read &amp; Write
-        permissions when Docker prompts for a password. The login must remain
-        available for the full <code>act</code> run so its publish step can
-        push the API and nginx images. Do not commit the token or include it
-        in a command line.
-      </p>
+      <div class="callout limitation">
+        <span class="callout-title">The release workflow is not run locally</span>
+        <p>
+          <span class="file-ref">.github/workflows/release.yml</span> pushes
+          both images to Docker Hub, so running it under <code>act</code>
+          would overwrite the real release tag. It only runs on GitHub, from a
+          pushed tag. CI is the check before a release; see
+          <a href="#local-build">Running the image build locally</a>.
+        </p>
+      </div>
 
       <h3>On a real GitHub runner</h3>
       <p>
@@ -281,39 +277,44 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         the single source, checked in like any other file.
       </p>
 
-      <h2>Running the image build locally</h2>
+      <h2 id="local-build">Running the image build locally</h2>
       <p>
-        To exercise only the container build, go straight at it:
+        To build both images for every published platform without pushing
+        (the same check CI's <code>docker-build</code> job runs):
+      </p>
+      <pre><code>docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.api .
+docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.nginx .</code></pre>
+      <p>
+        For a quick build for the host platform only, loaded into the local
+        image store:
       </p>
       <pre><code>task docker:build:app     # or docker:build:api / docker:build:nginx</code></pre>
       <p>
-        To rehearse the release workflow locally, authenticate Docker Hub and
-        then run <code>task ci:act-main</code>. It runs the full dependency
-        chain; <code>act</code> honors each job's <code>needs</code> entries.
+        <code>task ci:act-ci</code> runs <span class="file-ref">ci.yml</span>
+        under <code>act</code>, which checks the workflow wiring. It never
+        pushes. It is not a substitute for the <code>buildx</code> commands
+        above, because <code>docker-build</code> needs
+        <code>backend-test</code>, and that job fails under <code>act</code>
+        on an arm64 host (<code>actions/setup-dotnet</code> fetches x64
+        binaries).
       </p>
       <div class="callout limitation">
         <span class="callout-title">Two things that will bite</span>
         <p>
-          Running the full chain locally can end in
+          Running the chain under <code>act</code> can end in
           <code>exitcode '137'</code>
           — SIGKILL, the container being killed for running out of memory,
           usually while the .NET SDK unpacks or builds. It surfaces as a test
           failure but is not one; give Docker more memory.
         </p>
         <p>
-          <span class="file-ref">scripts/ci/run-main-workflow.sh</span>
+          <span class="file-ref">scripts/ci/run-workflow.sh</span>
           pipes through
           <code>tee /dev/tty</code>
           , which fails with
           <code>No such device or address</code>
           when there is no terminal — so the script cannot currently be run from
           a non-interactive context.
-        </p>
-        <p>
-          <code>act</code> cannot supply GitHub's
-          <code>ACTIONS_RUNTIME_TOKEN</code>, so the local wrapper marks its run
-          and skips <code>actions/upload-artifact</code>. GitHub-hosted runs
-          still upload the artifact and create the draft release for a tag.
         </p>
       </div>
 
