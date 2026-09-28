@@ -89,7 +89,10 @@
             <td><code>task docker:build:app</code> (and <code>:api</code>, <code>:nginx</code>)</td>
             <td>
               Uses <code>docker compose build</code> for the host platform only and loads the result into the local
-              image store.
+              image store, tagged <code>local</code> (<code>HOST_IMAGE_TAG</code>) instead of the release version.
+              A single-architecture build therefore never overwrites a multi-platform release tag locally, and it
+              cannot be mistaken for a release if pushed. <code>local</code> is used instead of <code>latest</code>
+              because Docker resolves an untagged pull or run to <code>latest</code>.
             </td>
             <td>Local testing</td>
           </tr>
@@ -165,7 +168,8 @@
       <p>
         With the <code>docker-container</code> driver, the result stays in the builder's cache and is not loaded into
         <code>docker images</code>. That is enough to prove that both architectures build. Use
-        <code>task docker:build:app</code> for a host-platform image that you want to run.
+        <code>task docker:build:app</code> for a host-platform image that you want to run, for example
+        <code>isuperman/bibleguessr-api:local</code>.
       </p>
 
       <h2>Verifying</h2>
