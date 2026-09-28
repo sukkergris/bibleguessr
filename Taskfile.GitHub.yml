@@ -8,9 +8,6 @@ version: '3'
 vars:
   TAG_PREFIX: v
 
-env:
-  DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
-
 tasks:
 
   release:check:
