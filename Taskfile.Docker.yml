@@ -7,6 +7,15 @@ env:
   BUILD_SHA: '{{.BUILD_SHA}}'
   BUILD_CONTEXT: '{{.BUILD_CONTEXT}}'
 
+vars:
+  # Platforms every published image is built for.
+  IMAGE_PLATFORMS: linux/amd64,linux/arm64
+  # Multi-platform build driven by build/docker-compose.build.yml, so image
+  # names, tags and build args live in one place. Run from build/ so that
+  # `--allow=fs.read=..` grants read access to exactly the repository root
+  # (the compose file's build context).
+  BAKE: docker buildx bake --allow=fs.read=.. -f docker-compose.build.yml --set '*.platform={{.IMAGE_PLATFORMS}}'
+
 tasks:
 
   build:api:
@@ -22,13 +31,19 @@ tasks:
       - docker compose -f build/docker-compose.build.yml build nginx
 
   build:app:
-    desc: Build the entire app
+    desc: Build the entire app for the host platform only
     dir: .
     cmds:
       - docker compose -f build/docker-compose.build.yml build
 
-  publish:app:
-    desc: Publish the entire app
-    dir: .
+  build:multi:
+    desc: Build both images for every platform in IMAGE_PLATFORMS, without pushing
+    dir: build
     cmds:
-      - docker compose -f build/docker-compose.build.yml push
+      - '{{.BAKE}}'
+
+  publish:app:
+    desc: Build both images for every platform in IMAGE_PLATFORMS and push them
+    dir: build
+    cmds:
+      - '{{.BAKE}} --push'

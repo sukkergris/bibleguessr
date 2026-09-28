@@ -58,30 +58,70 @@
         <code>mkdir</code>) execute under QEMU for the non-native platform. The compilers never run emulated.
       </p>
 
-      <h2>In the workflows</h2>
+      <h2>One build path</h2>
       <p>
-        <span class="file-ref">.github/workflows/ci.yml</span> (job <code>docker-build</code>) and
-        <span class="file-ref">.github/workflows/release.yml</span> (job <code>docker-publish</code>) use
-        <code>docker/setup-qemu-action</code>, <code>docker/setup-buildx-action</code> and
-        <code>docker/build-push-action</code>, one matrix job per image. The target platforms come from the
-        workflow-level <code>IMAGE_PLATFORMS</code> variable, which must stay the same in both files. CI builds without
-        pushing, so a change that breaks one architecture fails before a release. The release job pushes. Both jobs
-        share a GitHub Actions build cache, scoped per image.
+        <span class="file-ref">build/docker-compose.build.yml</span> is the only place that names the images, their
+        tag, their build args and their Dockerfiles. <code>docker buildx bake</code> reads that compose file directly,
+        so the multi-platform build doesn't need a second copy of any of it.
+        <span class="file-ref">Taskfile.Docker.yml</span> adds only the platforms, from its
+        <code>IMAGE_PLATFORMS</code> variable:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Task</th>
+            <th scope="col">What it does</th>
+            <th scope="col">Used by</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>task docker:build:multi</code></td>
+            <td>Builds both images for every platform in <code>IMAGE_PLATFORMS</code>. Nothing is pushed.</td>
+            <td><span class="file-ref">ci.yml</span>, job <code>docker-build</code></td>
+          </tr>
+          <tr>
+            <td><code>task docker:publish:app</code></td>
+            <td>Runs the same build and pushes one manifest list per image.</td>
+            <td><span class="file-ref">release.yml</span>, job <code>docker-publish</code></td>
+          </tr>
+          <tr>
+            <td><code>task docker:build:app</code> (and <code>:api</code>, <code>:nginx</code>)</td>
+            <td>
+              Uses <code>docker compose build</code> for the host platform only and loads the result into the local
+              image store.
+            </td>
+            <td>Local testing</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Both workflow jobs set up QEMU (<code>docker/setup-qemu-action</code>) and a buildx builder
+        (<code>docker/setup-buildx-action</code>) and then call the task. A workflow runs the same command a developer
+        runs locally.
       </p>
       <div class="callout limitation">
-        <span class="callout-title">Local compose builds are single-platform</span>
+        <span class="callout-title">Things to know about the bake path</span>
         <p>
-          <code>task docker:build:*</code> still uses <span class="file-ref">build/docker-compose.build.yml</span> and
-          builds for the host platform only. That is fine for local testing. Do not use
-          <code>task docker:publish:app</code> to publish a release: it would replace the multi-platform tag with a
-          single-platform image.
+          The tasks run from <code>build/</code> and pass <code>--allow=fs.read=..</code>. By default, bake refuses a
+          build context outside the current directory. From <code>build/</code>, <code>..</code> is exactly the
+          repository root, which is the compose file's context.
+        </p>
+        <p>
+          There is no GitHub Actions build cache. <code>type=gha</code> needs a runtime token that a plain
+          <code>run:</code> step does not receive. Every CI build therefore starts cold, which costs a few minutes.
+          Adding a cache would mean replacing the task call with <code>docker/bake-action</code>, which would split
+          the build back into two paths.
+        </p>
+        <p>
+          Like every compose-based task, the tasks need <code>DOCKER_USERNAME</code>, <code>BUILD_SHA</code> and
+          <code>BUILD_CONTEXT</code> in the environment. The workflows set all three. Locally, you set them yourself.
         </p>
       </div>
 
       <h2>Verifying</h2>
       <p>Build both platforms locally without pushing:</p>
-      <pre><code>docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.api .
-docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.nginx .</code></pre>
+      <pre><code>DOCKER_USERNAME=isuperman BUILD_SHA=local BUILD_CONTEXT=local task docker:build:multi</code></pre>
       <p>After a release, confirm that each published tag lists both platforms:</p>
       <pre><code>docker buildx imagetools inspect docker.io/isuperman/bibleguessr-api:&lt;tag&gt;
 docker buildx imagetools inspect docker.io/isuperman/bibleguessr-nginx:&lt;tag&gt;</code></pre>
@@ -97,6 +137,7 @@ docker buildx imagetools inspect docker.io/isuperman/bibleguessr-nginx:&lt;tag&g
       <h2>Implementation</h2>
       <p>
         <span class="file-ref">build/Dockerfile.api</span>, <span class="file-ref">build/Dockerfile.nginx</span>,
+        <span class="file-ref">build/docker-compose.build.yml</span>, <span class="file-ref">Taskfile.Docker.yml</span>,
         <span class="file-ref">.github/workflows/ci.yml</span> and
         <span class="file-ref">.github/workflows/release.yml</span>.
       </p>

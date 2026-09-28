@@ -265,12 +265,11 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
 
       <h3>On a real GitHub runner</h3>
       <p>
-        Both GitHub Actions workflows call the same script directly (a
-        <code>version</code> step feeding <code>docker/build-push-action</code>'s
-        <code>tags</code>), so they publish under whatever value it currently
-        returns — the same one a local build would produce from the same
-        checkout. They do not go through
-        <span class="file-ref">build/docker-compose.build.yml</span>; see
+        Both GitHub Actions workflows build through the same tasks as a local
+        build (<code>task docker:build:multi</code> in CI,
+        <code>task docker:publish:app</code> in a release), so they publish
+        under whatever value the script currently returns, the same one a
+        local build would produce from the same checkout. See
         <a href="../multi-platform-images/index.html">Multi-platform images</a>.
         No separate
         <code>IMAGE_TAG</code> workflow variable is necessary; the script is
@@ -280,10 +279,9 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
       <h2 id="local-build">Running the image build locally</h2>
       <p>
         To build both images for every published platform without pushing
-        (the same check CI's <code>docker-build</code> job runs):
+        (the same task CI's <code>docker-build</code> job runs):
       </p>
-      <pre><code>docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.api .
-docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.nginx .</code></pre>
+      <pre><code>task docker:build:multi</code></pre>
       <p>
         For a quick build for the host platform only, loaded into the local
         image store:
