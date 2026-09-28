@@ -115,12 +115,61 @@
         </p>
         <p>
           Like every compose-based task, the tasks need <code>DOCKER_USERNAME</code>, <code>BUILD_SHA</code> and
-          <code>BUILD_CONTEXT</code> in the environment. The workflows set all three. Locally, you set them yourself.
+          <code>BUILD_CONTEXT</code> in the environment. The workflows set all three as job environment variables.
+          Locally, <code>DOCKER_USERNAME</code> and <code>BUILD_CONTEXT</code> come from the git-ignored
+          <code>.github/workflows/.vars</code>, which the root <code>Taskfile.yml</code> loads as a dotenv file, or
+          from your shell. You set <code>BUILD_SHA</code> yourself. <code>Taskfile.Docker.yml</code> must not
+          redeclare these three in its <code>env:</code> block: a <code>'{{.VAR}}'</code> template there cannot see
+          dotenv values, so it would overwrite them with empty strings.
         </p>
       </div>
 
+      <h2>Building locally on any host</h2>
+      <p>
+        The same task builds both platforms on an arm64 host (Apple Silicon) and on an amd64 host (Intel/AMD). The
+        non-native platform's final stages run under QEMU, as in CI. The host needs two things: QEMU binfmt handlers
+        for the other architecture, and a builder that can produce multi-platform images.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Host</th>
+            <th scope="col">One-time setup</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Docker Desktop (macOS, Windows, any CPU)</td>
+            <td>
+              None. Docker Desktop ships QEMU, and its default builder uses the containerd image store, which holds
+              multi-platform images.
+            </td>
+          </tr>
+          <tr>
+            <td>Docker Engine on Linux</td>
+            <td>
+              <p>Install QEMU handlers for the other architecture (repeat after a reboot unless your distribution persists them):</p>
+              <pre><code>docker run --privileged --rm tonistiigi/binfmt --install all</code></pre>
+              <p>Then create a builder that supports multi-platform builds, because the default <code>docker</code> driver does not unless the containerd image store is enabled:</p>
+              <pre><code>docker buildx create --name multi --driver docker-container --use</code></pre>
+              <p>Check with <code>docker buildx ls</code> that the active builder lists both <code>linux/amd64</code> and <code>linux/arm64</code>.</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Create <code>.github/workflows/.vars</code> with <code>DOCKER_USERNAME</code> and <code>BUILD_CONTEXT</code>
+        (it is git-ignored, so each developer has their own), then build both platforms without pushing:
+      </p>
+      <pre><code>BUILD_SHA=$(git rev-parse --short HEAD) task docker:build:multi</code></pre>
+      <p>
+        With the <code>docker-container</code> driver, the result stays in the builder's cache and is not loaded into
+        <code>docker images</code>. That is enough to prove that both architectures build. Use
+        <code>task docker:build:app</code> for a host-platform image that you want to run.
+      </p>
+
       <h2>Verifying</h2>
-      <p>Build both platforms locally without pushing:</p>
+      <p>Build both platforms locally without pushing, with every variable given inline:</p>
       <pre><code>DOCKER_USERNAME=isuperman BUILD_SHA=local BUILD_CONTEXT=local task docker:build:multi</code></pre>
       <p>After a release, confirm that each published tag lists both platforms:</p>
       <pre><code>docker buildx imagetools inspect docker.io/isuperman/bibleguessr-api:&lt;tag&gt;
