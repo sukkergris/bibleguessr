@@ -6,6 +6,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
+env:
+  # Platforms every Docker image is built for. Keep in sync with release.yml.
+  IMAGE_PLATFORMS: linux/amd64,linux/arm64
+
 jobs:
   backend-test:
     runs-on: ubuntu-24.04
@@ -37,17 +41,34 @@ jobs:
       - run: task frontend:test
       - run: task frontend:build
 
+  # Builds both images for every platform in IMAGE_PLATFORMS without pushing,
+  # so a change that breaks one architecture fails CI rather than the release.
+  # The GitHub Actions cache is shared with release.yml's docker-publish job.
   docker-build:
     needs: [backend-test, frontend-build]
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        image: [api, nginx]
     env:
       DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
       BUILD_SHA: ${{ github.sha }}
       BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
     steps:
       - uses: actions/checkout@v4
-      - uses: arduino/setup-task@v2
+      - id: version
+        run: echo "tag=$(scripts/ci/load-image-version.sh)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
         with:
-          version: '3.x'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task docker:build:app
+          context: .
+          file: build/Dockerfile.${{ matrix.image }}
+          platforms: ${{ env.IMAGE_PLATFORMS }}
+          build-args: |
+            BUILD_SHA=${{ env.BUILD_SHA }}
+            BUILD_CONTEXT=${{ env.BUILD_CONTEXT }}
+          tags: ${{ env.DOCKER_USERNAME }}/bibleguessr-${{ matrix.image }}:${{ steps.version.outputs.tag }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }},ignore-error=true

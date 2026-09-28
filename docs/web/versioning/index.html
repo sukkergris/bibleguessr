@@ -269,9 +269,14 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
 
       <h3>On a real GitHub runner</h3>
       <p>
-        Both GitHub Actions workflows run the same script through Task, so
-        they publish under whatever value it currently returns — the same one
-        a local build would produce from the same checkout. No separate
+        Both GitHub Actions workflows call the same script directly (a
+        <code>version</code> step feeding <code>docker/build-push-action</code>'s
+        <code>tags</code>), so they publish under whatever value it currently
+        returns — the same one a local build would produce from the same
+        checkout. They do not go through
+        <span class="file-ref">build/docker-compose.build.yml</span>; see
+        <a href="../multi-platform-images/index.html">Multi-platform images</a>.
+        No separate
         <code>IMAGE_TAG</code> workflow variable is necessary; the script is
         the single source, checked in like any other file.
       </p>

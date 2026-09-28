@@ -1,14 +1,20 @@
 # Production image for the BibleGuessr backend API (F# / ASP.NET Core).
 # Build context is the repository root, e.g.:
 #   docker build -f build/Dockerfile.api -t bibleguessr-api .
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+#
+# Multi-platform (linux/amd64 + linux/arm64): the build stage always runs on
+# the builder's native platform ($BUILDPLATFORM) and cross-publishes for the
+# target with `-a $TARGETARCH`, so dotnet never runs under QEMU emulation.
+# Only the runtime stage is built per target platform.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+ARG TARGETARCH
 WORKDIR /src
 
 # Restore first, using only the project files, so dependency restore is
 # cached independently of source code changes.
 COPY backend/Api/BibleGuessr.Api.fsproj backend/Api/
 COPY backend/Domain/BibleGuessr.Domain.fsproj backend/Domain/
-RUN dotnet restore backend/Api/BibleGuessr.Api.fsproj
+RUN dotnet restore backend/Api/BibleGuessr.Api.fsproj -a "$TARGETARCH"
 
 # Now bring in the rest of the source and publish. (Restore runs again here
 # rather than passing --no-restore: on Alpine, publish's own dependency
@@ -17,6 +23,7 @@ COPY backend/Api/ backend/Api/
 COPY backend/Domain/ backend/Domain/
 RUN dotnet publish backend/Api/BibleGuessr.Api.fsproj \
     --configuration Release \
+    -a "$TARGETARCH" \
     --output /app/publish
 
 

@@ -4,7 +4,10 @@
 #   docker build -f build/Dockerfile.nginx -t bibleguessr-nginx .
 # Pin the build image to the current Alpine release so it receives the latest
 # security fixes instead of relying on the moving, unversioned Alpine tag.
-FROM node:24-alpine3.23 AS build-env
+# The build stage runs on the builder's native platform ($BUILDPLATFORM):
+# its output is platform-independent static files, so a multi-platform
+# build runs Vite once, natively, instead of once per target under QEMU.
+FROM --platform=$BUILDPLATFORM node:24-alpine3.23 AS build-env
 
 # Bring Alpine packages up to date to reduce vulnerabilities in the build image.
 RUN apk upgrade --no-cache
@@ -28,7 +31,8 @@ RUN echo "${BUILD_CONTEXT}" > dist/build-context.txt
 
 # Pin to a specific nginx release on Alpine instead of the moving `alpine`
 # tag, so the base image only changes when we bump it here. The njs module
-# ships with this image as a dynamic module; nginx.conf loads it.
+# ships with this image as a dynamic module; nginx.conf loads it. The
+# official nginx image is multi-arch, so this stage is built per target.
 FROM nginx:1.31.6-alpine AS final
 
 # Bring Alpine packages up to date to reduce vulnerabilities in the runtime image.

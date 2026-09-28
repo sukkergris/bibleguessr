@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-platform images — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Multi-platform images</h1>
+      <p class="subtitle">
+        Both Docker images are published as one multi-platform manifest list covering <code>linux/amd64</code> and
+        <code>linux/arm64</code>, under the same names and tags as before.
+      </p>
+
+      <h2>Why this exists</h2>
+      <p>
+        The production server is arm64 and has no emulation, so an amd64-only image fails with
+        <code>exec format error</code>. Apple Silicon development machines are arm64 too, and pulling an amd64-only
+        image there prints a platform-mismatch warning and runs under QEMU. With a manifest list, Docker pulls the
+        variant that matches the host automatically. The deploy repository needs no changes.
+      </p>
+
+      <h2>How the images are built</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Image</th>
+            <th scope="col">Build stage</th>
+            <th scope="col">Final stage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>bibleguessr-api</code></td>
+            <td>
+              <code>FROM --platform=$BUILDPLATFORM</code> .NET SDK. It runs natively on the builder and cross-publishes
+              with <code>dotnet publish -a $TARGETARCH</code> (the RID becomes <code>linux-musl-x64</code> or
+              <code>linux-musl-arm64</code>).
+            </td>
+            <td><code>aspnet</code> runtime, one per target platform. It runs as <code>apiuser</code> (UID 1000).</td>
+          </tr>
+          <tr>
+            <td><code>bibleguessr-nginx</code></td>
+            <td>
+              <code>FROM --platform=$BUILDPLATFORM</code> Node. Vite runs once, natively. Its output is
+              platform-independent static files.
+            </td>
+            <td>The official multi-arch <code>nginx</code> Alpine image, one per target platform.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Only the short <code>RUN</code> steps in the final stages (<code>apk upgrade</code>, <code>adduser</code>,
+        <code>mkdir</code>) execute under QEMU for the non-native platform. The compilers never run emulated.
+      </p>
+
+      <h2>In the workflows</h2>
+      <p>
+        <span class="file-ref">.github/workflows/ci.yml</span> (job <code>docker-build</code>) and
+        <span class="file-ref">.github/workflows/release.yml</span> (job <code>docker-publish</code>) use
+        <code>docker/setup-qemu-action</code>, <code>docker/setup-buildx-action</code> and
+        <code>docker/build-push-action</code>, one matrix job per image. The target platforms come from the
+        workflow-level <code>IMAGE_PLATFORMS</code> variable, which must stay the same in both files. CI builds without
+        pushing, so a change that breaks one architecture fails before a release. The release job pushes. Both jobs
+        share a GitHub Actions build cache, scoped per image.
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">Local compose builds are single-platform</span>
+        <p>
+          <code>task docker:build:*</code> still uses <span class="file-ref">build/docker-compose.build.yml</span> and
+          builds for the host platform only. That is fine for local testing. Do not use
+          <code>task docker:publish:app</code> to publish a release: it would replace the multi-platform tag with a
+          single-platform image.
+        </p>
+      </div>
+
+      <h2>Verifying</h2>
+      <p>Build both platforms locally without pushing:</p>
+      <pre><code>docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.api .
+docker buildx build --platform linux/amd64,linux/arm64 -f build/Dockerfile.nginx .</code></pre>
+      <p>After a release, confirm that each published tag lists both platforms:</p>
+      <pre><code>docker buildx imagetools inspect docker.io/isuperman/bibleguessr-api:&lt;tag&gt;
+docker buildx imagetools inspect docker.io/isuperman/bibleguessr-nginx:&lt;tag&gt;</code></pre>
+
+      <h2>Alternative: native arm64 runners</h2>
+      <p>
+        Instead of QEMU, each platform could build on its own runner (<code>runs-on: ubuntu-24.04-arm</code>). The
+        per-platform digests would then be merged with <code>docker buildx imagetools create</code>. This is not the
+        default. Because the heavy stages already run natively, the gain is small, and arm64 runner availability for
+        private repositories depends on the GitHub plan.
+      </p>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">build/Dockerfile.api</span>, <span class="file-ref">build/Dockerfile.nginx</span>,
+        <span class="file-ref">.github/workflows/ci.yml</span> and
+        <span class="file-ref">.github/workflows/release.yml</span>.
+      </p>
+    </main>
+  </body>
+</html>
