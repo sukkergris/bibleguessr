@@ -28,6 +28,9 @@ includes:
   test:
     taskfile: ./Taskfile.Test.yml
     dir: .
+  github:
+    taskfile: ./Taskfile.GitHub.yml
+    dir: .
 tasks:
   default:
     desc: List all available tasks

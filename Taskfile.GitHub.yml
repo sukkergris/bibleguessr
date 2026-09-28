@@ -1,0 +1,35 @@
+version: '3'
+
+# Steps 5 and 6 of a release (see docs/web/cutting-a-release): check what the
+# release workflow produced, then publish the draft. Both act on
+# v<release version>, where the release version is IMAGE_TAG from
+# scripts/ci/load-image-version.sh, exported by the root Taskfile.yml.
+
+vars:
+  TAG_PREFIX: v
+
+env:
+  DOCKER_USERNAME: '{{.DOCKER_USERNAME}}'
+
+tasks:
+
+  release:check:
+    desc: "Step 5 — check the GitHub release and both Docker images for v<release version>"
+    dir: .
+    cmds:
+      - scripts/ci/check-github-release.sh "{{.TAG_PREFIX}}${IMAGE_TAG}"
+
+  release:publish:
+    desc: "Step 6 — publish the draft GitHub release for v<release version>"
+    dir: .
+    prompt: Publish the draft GitHub release for {{.TAG_PREFIX}}{{.IMAGE_TAG}}? It becomes public and cannot be un-published quietly.
+    cmds:
+      - task: release:check
+      - |
+        tag="{{.TAG_PREFIX}}${IMAGE_TAG}"
+        if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" != "true" ]; then
+          echo "$tag is already published — nothing to do." >&2
+          exit 1
+        fi
+        gh release edit "$tag" --draft=false
+        gh release view "$tag" --json url --jq .url
