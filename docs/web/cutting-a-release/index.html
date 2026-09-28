@@ -13,8 +13,8 @@
       <h1>Cutting a release</h1>
       <p class="subtitle">
         The checklist for shipping a release: which of three version values
-        to edit, in what order, and the one edit that's easy to forget
-        because it doesn't follow the same rule as the other two.
+        to edit, in what order, and the one edit that's required every time
+        because it names the release itself.
       </p>
 
       <div class="callout">
@@ -22,8 +22,8 @@
         <p>
           This is the practical checklist — what to touch and in what order.
           <a href="../versioning/index.html">Versioning</a>
-          explains why the three values are independent and never meant to
-          match each other, and
+          explains why the two application revisions are independent of the
+          release version, and
           <a href="../frontend-release/index.html">Application release</a>
           covers what the release workflow itself does once the tag lands.
           Read this one first if you just want to ship.
@@ -37,12 +37,12 @@
       </p>
       <ul>
         <li>
-          <strong><code>frontend/package.json</code>'s <code>version</code></strong>
+          <strong><code>frontend/package.json</code>'s <code>revision</code></strong>
           — edit only if the frontend changed.
         </li>
         <li>
           <strong>
-            <code>BackendVersion</code>
+            <code>BackendRevision</code>
             in
             <span class="file-ref">backend/Api/Program.fs</span>
           </strong>
@@ -53,20 +53,23 @@
             the returned value in
             <span class="file-ref">scripts/ci/load-image-version.sh</span>
           </strong>
-          — edit <em>every</em> release, whether or not either application
-          changed.
+          — the <strong>release version</strong>. Edit it <em>every</em>
+          release, whether or not either application changed.
         </li>
       </ul>
       <div class="callout limitation">
         <span class="callout-title">The third one isn't optional</span>
         <p>
-          Both Docker images are rebuilt and republished on every tag push,
-          regardless of what triggered the release. Skipping the
+          The release version is the git tag (<code>v&lt;version&gt;</code>),
+          the GitHub release and the tag of both Docker images. The
+          <code>check-tag</code>
+          job in the release workflow refuses to run unless the pushed tag is
+          exactly
+          <code>v</code>
+          followed by what
           <code>load-image-version.sh</code>
-          edit doesn't skip the publish — it just means the new images
-          silently overwrite whatever tag the script last returned, instead
-          of publishing under their own. This is the mistake this checklist
-          exists to prevent.
+          returns, so a forgotten edit fails the run before anything is built
+          or published instead of silently overwriting the previous images.
         </p>
       </div>
 
@@ -78,41 +81,43 @@
           you want to ship.
         </li>
         <li>
-          If the frontend changed, bump
-          <code>version</code>
+          If the frontend changed, increment
+          <code>revision</code>
           in
           <span class="file-ref">frontend/package.json</span>
           .
         </li>
         <li>
-          If the backend changed, bump
-          <code>BackendVersion</code>
+          If the backend changed, increment
+          <code>BackendRevision</code>
           in
           <span class="file-ref">backend/Api/Program.fs</span>
-          .
+          . Both can be done with
+          <code>task release:revision -- frontend backend</code>
+          (name only the side that changed).
         </li>
         <li>
           Every time, regardless of the two steps above: edit the returned
           value in
           <span class="file-ref">scripts/ci/load-image-version.sh</span>
-          to something new, following the project's
+          to the new release version, in the project's
           <code>n.n.n</code>
           form (e.g.
-          <code>1.1.0</code>
+          <code>0.0.2</code>
           ).
         </li>
         <li>
           Commit and push whichever of the three files you actually changed
-          — the two application-version files are omitted if their
+          — the two revision files are omitted if their
           application didn't change, but
           <span class="file-ref">scripts/ci/load-image-version.sh</span>
           is always in the commit.
         </li>
         <li>
           Tag the pushed commit
-          <code>frontend-v&lt;version&gt;</code>
+          <code>v&lt;release version&gt;</code>
           , matching
-          <span class="file-ref">frontend/package.json</span>
+          <span class="file-ref">scripts/ci/load-image-version.sh</span>
           , and push the tag. The tag is the release trigger — see
           <a href="../frontend-release/index.html">Application release</a>
           for what runs afterward and how to watch it.
@@ -122,34 +127,38 @@
       <h2>Why the third value works differently</h2>
       <p>
         <code>frontend/package.json</code>
-        's version and
-        <code>BackendVersion</code>
-        are each their application's own semantic version — they change when
-        that application's behavior changes, and nothing else. The value
+        's
+        <code>revision</code>
+        and
+        <code>BackendRevision</code>
+        are plain integer counters, one per application — incremented by one
+        when that application changes, and nothing else. They are for humans:
+        a counter that did or did not move tells you at a glance which side a
+        release changed. The value
         <span class="file-ref">scripts/ci/load-image-version.sh</span>
-        returns is a different kind of thing: a deployment coordinate for
-        the pair of Docker images built from this commit, not either
-        application's version. It doesn't need to match either bump above,
-        or follow any particular scheme beyond being new — but it does need
-        to actually be new, every time, because both images publish under it
-        unconditionally.
+        returns is a different kind of thing: the version of the release as
+        a whole — one number for the tag, the GitHub release and the pair of
+        Docker images built from this commit. It doesn't need to match either
+        application revision, but it does need to be new every time, because
+        each release is published under it.
       </p>
       <p>
         See
         <a href="../versioning/index.html#bumping">Versioning: Bumping a version</a>
-        for the full reasoning behind keeping the three values independent.
+        for the full reasoning behind keeping the application revisions
+        independent of the release version.
       </p>
 
       <h2>A worked example</h2>
       <pre><code>task release:bundle
 git add frontend/package.json backend/Api/Program.fs scripts/ci/load-image-version.sh
-git commit -m "release: frontend v0.8.3"
+git commit -m "release: v0.0.1"
 git push origin main
-git tag frontend-v0.8.3
-git push origin frontend-v0.8.3
+git tag v0.0.1
+git push origin v0.0.1
 gh run watch</code></pre>
       <p>
-        Omit the two application-version files from
+        Omit the two revision files from
         <code>git add</code>
         if their application didn't change this time —
         <span class="file-ref">scripts/ci/load-image-version.sh</span>
@@ -169,8 +178,10 @@ gh run watch</code></pre>
         are the three files this checklist edits.
         <span class="file-ref">.github/workflows/release.yml</span>
         is what a pushed
-        <code>frontend-v*</code>
-        tag triggers —
+        <code>v&lt;n.n.n&gt;</code>
+        tag triggers, and
+        <span class="file-ref">scripts/ci/check-release-tag.sh</span>
+        is its first job's guard —
         <a href="../frontend-release/index.html">Application release</a>
         covers that workflow in full.
       </p>

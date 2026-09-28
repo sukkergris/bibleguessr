@@ -5,26 +5,27 @@ import { defineConfig } from 'vite';
 // "http" profile and Taskfile.Dotnet.yml's API_PORT.
 const apiTarget = 'http://localhost:5162';
 
-// The single source of truth for the frontend version is package.json.
+// The single source of truth for the frontend revision is package.json's
+// `revision` — a plain integer, bumped by hand when the frontend changes.
 // It is read here and injected into index.html's meta tag at build time,
-// so the version can never be edited in two places and drift apart.
+// so the revision can never be edited in two places and drift apart.
 const packageJson = readFileSync(
   new URL('./package.json', import.meta.url),
   'utf-8'
 );
-const appVersion = JSON.parse(packageJson).version;
+const appRevision = String(JSON.parse(packageJson).revision);
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     {
-      name: 'inject-app-version',
+      name: 'inject-app-revision',
       // Runs for both `vite dev` and `vite build`, so the Nerd tab shows
-      // the same version in development and in a production bundle.
+      // the same revision in development and in a production bundle.
       transformIndexHtml(html) {
         return html.replace(
-          /(<meta name="application-version" content=")[^"]*(")/,
-          `$1${appVersion}$2`
+          /(<meta name="application-revision" content=")[^"]*(")/,
+          `$1${appRevision}$2`
         );
       },
     },

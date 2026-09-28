@@ -9,9 +9,11 @@ open System.IO
 
 let rootDir = RootLoader.findRoot __SOURCE_DIRECTORY__
 
-let version = packageVersion ()
+let revision = packageRevision ()
 
-let artifact = $"bibleguessr-frontend-{version}"
+let revisionPrefix = "r"
+
+let artifact = $"bibleguessr-frontend-{revisionPrefix}{revision}"
 
 let artifactPath = Path.Combine( rootDir,"artifacts", artifact)
 

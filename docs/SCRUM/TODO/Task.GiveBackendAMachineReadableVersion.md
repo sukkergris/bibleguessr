@@ -1,5 +1,12 @@
 # Give the backend a machine-readable version
 
+> **Note (2026-09-28):** the application versions are now plain integer
+> revisions, not semantic versions — `BackendRevision` is `1`, and the
+> frontend's lives in `package.json`'s `revision` field (see "Versioning" in
+> `CLAUDE.md`). Revisit the requirements below before picking this up: a
+> `<Version>` property and a `major|minor|patch` bump no longer fit, while
+> an integer property and a plain increment would.
+
 `backend/Api/Program.fs:46` holds `let BackendVersion = "0.5.3"` as a bare
 literal, served at `/api/version`. There is no `<Version>` property in
 `backend/Api/BibleGuessr.Api.fsproj`, so nothing outside the running process

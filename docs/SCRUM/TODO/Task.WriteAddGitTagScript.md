@@ -1,6 +1,6 @@
 # Write `build/fsx/AddGitTag.fsx`
 
-A release today starts with a developer pushing a `frontend-v<version>` tag
+A release today starts with a developer pushing a `v<release version>` tag
 by hand. `Taskfile.Release.yml` was originally meant to have a
 `release:tag` task backing that step, but the script it would call,
 `AddGitTag.fsx`, was never written — `task release:tag` calls a file that
@@ -13,9 +13,12 @@ copying the same relative-path mistake into a new file.
 
 ## Requirements
 
-- Reads the version from `frontend/package.json` (the single source of
-  truth, per D1 in `BACKLOG/Feature.BuildFrontendAndPublishToGithubRelease.md`)
-  and creates the tag `frontend-v<version>` (D2, same document).
+- Reads the release version from `scripts/ci/load-image-version.sh` and
+  creates the tag `v<release version>`. This replaces D2 in
+  `BACKLOG/Feature.BuildFrontendAndPublishToGithubRelease.md`
+  (`frontend-v<version>` from `frontend/package.json`); see "The release
+  version" in `docs/web/versioning/index.html`. The tag must still pass
+  `scripts/ci/check-release-tag.sh`, which the release workflow runs first.
 - Refuses to tag when the working tree is dirty, with a message naming which
   files are dirty.
 - Refuses to overwrite an existing tag. Re-running is either a safe no-op or

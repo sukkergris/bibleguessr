@@ -12,6 +12,11 @@ tasks:
     cmds:
       - dotnet fsi {{.FSX_DIR}}/VerifyFrontendArtifact.fsx
 
+  revision:
+    desc: "Increment the frontend and/or backend revision by one (task release:revision -- frontend backend)"
+    cmds:
+      - dotnet fsi {{.FSX_DIR}}/IncrementRevision.fsx {{.CLI_ARGS}}
+
   bundle:
     desc: Package the verified frontend build as a release zip
     deps:

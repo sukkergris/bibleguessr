@@ -77,7 +77,7 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 
 export const api = {
   baseUrl: API_BASE_URL,
-  getVersion: () => getJson<{ version: string }>('/api/version'),
+  getRevision: () => getJson<{ revision: number }>('/api/revision'),
   getTranslations: () => getJson<string[]>('/api/translations'),
   // `restriction` narrows the pool of candidate verses to specific
   // books/chapters — see docs/SCRUM/Feature.BibleSelector.md. Encoded as

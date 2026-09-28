@@ -20,19 +20,25 @@
       <p>
         An application release creates two deliverables from one commit: a zip
         of the production frontend build, attached to a draft GitHub release,
-        and Docker images for the API and nginx services. The zip is named after
-        the frontend version. Both images currently use the fixed Docker tag
-        <code>0.0.1</code>.
+        and Docker images for the API and nginx services. The git tag, the
+        GitHub release and both Docker image tags all carry the
+        <a href="../versioning/index.html#release-version">release version</a>
+        from
+        <span class="file-ref">scripts/ci/load-image-version.sh</span>
+        , e.g.
+        <code>v0.0.1</code>
+        . The zip is named after the frontend revision.
       </p>
       <p>
-        The frontend and backend retain independent application versions. The
-        fixed image tag is a known deployment-versioning limitation.
+        The frontend and backend keep independent revisions.
       </p>
 
       <h2>The version is one value</h2>
       <p>
         <span class="file-ref">frontend/package.json</span>
-        holds the authoritative frontend version. Everything else derives from
+        's integer
+        <code>revision</code>
+        holds the authoritative frontend revision. Everything else derives from
         it — nothing is typed twice:
       </p>
       <ul>
@@ -45,19 +51,13 @@
           plugin in
           <span class="file-ref">frontend/vite.config.ts</span>
           . The source file holds the placeholder
-          <code>0.0.0</code>
+          <code>0</code>
           , which never survives a build.
         </li>
         <li>
           <strong>The zip filename</strong>
           —
-          <code>bibleguessr-frontend-&lt;version&gt;.zip</code>
-          .
-        </li>
-        <li>
-          <strong>The git tag</strong>
-          —
-          <code>frontend-v&lt;version&gt;</code>
+          <code>bibleguessr-frontend-r&lt;revision&gt;.zip</code>
           .
         </li>
       </ul>
@@ -70,7 +70,7 @@
         while the Nerd tab showed
         <code>0.7.2</code>
         , because nothing asserted the two agreed. Two tests now do —
-        <span class="file-ref">frontend/src/app-version.test.ts</span>
+        <span class="file-ref">frontend/src/app-revision.test.ts</span>
         checks a fresh build, and the release script checks the artifact about
         to be packaged.
       </p>
@@ -125,7 +125,7 @@
         <li>
           <strong>
             Still
-            <code>0.0.0</code>
+            <code>0</code>
           </strong>
           — injection did not run.
         </li>
@@ -141,9 +141,9 @@
         <code>dist/</code>
         is gitignored and can survive a branch switch, so without this check a
         bundle named
-        <code>0.9.0</code>
+        <code>r2</code>
         could contain
-        <code>0.8.3</code>
+        <code>r1</code>
         — a mislabelled artifact that nothing else would catch.
       </p>
       <p>
@@ -171,7 +171,7 @@
         The zip's entries sit at its root rather than under a top-level folder,
         so it must be unpacked with an explicit destination:
       </p>
-      <pre><code>unzip bibleguessr-frontend-0.8.3.zip -d /usr/share/nginx/html/bibleguessr/</code></pre>
+      <pre><code>unzip bibleguessr-frontend-r1.zip -d /usr/share/nginx/html/bibleguessr/</code></pre>
       <div class="callout limitation">
         <span class="callout-title">
           The
@@ -195,7 +195,7 @@
         The frontend artifact can be checked locally without credentials:
       </p>
       <pre><code>task release:bundle       # test, build, verify, package
-unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
+unzip -l artifacts/bibleguessr-frontend-r1.zip</code></pre>
       <p>
         <span class="file-ref">artifacts/</span>
         is gitignored, so a bundle never reaches a commit.
@@ -214,10 +214,11 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
         <li>
           <strong>
             A tag push matching
-            <code>frontend-v*</code>
+            <code>v&lt;n.n.n&gt;</code>
           </strong>
-          — runs the tests, publishes the Docker images, bundles the frontend,
-          and creates a draft release.
+          — checks that the tag matches the release version, then runs the
+          tests, publishes the Docker images, bundles the frontend, and creates
+          a draft release.
         </li>
         <li>
           <strong><code>workflow_dispatch</code></strong>
@@ -246,27 +247,27 @@ unzip -l artifacts/bibleguessr-frontend-0.8.3.zip</code></pre>
 
       <h2>Cutting a release</h2>
       <p>
-        First update the frontend version when the frontend changed, and update
-        the backend version when the backend changed. Then update
+        First increment the frontend revision when the frontend changed, and
+        the backend revision when the backend changed. Then set
         <span class="file-ref">scripts/ci/load-image-version.sh</span>
-        's returned value — unlike the two application versions, this one is
-        not conditional: both Docker images are rebuilt and republished on
-        every tag push, so it needs a new value every release regardless of
-        what changed. See
+        's returned value to the new release version — unlike the two
+        revisions, this one is not conditional: every release needs
+        its own number. See
         <a href="../versioning/index.html#bumping">Versioning</a>
         for the full reasoning. Commit and push all changed version files
-        before creating a tag whose version matches
-        <code>frontend/package.json</code>:
+        before creating a tag
+        <code>v&lt;release version&gt;</code>
+        :
       </p>
       <pre><code>task release:bundle
 git add frontend/package.json backend/Api/Program.fs scripts/ci/load-image-version.sh
-git commit -m "release: frontend v0.8.3"
+git commit -m "release: v0.0.1"
 git push origin main
-git tag frontend-v0.8.3
-git push origin frontend-v0.8.3
+git tag v0.0.1
+git push origin v0.0.1
 gh run watch</code></pre>
       <p>
-        Omit the two application-version files from the commit if their
+        Omit the two revision files from the commit if their
         application didn't change —
         <span class="file-ref">scripts/ci/load-image-version.sh</span>
         stays in either way. The tag is the release trigger, so it must point
@@ -279,21 +280,20 @@ gh run watch</code></pre>
         To undo a test release — the tag exists in three places, and deleting
         the release does not remove it:
       </p>
-      <pre><code>gh release delete frontend-v0.8.3 --yes --cleanup-tag  # release + remote tag
-git tag -d frontend-v0.8.3                             # local tag</code></pre>
+      <pre><code>gh release delete v0.0.1 --yes --cleanup-tag  # release + remote tag
+git tag -d v0.0.1                             # local tag</code></pre>
 
       <h2>Consuming the artifact</h2>
       <p>
         The release zip is a downloadable frontend distribution. The current
         nginx Dockerfile does not consume it; it builds the frontend source
-        from the same checkout as the API image. Both images are published with
-        the same fixed tag.
-      </p>
-      <p>
-        The fixed image tag is overwritten by each publish, so it cannot
-        identify a release or safely pin a deployment. Use the frontend GitHub
-        release for versioned frontend distribution; container-image versioning
-        remains a known limitation.
+        from the same checkout as the API image. Both images are published
+        under the release version, so a deployment can pin both by the same
+        tag as the GitHub release, e.g.
+        <code>0.0.1</code>
+        for
+        <code>v0.0.1</code>
+        .
       </p>
 
       <h2>Implementation</h2>
@@ -308,7 +308,7 @@ git tag -d frontend-v0.8.3                             # local tag</code></pre>
         .
         <span class="file-ref">frontend/vite.config.ts</span>
         injects the version at build time, and
-        <span class="file-ref">frontend/src/app-version.test.ts</span>
+        <span class="file-ref">frontend/src/app-revision.test.ts</span>
         asserts that it matches.
       </p>
       <p>

@@ -16,12 +16,14 @@
         which are typed by hand, and what to edit when a feature is finished.
       </p>
 
-      <h2>Two applications, two version numbers</h2>
+      <h2>Two applications, two revisions</h2>
       <p>
-        The frontend and the backend version independently. They ship
+        The frontend and the backend each carry their own revision, counted independently. They ship
         separately — the frontend as a zip on a GitHub release, the backend as a
-        Docker image — so there is no single "project version" and no attempt to
-        keep the two numbers in step.
+        Docker image — so there is no attempt to keep the two numbers in step.
+        A third number, the
+        <a href="#release-version">release version</a>
+        , names each release that ships them together.
       </p>
       <p>
         <span class="file-ref">CLAUDE.md</span>
@@ -30,12 +32,17 @@
         A change touching both bumps both.
       </p>
 
-      <h2>The frontend version</h2>
+      <h2>The frontend revision</h2>
       <p>
         <span class="file-ref">frontend/package.json</span>
-        is the single source of truth. It currently reads
-        <code>0.8.3</code>
-        . Three things derive from it, and none of them is edited by hand:
+        's
+        <code>revision</code>
+        is the single source of truth — a plain integer, currently
+        <code>1</code>
+        , incremented by one whenever the frontend changes. It is not a
+        semantic version, and it lives in its own field because npm reserves
+        <code>version</code>
+        for semver. Two things derive from it, and neither is edited by hand:
       </p>
       <ul>
         <li>
@@ -44,13 +51,13 @@
           reads
           <code>package.json</code>
           at build time and rewrites
-          <code>&lt;meta name="application-version"&gt;</code>
+          <code>&lt;meta name="application-revision"&gt;</code>
           in
           <span class="file-ref">frontend/index.html</span>
           through a
           <code>transformIndexHtml</code>
           plugin. The checked-in placeholder is
-          <code>0.0.0</code>
+          <code>0</code>
           and never survives a build.
           <span class="file-ref">frontend/src/components/nerd-panel.ts</span>
           reads that tag to display the version in the Nerd panel.
@@ -58,18 +65,19 @@
         <li>
           <strong>The release zip filename</strong>
           —
-          <code>bibleguessr-frontend-&lt;version&gt;.zip</code>
-          .
-        </li>
-        <li>
-          <strong>The git tag</strong>
-          —
-          <code>frontend-v&lt;version&gt;</code>
+          <code>bibleguessr-frontend-r&lt;revision&gt;.zip</code>
           .
         </li>
       </ul>
       <p>
-        To bump it, edit
+        The git tag does not derive from it — tags carry the
+        <a href="#release-version">release version</a>
+        instead.
+      </p>
+      <p>
+        To bump it, increment
+        <code>revision</code>
+        in
         <code>package.json</code>
         and rebuild. Nothing else needs touching.
       </p>
@@ -83,7 +91,7 @@
           while the Nerd panel showed
           <code>0.7.2</code>
           , because nothing asserted the two agreed. Two checks now do —
-          <span class="file-ref">frontend/src/app-version.test.ts</span>
+          <span class="file-ref">frontend/src/app-revision.test.ts</span>
           against a fresh build, and
           <span class="file-ref">build/fsx/VerifyFrontendArtifact.fsx</span>
           against the artifact about to be packaged. See
@@ -92,17 +100,20 @@
         </p>
       </div>
 
-      <h2>The backend version</h2>
+      <h2>The backend revision</h2>
       <p>
         <span class="file-ref">backend/Api/Program.fs</span>
-        holds it as a literal on line 46:
+        holds it as an integer literal on line 46, the same kind of counter
+        as the frontend's
+        <code>revision</code>
+        :
       </p>
-      <pre><code>let BackendVersion = "0.5.3"</code></pre>
+      <pre><code>let BackendRevision = 1</code></pre>
       <p>
         It is served from
-        <code>/api/version</code>
+        <code>/api/revision</code>
         , which the Nerd panel fetches and displays next to the frontend
-        version. To bump it, edit the literal.
+        version. To bump it, increment the literal.
       </p>
       <div class="callout limitation">
         <span class="callout-title">This is the weak spot</span>
@@ -111,11 +122,11 @@
           <code>&lt;Version&gt;</code>
           property in
           <span class="file-ref">backend/Api/BibleGuessr.Api.fsproj</span>
-          , so the backend version has no build-time representation. Nothing
+          , so the backend revision has no build-time representation. Nothing
           outside the running process can read it the way the release scripts
           read
           <code>package.json</code>
-          — a build script wanting the backend version would have to parse F#
+          — a build script wanting the backend revision would have to parse F#
           source. The assemblies carry the .NET default
           <code>1.0.0.0</code>
           , unrelated to the literal.
@@ -129,10 +140,36 @@
         </p>
       </div>
 
-      <h2>The container image tag</h2>
+      <h2 id="release-version">The release version</h2>
+      <p>
+        One number names a release as a whole. It is used in three places,
+        always identically:
+      </p>
+      <ul>
+        <li>
+          <strong>The git tag</strong>
+          —
+          <code>v&lt;release version&gt;</code>
+          , e.g.
+          <code>v0.0.1</code>
+          . Pushing it triggers the release workflow.
+        </li>
+        <li>
+          <strong>The GitHub release</strong>
+          , created from that tag.
+        </li>
+        <li>
+          <strong>The Docker image tag</strong>
+          of both images, exported as
+          <code>IMAGE_TAG</code>
+          .
+        </li>
+      </ul>
       <p>
         <span class="file-ref">build/docker-compose.build.yml</span>
-        names both images after an environment variable, using the
+        names both images after
+        <code>IMAGE_TAG</code>
+        , using the
         <code>:?</code>
         form so a missing value fails the build rather than producing an image
         tagged with an empty string:
@@ -140,10 +177,11 @@
       <pre><code>image: ${DOCKER_USERNAME:?}/bibleguessr-api:${IMAGE_TAG:?}
 image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
       <p>
-        <code>IMAGE_TAG</code>
-        is a deployment coordinate, not an application version. It tags both
-        images together, while the two applications inside them version
-        separately.
+        The release version is not an application revision. The two
+        applications inside a release count their revisions separately, and a
+        release records which of their revisions it contains through
+        <code>/api/revision</code>
+        and the Nerd panel.
       </p>
 
       <h3>Where the value comes from</h3>
@@ -165,15 +203,20 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         version, and nothing is meant to — it is a third, independent value,
         edited as its own step in a release.
       </p>
-      <div class="callout limitation">
-        <span class="callout-title">The tag is only as reliable as the edit</span>
+      <div class="callout">
+        <span class="callout-title">The tag and the script must agree</span>
         <p>
-          Nothing enforces that
+          The release workflow's first job,
+          <code>check-tag</code>
+          , runs
+          <span class="file-ref">scripts/ci/check-release-tag.sh</span>
+          against the pushed tag and fails the run unless the tag is exactly
+          <code>v</code>
+          followed by what
           <code>load-image-version.sh</code>
-          is bumped before a tag is pushed — it is a manual step, same as the
-          two application versions. Forgetting it means the new images
-          silently overwrite whatever the script last returned, rather than
-          publishing under their own tag. See
+          returns. Forgetting to bump the script therefore stops the release
+          before anything is built or published, rather than overwriting the
+          previous release's images. See
           <a href="#bumping">Bumping a version</a>
           for the full checklist a release goes through.
         </p>
@@ -270,61 +313,75 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
       </div>
 
       <h2 id="bumping">Bumping a version</h2>
+      <p>
+        The two revisions are incremented by a script rather than by hand, so
+        only the number changes and a file it cannot parse is left untouched:
+      </p>
+      <pre><code>task release:revision -- frontend          # or: backend, or: frontend backend</code></pre>
+      <p>
+        <span class="file-ref">build/fsx/IncrementRevision.fsx</span>
+        checks every named target before writing any of them — if one file
+        has no recognizable revision, or more than one, it exits non-zero and
+        neither file is changed.
+      </p>
       <ul>
         <li>
           <strong>Frontend changed</strong>
-          — edit
-          <code>version</code>
+          — increment
+          <code>revision</code>
           in
           <span class="file-ref">frontend/package.json</span>
           .
         </li>
         <li>
           <strong>Backend changed</strong>
-          — edit
-          <code>BackendVersion</code>
+          — increment
+          <code>BackendRevision</code>
           in
           <span class="file-ref">backend/Api/Program.fs</span>
           .
         </li>
         <li>
           <strong>Both changed</strong>
-          — edit both, independently. They are not meant to match.
+          — increment both, independently. They are counters, not meant to
+          match.
         </li>
         <li>
           <strong>Every release, regardless of what changed</strong>
           — edit the returned value in
           <span class="file-ref">scripts/ci/load-image-version.sh</span>
-          . Both Docker images are rebuilt and republished on every tag push,
-          so this is not conditional on the frontend or backend bump above —
-          skipping it means the new images overwrite whatever tag the script
-          last returned instead of publishing under their own.
+          to the new release version, and tag the release
+          <code>v</code>
+          followed by that value. This is not conditional on the frontend or
+          backend bump above — every release needs its own number.
         </li>
       </ul>
       <p>
-        <code>IMAGE_TAG</code>
-        is independent of the other two on purpose — it is a deployment
-        coordinate for the image pair, not either application's version. Its
-        value does not need to match either bump above, or follow any
-        particular scheme beyond being new.
+        The release version is independent of the other two on purpose — it
+        names the release, not either application. Its value does not need to
+        match either bump above, only to be new and in
+        <code>n.n.n</code>
+        form.
       </p>
 
       <h2>Implementation</h2>
       <p>
         <span class="file-ref">frontend/package.json</span>
-        holds the frontend version;
+        holds the frontend revision;
         <span class="file-ref">frontend/vite.config.ts</span>
         injects it and
-        <span class="file-ref">frontend/src/app-version.test.ts</span>
+        <span class="file-ref">frontend/src/app-revision.test.ts</span>
         asserts it.
         <span class="file-ref">backend/Api/Program.fs</span>
-        holds the backend version and serves it at
-        <code>/api/version</code>
+        holds the backend revision and serves it at
+        <code>/api/revision</code>
         .
       </p>
       <p>
         <span class="file-ref">scripts/ci/load-image-version.sh</span>
-        produces the image tag,
+        produces the release version,
+        <span class="file-ref">scripts/ci/check-release-tag.sh</span>
+        checks the pushed tag against it,
         <span class="file-ref">Taskfile.yml</span>
         and
         <span class="file-ref">Taskfile.Docker.yml</span>
@@ -338,7 +395,7 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
       </p>
       <p>
         <a href="../frontend-release/index.html">Frontend release</a>
-        covers how the frontend version becomes a published artifact.
+        covers how the frontend revision becomes a published artifact.
       </p>
     </main>
   </body>

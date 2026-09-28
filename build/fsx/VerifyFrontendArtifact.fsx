@@ -2,14 +2,14 @@
 
 open Common
 
-let expected = packageVersion ()
+let expected = packageRevision ()
 let validate () =
-    match metaVersion indexHtml with
-        | None -> failWith "Missing application-version meta tag in index.html"
-        | Some v when v = placeholderVersion -> failWith $"Version is still the {placeholderVersion} placeholder — injection did not run."
+    match metaRevision indexHtml with
+        | None -> failWith "Missing application-revision meta tag in index.html"
+        | Some v when v = placeholderRevision -> failWith $"Revision is still the {placeholderRevision} placeholder — injection did not run."
         | Some v when v <> expected ->
-            failWith $"Version mismatch: package.json says {expected}, artifact says {v}."
+            failWith $"Revision mismatch: package.json says {expected}, artifact says {v}."
         | Some v ->
-            printfn $"Frontend artifact verified: version {v}"
+            printfn $"Frontend artifact verified: revision {v}"
 
 validate ()

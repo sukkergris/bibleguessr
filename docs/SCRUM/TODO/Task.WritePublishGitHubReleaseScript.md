@@ -15,7 +15,7 @@ exercised.
 
 ## Requirements
 
-- Creates the release as a **draft** for the `frontend-v<version>` tag, and
+- Creates the release as a **draft** for the `v<release version>` tag, and
   uploads the artifact from `artifacts/`.
 - Shells out to the `gh` CLI rather than calling the REST API directly —
   `gh` already authenticates identically from a developer shell and from

@@ -42,7 +42,13 @@ Maintain sufficient color contrast for text, interactive controls, and focus sta
 
 ## Versioning
 
-When a feature is completed, increase the version number for each affected application. Update the frontend version when the feature changes the frontend, update the backend version when it changes the backend, and update both when it affects both applications.
+There are three values, each with its own job:
+
+- **Frontend revision** — the integer `revision` in `frontend/package.json`.
+- **Backend revision** — the integer `BackendRevision` in `backend/Api/Program.fs`.
+- **Release version** — the `n.n.n` value returned by `scripts/ci/load-image-version.sh`. It is the git tag (`v<release version>`), the GitHub release and the Docker image tag. The maintainer assigns it when cutting a release; do not change it as part of a feature.
+
+The two revisions are plain counters for humans, not semantic versions. When a feature is completed, increment the revision of each affected application by one: the frontend when the feature changes the frontend, the backend when it changes the backend, both when it affects both. The git SHA (`BUILD_SHA`) is what traces a build back to its exact commit.
 
 ## Data security
 

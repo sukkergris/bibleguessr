@@ -43,7 +43,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendVersion = "0.6.0"
+let BackendRevision = 1
 
 [<EntryPoint>]
 let main args =
@@ -313,8 +313,8 @@ let main args =
     app.MapGet("/api/health", healthResponse) |> ignore
 
     app.MapGet(
-        "/api/version",
-        Func<_>(fun () -> {| version = BackendVersion |})
+        "/api/revision",
+        Func<_>(fun () -> {| revision = BackendRevision |})
     )
     |> ignore
 

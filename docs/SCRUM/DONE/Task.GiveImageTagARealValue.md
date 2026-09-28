@@ -78,3 +78,14 @@ document if picking it up.
 ## Source
 
 "What remains" in `DONE/Feature.BuildBackendAndPublishToDockerhub.md`.
+
+## Outcome (2026-09-28)
+
+Resolved by a later decision that goes one step further: the value
+`load-image-version.sh` returns is now the **release version** — the git tag
+is `v<release version>`, and the same number names the GitHub release and
+both Docker images. `release.yml` triggers on `v<n.n.n>` tags instead of
+`frontend-v*`, and its first job runs `scripts/ci/check-release-tag.sh`,
+which fails the run unless the tag matches the script. The old `v1.0.0`,
+`v2.0.0` and `frontend-v0.8.3` tags were retired; releases restart at
+`v0.0.1`.

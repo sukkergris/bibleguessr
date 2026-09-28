@@ -27,15 +27,15 @@ export class NerdPanel extends LitElement {
   private open = false;
 
   @state()
-  private backendVersion?: string;
+  private backendRevision?: number;
 
   @state()
-  private versionError?: string;
+  private revisionError?: string;
 
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener('keydown', this._onKeydown);
-    void this._loadVersions();
+    void this._loadRevisions();
 
     // Deliberate, permanent console hint — keep this even when trimming
     // other logging elsewhere. The nerd panel has no visible on-page
@@ -69,21 +69,21 @@ export class NerdPanel extends LitElement {
     return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
   }
 
-  private async _loadVersions() {
+  private async _loadRevisions() {
     try {
-      const response = await api.getVersion();
-      this.backendVersion = response.version;
-      this.versionError = undefined;
+      const response = await api.getRevision();
+      this.backendRevision = response.revision;
+      this.revisionError = undefined;
     } catch (error) {
-      this.versionError =
-        error instanceof Error ? error.message : 'Backend version unavailable.';
+      this.revisionError =
+        error instanceof Error ? error.message : 'Backend revision unavailable.';
     }
   }
 
-  private _frontendVersion() {
+  private _frontendRevision() {
     return (
       document
-        .querySelector('meta[name="application-version"]')
+        .querySelector('meta[name="application-revision"]')
         ?.getAttribute('content') ?? 'Unknown'
     );
   }
@@ -138,24 +138,24 @@ export class NerdPanel extends LitElement {
             </p>
           </section>
 
-          <section class="versions" aria-labelledby="versions-heading">
-            <h3 id="versions-heading">Versions</h3>
+          <section class="revisions" aria-labelledby="revisions-heading">
+            <h3 id="revisions-heading">Revisions</h3>
             <dl>
               <div>
                 <dt>Frontend</dt>
-                <dd>${this._frontendVersion()}</dd>
+                <dd>${this._frontendRevision()}</dd>
               </div>
               <div>
                 <dt>Backend</dt>
                 <dd>
-                  ${this.backendVersion ??
-                  (this.versionError ? 'Unavailable' : 'Loading…')}
+                  ${this.backendRevision ??
+                  (this.revisionError ? 'Unavailable' : 'Loading…')}
                 </dd>
               </div>
             </dl>
-            ${this.versionError
+            ${this.revisionError
               ? html`
-                  <p class="error">${this.versionError}</p>
+                  <p class="error">${this.revisionError}</p>
                 `
               : null}
           </section>
@@ -239,7 +239,7 @@ export class NerdPanel extends LitElement {
       padding: 1rem;
     }
 
-    .versions {
+    .revisions {
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 0.8rem;

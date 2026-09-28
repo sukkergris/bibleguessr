@@ -85,14 +85,16 @@ succeeds and creates a tag named `main`.
 To trigger a real release:
 
 ```sh
-git tag frontend-v0.8.3
-git push origin frontend-v0.8.3
+git tag v0.0.1
+git push origin v0.0.1
 gh run watch
 ```
 
-The workflow also publishes the API and nginx images. Both currently use the
-fixed Docker tag `0.0.1`, which is overwritten by each publish and cannot
-identify a specific release. Container-image versioning remains a known gap.
+The tag must be `v<release version>`, where the release version is what
+`scripts/ci/load-image-version.sh` returns. The `check-tag` job fails the run
+before anything is built or published if the two disagree. The API and nginx
+images are published under the same release version, so the tag, the GitHub
+release and the Docker tags always share one number.
 
 ## Cleaning up a test release
 
@@ -100,8 +102,8 @@ Deleting the release does not delete the tag, and the tag exists in three
 places — the release, the remote, and locally:
 
 ```sh
-gh release delete frontend-v0.8.3 --yes --cleanup-tag  # release + remote tag
-git tag -d frontend-v0.8.3                             # local tag
+gh release delete v0.0.1 --yes --cleanup-tag  # release + remote tag
+git tag -d v0.0.1                             # local tag
 ```
 
 `--cleanup-tag` removes the remote tag along with the release. Without it, the
@@ -112,8 +114,8 @@ separately.
 To remove only a tag, without a release attached:
 
 ```sh
-git push origin :refs/tags/frontend-v0.8.3
-git tag -d frontend-v0.8.3
+git push origin :refs/tags/v0.0.1
+git tag -d v0.0.1
 ```
 
 ## `name:` on a step
