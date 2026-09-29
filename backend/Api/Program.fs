@@ -46,6 +46,12 @@ type GeneralBugReportRequest =
 [<Literal>]
 let BackendRevision = 1
 
+[<Literal>]
+let StartupLogCategory = "BibleGuessr.Api.Startup"
+
+[<Literal>]
+let ReportsLogCategory = "BibleGuessr.Api.Reports"
+
 [<EntryPoint>]
 let main args =
     let builder = WebApplication.CreateBuilder(args)
@@ -254,7 +260,9 @@ let main args =
 
     let app = builder.Build()
 
-    let startupLogger = app.Services.GetRequiredService<ILogger<obj>>()
+    let loggerFactory = app.Services.GetRequiredService<ILoggerFactory>()
+    let startupLogger = loggerFactory.CreateLogger StartupLogCategory
+    let reportsLogger = loggerFactory.CreateLogger ReportsLogCategory
 
     match unpackOutcome with
     | BibleArchiveUnpacker.AlreadyUpToDate ->
@@ -561,8 +569,8 @@ let main args =
     // was GET-with-query-params or a body-less POST.
     app.MapPost(
         "/api/reports",
-        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ILogger<obj>, ReportRequest, IResult>
-            (fun httpContext perIpLimiter globalLimiter smtp logger request ->
+        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ReportRequest, IResult>
+            (fun httpContext perIpLimiter globalLimiter smtp request ->
                 // Both limits must permit the request — see the limiters'
                 // construction above for why this is a manual check rather
                 // than declarative .RequireRateLimiting.
@@ -585,7 +593,7 @@ let main args =
                               ErrorMessage = request.ErrorMessage
                               SubmittedAt = DateTimeOffset.UtcNow }
 
-                        if MailSender.sendBibleFileUploadReport smtp logger report then
+                        if MailSender.sendBibleFileUploadReport smtp reportsLogger report then
                             Results.Ok({| status = "sent" |})
                         else
                             // The mail relay failed, but this is never the
@@ -605,8 +613,8 @@ let main args =
     // endpoints, and the global cap covers the relay as a whole.
     app.MapPost(
         "/api/abuse-reports",
-        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ILogger<obj>, AbuseReportRequest, IResult>
-            (fun httpContext perIpLimiter globalLimiter smtp logger request ->
+        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, AbuseReportRequest, IResult>
+            (fun httpContext perIpLimiter globalLimiter smtp request ->
                 use ipLease = perIpLimiter.AttemptAcquire(httpContext)
 
                 if not ipLease.IsAcquired then
@@ -639,7 +647,7 @@ let main args =
                                 detail = $"That %s{field} is too long — please keep it under %d{maxLength} characters."
                             )
                         | Ok report ->
-                            if MailSender.sendAbuseReport smtp logger report then
+                            if MailSender.sendAbuseReport smtp reportsLogger report then
                                 Results.Ok({| status = "sent" |})
                             else
                                 // Same reasoning as /api/reports: an SMTP
@@ -657,8 +665,8 @@ let main args =
     // able to dodge their budget by rotating between them.
     app.MapPost(
         "/api/bug-reports",
-        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, ILogger<obj>, GeneralBugReportRequest, IResult>
-            (fun httpContext perIpLimiter globalLimiter smtp logger request ->
+        Func<HttpContext, PartitionedRateLimiter<HttpContext>, FixedWindowRateLimiter, MailSender.SmtpSettings, GeneralBugReportRequest, IResult>
+            (fun httpContext perIpLimiter globalLimiter smtp request ->
                 use ipLease = perIpLimiter.AttemptAcquire(httpContext)
 
                 if not ipLease.IsAcquired then
@@ -688,7 +696,7 @@ let main args =
                                 detail = $"That %s{field} is too long — please keep it under %d{maxLength} characters."
                             )
                         | Ok report ->
-                            if MailSender.sendGeneralBugReport smtp logger report then
+                            if MailSender.sendGeneralBugReport smtp reportsLogger report then
                                 Results.Ok({| status = "sent" |})
                             else
                                 // Deliberately says nothing about the relay,
