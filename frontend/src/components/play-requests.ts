@@ -229,8 +229,8 @@ export class PlayRequests extends LitElement {
 
     button.deny {
       background: transparent;
-      color: #d33;
-      border: 1px solid #d33;
+      color: var(--error);
+      border: 1px solid var(--error);
     }
   `
 }

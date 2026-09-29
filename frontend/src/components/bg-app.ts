@@ -640,7 +640,7 @@ export class BgApp extends LitElement {
     }
 
     .error {
-      color: #d33;
+      color: var(--error);
     }
 
     .feedback {
@@ -657,7 +657,7 @@ export class BgApp extends LitElement {
 
     .feedback.incorrect {
       background: rgba(239, 68, 68, 0.15);
-      color: #dc2626;
+      color: var(--error);
     }
 
     .next {

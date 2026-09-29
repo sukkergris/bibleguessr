@@ -269,13 +269,13 @@ export class ReportAbuse extends LitElement {
     /* Not colour alone: an invalid field also gets a thicker border, so
        the state is visible without relying on hue. */
     [aria-invalid='true'] {
-      border-color: #d33;
+      border-color: var(--error);
       border-width: 2px;
     }
 
     .error {
       margin: 0;
-      color: #d33;
+      color: var(--error);
       font-weight: 600;
       font-size: 0.85rem;
     }

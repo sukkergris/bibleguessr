@@ -73,5 +73,18 @@ RUN case "$(dpkg --print-architecture)" in \
     && install -m 755 /tmp/act/act /usr/local/bin/act \
     && rm -rf /tmp/act /tmp/act.tar.gz
 
+RUN dotnet tool install --tool-path /usr/local/bin Microsoft.Playwright.CLI
+
+
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin
+
+# Docker CLI + socket access come from the docker-outside-of-docker feature in
+# devcontainer.json, not from here.
+
+# # act — run GitHub Actions workflows locally (https://github.com/nektos/act).
+# # Used to rehearse .github/workflows/playwright.yml without pushing.
+# # See docs/web/ci/index.html for how to use it.
+# RUN curl -fsSL https://raw.githubusercontent.com/nektos/act/master/install.sh | bash -s -- -b /usr/local/bin
+
 USER container-user
 RUN curl -fsSL https://claude.ai/install.sh | bash

@@ -894,7 +894,7 @@ export class RoomSetup extends LitElement {
     }
 
     .error {
-      color: #d33;
+      color: var(--error);
     }
   `
 }

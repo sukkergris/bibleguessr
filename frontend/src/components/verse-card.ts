@@ -33,8 +33,8 @@ export class VerseCard extends LitElement {
     :host {
       display: block;
       --card-bg: var(--surface-raised);
-      --card-text: #1a1a1a;
-      --card-border: #e5e4e7;
+      --card-text: var(--text);
+      --card-border: var(--border);
       --card-muted: var(--text-muted);
     }
 

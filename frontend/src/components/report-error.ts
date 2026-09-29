@@ -138,7 +138,7 @@ export class ReportError extends LitElement {
     .error {
       margin: 0;
       font-size: 0.8rem;
-      color: #d33;
+      color: var(--error);
     }
 
     .actions {

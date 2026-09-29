@@ -1120,7 +1120,7 @@ export class MultiplayerGame extends LitElement {
     }
 
     .timer.urgent {
-      color: #d33;
+      color: var(--error);
     }
 
     .timer-infinite {
@@ -1132,7 +1132,7 @@ export class MultiplayerGame extends LitElement {
       flex-direction: column;
       gap: 0.15rem;
       font-size: 0.9rem;
-      color: #922;
+      color: var(--error);
       background: rgba(221, 51, 51, 0.1);
       border: 1px solid rgba(221, 51, 51, 0.35);
       border-radius: 8px;
@@ -1148,7 +1148,7 @@ export class MultiplayerGame extends LitElement {
       padding: 2rem;
       border-radius: 12px;
       background: rgba(221, 51, 51, 0.08);
-      color: #d33;
+      color: var(--error);
       font-size: 0.9rem;
     }
 
@@ -1173,9 +1173,9 @@ export class MultiplayerGame extends LitElement {
       margin-top: 1rem;
       padding: 0.5rem 1rem;
       border-radius: 8px;
-      border: 1px solid #d33;
+      border: 1px solid var(--error);
       background: transparent;
-      color: #d33;
+      color: var(--error);
       font-size: 0.85rem;
       cursor: pointer;
     }
@@ -1195,7 +1195,7 @@ export class MultiplayerGame extends LitElement {
       padding: 1.25rem;
       border-radius: 12px;
       background: var(--surface-raised);
-      color: #201a24;
+      color: var(--text);
       box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.25);
     }
 
@@ -1209,7 +1209,7 @@ export class MultiplayerGame extends LitElement {
     }
 
     .forfeit-error {
-      color: #b42318;
+      color: var(--error);
       font-weight: 600;
     }
 

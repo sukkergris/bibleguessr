@@ -82,11 +82,19 @@
       </p>
       <p>
         That spec also surfaced a second, unrelated defect in the tokens themselves: dark-theme
-        <code>--accent</code> (<code>#aa3bff</code>) under white <code>--accent-text</code> measures
+        <code>--accent</code> was <code>#aa3bff</code>, and under white <code>--accent-text</code> it measured
         <strong>4.39:1</strong>, just short of the 4.5:1 AA threshold, affecting every accent-filled control
-        app-wide. It is tracked separately in
-        <span class="file-ref">docs/SCRUM/BUGS/Bug.DarkThemeAccentContrast.md</span> rather than fixed in passing,
-        because changing it recolours the whole application.
+        app-wide. It is now <code>#9b2bf0</code> (about 4.9:1), and the contrast specs check the selected state
+        too. See <span class="file-ref">docs/SCRUM/DONE/Bug.DarkThemeAccentContrast.md</span>.
+      </p>
+      <p>
+        The same class of defect as a hardcoded colour: the verse card set its text to <code>#1a1a1a</code> while
+        its background followed the theme, so in dark mode the verse itself read at <strong>1.19:1</strong>. A few
+        components likewise hardcoded reds (<code>#d33</code>, <code>#922</code>, <code>#b42318</code>) for error text,
+        which fall below 4.5:1 on the dark surfaces; they now use <code>--error</code>. A hex value in a
+        <code>color</code> declaration is a smell: it cannot follow the theme.
+        <span class="file-ref">frontend/e2e/game-screen-contrast.spec.ts</span> covers the verse text and the Guess
+        button in both themes.
       </p>
 
       <h2>Implementation</h2>

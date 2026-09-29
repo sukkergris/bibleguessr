@@ -47,10 +47,16 @@ Text drawn on `--accent` meets at least 4.5:1 in both themes.
 The first is simpler and keeps one accent contract; the second is more precise
 if the current hue matters to the design.
 
+## Resolution
+
+Dark-theme `--accent` darkened to `#9b2bf0` (≈4.9:1 against white). Both
+contrast specs now assert selected and unselected states, and
+`frontend/e2e/game-screen-contrast.spec.ts` checks the Guess button.
+
 ## Acceptance criteria
 
-- [ ] White text on `--accent` measures at least 4.5:1 in the dark theme.
-- [ ] The light theme keeps its current (passing) ratio.
-- [ ] A test asserts the ratio for accent-filled controls in both themes.
-- [ ] The unselected-tab-only scoping in `mode-switch-contrast.spec.ts` is
+- [x] White text on `--accent` measures at least 4.5:1 in the dark theme.
+- [x] The light theme keeps its current (passing) ratio.
+- [x] A test asserts the ratio for accent-filled controls in both themes.
+- [x] The unselected-tab-only scoping in `mode-switch-contrast.spec.ts` is
       widened back to both tabs once this is fixed.

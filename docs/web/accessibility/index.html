@@ -73,10 +73,9 @@
       <p>
         Because neither an accessible-name audit nor a unit test can see it, this is covered by computed-colour
         checks that read each control's foreground against the background actually painted behind it — resolved by
-        walking up through shadow hosts, since the controls themselves are transparent. Both specs assert only the
-        <em>unselected</em> state; the selected pill is <code>--accent-text</code> on <code>--accent</code>, which is
-        4.39:1 in the dark theme — a separate pre-existing defect in the token itself, affecting every accent-filled
-        control app-wide.
+        walking up through shadow hosts, since the controls themselves are transparent. Both specs assert the
+        selected and unselected states; the selected state is <code>--accent-text</code> on <code>--accent</code>,
+        which was 4.39:1 in the dark theme until <code>--accent</code> was darkened to <code>#9b2bf0</code>.
       </p>
 
       <h2>What automation cannot settle</h2>
@@ -93,8 +92,9 @@
         <span class="file-ref">frontend/e2e/helpers/a11y.ts</span> holds the audit;
         <span class="file-ref">frontend/e2e/accessibility.spec.ts</span> runs it per screen and covers keyboard
         access, announcements, zoom and touch targets.
-        <span class="file-ref">frontend/e2e/mode-switch-contrast.spec.ts</span> and
-        <span class="file-ref">frontend/e2e/game-type-contrast.spec.ts</span> hold the computed-colour checks.
+        <span class="file-ref">frontend/e2e/mode-switch-contrast.spec.ts</span>,
+        <span class="file-ref">frontend/e2e/game-type-contrast.spec.ts</span> and
+        <span class="file-ref">frontend/e2e/game-screen-contrast.spec.ts</span> hold the computed-colour checks.
       </p>
     </main>
   </body>

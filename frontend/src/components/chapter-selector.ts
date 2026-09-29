@@ -207,7 +207,7 @@ export class ChapterSelector extends LitElement {
     .error {
       margin: 0;
       font-size: 0.85rem;
-      color: #d33;
+      color: var(--error);
     }
 
     .grid {

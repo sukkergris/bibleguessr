@@ -73,13 +73,9 @@ function expectReadable(samples: Awaited<ReturnType<typeof sampleTabs>>, where: 
   expect(samples.length, `${where}: expected both mode-switch tabs`).toBe(2)
   expect(samples.some((s) => !s.selected), `${where}: expected one unselected tab`).toBe(true)
 
-  // Scoped to the UNSELECTED tab, which is what this bug was about. The
-  // selected tab is white on --accent, which is only 4.39:1 in the dark
-  // theme — a separate, pre-existing defect in the theme token itself that
-  // affects every accent-filled control app-wide, not just this switch. It
-  // is tracked in docs/SCRUM/BUGS/Bug.DarkThemeAccentContrast.md; fixing it
-  // means recolouring --accent, which is deliberately not done here.
-  for (const tab of samples.filter((s) => !s.selected)) {
+  // Both tabs: the selected one is white on --accent, which was only 4.39:1
+  // in the dark theme until docs/SCRUM/DONE/Bug.DarkThemeAccentContrast.md.
+  for (const tab of samples) {
     const ratio = contrastRatio(tab.fg, tab.bg)
     expect(
       ratio,

@@ -253,13 +253,13 @@ export class BugReport extends LitElement {
 
     /* Not colour alone: an invalid field also thickens its border. */
     [aria-invalid='true'] {
-      border-color: #d33;
+      border-color: var(--error);
       border-width: 2px;
     }
 
     .error {
       margin: 0;
-      color: #d33;
+      color: var(--error);
       font-weight: 600;
       font-size: 0.85rem;
     }

@@ -428,7 +428,7 @@ export class TranslationSourceSelect extends LitElement {
     }
 
     .error {
-      color: #d33;
+      color: var(--error);
     }
 
     .file-status {
@@ -542,13 +542,13 @@ export class TranslationSourceSelect extends LitElement {
       border-radius: 10px;
       border: 1px solid #ccc;
       background: transparent;
-      color: #d33;
+      color: var(--error);
       font-size: 0.9rem;
       cursor: pointer;
     }
 
     .cached-remove:hover {
-      border-color: #d33;
+      border-color: var(--error);
       background: rgba(221, 51, 51, 0.08);
     }
   `

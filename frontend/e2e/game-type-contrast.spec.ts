@@ -78,16 +78,14 @@ function expectReadable(samples: Sample[], where: string, expectedCount: number)
   expect(samples.length, `${where}: expected ${expectedCount} controls`).toBe(expectedCount)
   expect(samples.some((s) => !s.selected), `${where}: expected an unselected control`).toBe(true)
 
-  // Scoped to the UNSELECTED state, which is what this bug was about. The
-  // selected pill is --accent-text on --accent, only 4.39:1 in the dark
-  // theme — the separate pre-existing token defect tracked in
-  // docs/SCRUM/BUGS/Bug.DarkThemeAccentContrast.md, deliberately not fixed
-  // here since it means recolouring --accent app-wide.
-  for (const control of samples.filter((s) => !s.selected)) {
+  // Both states: the selected pill is --accent-text on --accent, which was
+  // only 4.39:1 in the dark theme until
+  // docs/SCRUM/DONE/Bug.DarkThemeAccentContrast.md.
+  for (const control of samples) {
     const ratio = contrastRatio(control.fg, control.bg)
     expect(
       ratio,
-      `${where}: "${control.label}" (unselected) renders ${control.fg} on ${control.bg} ` +
+      `${where}: "${control.label}" (${control.selected ? 'selected' : 'unselected'}) renders ${control.fg} on ${control.bg} ` +
         `— ${ratio.toFixed(2)}:1`,
     ).toBeGreaterThanOrEqual(minimumContrast)
   }
