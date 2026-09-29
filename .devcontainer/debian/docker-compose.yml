@@ -29,6 +29,14 @@ services:
       # blocks the dotfiles repo's stow packages from writing their own
       # subdirectories into ~/.config.
       - bibleguessr-gh:/home/container-user/.gh
+      # Persists the NuGet package cache across rebuilds. Without it, every
+      # rebuild empties ~/.nuget/packages, and the F# language server (which
+      # loads the projects once, right after startup) resolves no package
+      # references — Serilog etc. show as "not defined" in the editor until
+      # the projects are reloaded, even though `dotnet build` works.
+      # A corrupt package now survives a rebuild too; clear it with
+      # `dotnet nuget locals all --clear`.
+      - bibleguessr-nuget:/home/container-user/.nuget
       # - /var/run/docker.sock:/var/run/docker.sock
       # macOS Docker Desktop: forwards SSH agent via host-services socket.
       # Linux alternative: ${SSH_AUTH_SOCK}:/ssh-agent
@@ -100,6 +108,7 @@ volumes:
   bibleguessr-continue:
   bibleguessr-gemini:
   bibleguessr-gh:
+  bibleguessr-nuget:
   bibleguessr-mailpit-data:
 
 networks:
