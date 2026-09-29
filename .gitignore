@@ -331,8 +331,10 @@ test-results/
 ## Per-developer tool permissions, not project settings
 .claude/settings.local.json
 
-# Local-only evanessences directory
-.evanessences/
+# Local-only scratch folder: anything that must never be committed.
+# Only .gitkeep is tracked; it explains the folder's purpose.
+/.evanescence/*
+!/.evanescence/.gitkeep
 
 .env
 .secrets

@@ -14,6 +14,7 @@ backend/       F# / ASP.NET Core minimal API
   Api/         HTTP endpoints, SignalR hub, and the translation loaders
 frontend/      TypeScript + Lit web components (Vite)
 bibles/        Local translation source files the backend loads at startup
+.evanescence/  Local-only scratch folder; its contents are never committed
 ```
 
 ## Two ways to get verses

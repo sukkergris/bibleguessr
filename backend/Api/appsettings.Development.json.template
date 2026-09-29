@@ -1,0 +1,32 @@
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Override": { "Microsoft.AspNetCore": "Information" }
+    },
+    "WriteTo": [
+      { "Name": "Console" },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/bibleguessr-api-.log",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 7,
+          "formatter": "Serilog.Formatting.Compact.CompactJsonFormatter, Serilog.Formatting.Compact"
+        }
+      }
+    ]
+  },
+  "Smtp": {
+    "Host": "mailpit",
+    "Port": "1025",
+    "EnableSsl": "false",
+    "Username": "dev",
+    "Password": "dev",
+    "From": "bibleguessr@example.test",
+    "To": "bibleguessr@example.test"
+  },
+  "Reports": {
+    "PerIpDailyLimit": 10000,
+    "GlobalDailyLimit": 100000
+  }
+}

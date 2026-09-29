@@ -1,0 +1,20 @@
+# .evanescence
+
+A local-only scratch folder for anything that must **not** go into git:
+notes, experiments, exported logs, downloaded files, one-off scripts, and
+similar throwaway material.
+
+Everything in this folder is ignored by `.gitignore` except this `.gitkeep`,
+which exists so the folder is present in every clone and explains its purpose.
+
+## Rules
+
+- Put files here only for your own local use. Nothing here is shared,
+  backed up, or guaranteed to survive a fresh clone or a devcontainer rebuild.
+- Do not reference files in this folder from code, tests, scripts, or CI.
+  If something is needed by the project, it belongs somewhere tracked.
+- Being ignored is not the same as being safe. Secrets still belong in
+  `.env`/`.secrets`, and copyrighted Bible text follows the local-only
+  workflow in `docs/jw.org/README.md`.
+- Before running `git add -f` on anything in here, stop: forcing it defeats
+  the purpose of the folder.

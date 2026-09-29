@@ -9,6 +9,7 @@ open System.Threading.RateLimiting
 open BibleGuessr.Domain
 open BibleGuessr.Api
 open System.Text.Json.Serialization
+open Serilog.Events
 
 /// POST /api/reports's request body — see docs/SCRUM/Feature.ErrorMessageBibleLoader.md.
 /// A plain DTO (nullable `string`, not `string option`) since it's bound
@@ -52,6 +53,9 @@ let StartupLogCategory = "BibleGuessr.Api.Startup"
 [<Literal>]
 let ReportsLogCategory = "BibleGuessr.Api.Reports"
 
+[<Literal>]
+let HealthzPath = "/api/healthz"
+
 [<EntryPoint>]
 let main args =
     let builder = WebApplication.CreateBuilder(args)
@@ -72,15 +76,6 @@ let main args =
 
     builder.Services.ConfigureHttpJsonOptions(fun options ->
         options.SerializerOptions.Converters.Add(JsonFSharpConverter(jsonOptions)))
-    |> ignore
-
-    builder.Services.AddHttpLogging(fun options ->
-        options.LoggingFields <-
-            Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod
-            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath
-            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestQuery
-            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode
-            ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration)
     |> ignore
 
     builder.Services.AddSerilog(fun services configuration ->
@@ -260,6 +255,26 @@ let main args =
 
     let app = builder.Build()
 
+/// Liveness probes poll constantly; logging each one at Information buries
+/// real traffic. They drop to Verbose unless they fail, so an unhealthy
+/// (503) or crashing probe still shows up.
+    let requestLogLevel (ctx: HttpContext) (_elapsedMs: float) (error: exn) =
+        let isProbe =
+            [ HealthzPath; ]
+            |> List.exists (fun path -> ctx.Request.Path.Equals(PathString path))
+
+        if not (isNull error) || ctx.Response.StatusCode >= StatusCodes.Status500InternalServerError then
+            LogEventLevel.Error
+        elif isProbe then
+            LogEventLevel.Verbose
+        else
+            LogEventLevel.Information
+
+
+
+    app.UseSerilogRequestLogging(fun options ->
+    options.GetLevel <- Func<HttpContext, float, exn, LogEventLevel>(requestLogLevel)) |> ignore
+
     let loggerFactory = app.Services.GetRequiredService<ILoggerFactory>()
     let startupLogger = loggerFactory.CreateLogger StartupLogCategory
     let reportsLogger = loggerFactory.CreateLogger ReportsLogCategory
@@ -303,7 +318,6 @@ let main args =
 
     startupLogger.LogInformation("SMTP host for bug reports: {Host}:{Port}", smtpSettings.Host, smtpSettings.Port)
 
-    app.UseHttpLogging() |> ignore
 
     // /healthz is the conventional name for a liveness endpoint, and the
     // connection panel names it directly rather than calling it "backend"
@@ -325,8 +339,7 @@ let main args =
                     statusCode = StatusCodes.Status503ServiceUnavailable
                 ))
 
-    app.MapGet("/api/healthz", healthResponse) |> ignore
-    app.MapGet("/api/health", healthResponse) |> ignore
+    app.MapGet(HealthzPath, healthResponse) |> ignore
 
     app.MapGet(
         "/api/revision",
