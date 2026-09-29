@@ -275,6 +275,7 @@ __pycache__/
 
 # appsettings.*.json
 **/appsettings.*.json
+!appsettings.Production.json
 
 # Logfiles during development
 **/logfiles/

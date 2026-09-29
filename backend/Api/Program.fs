@@ -4,6 +4,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open Serilog
 open System.Threading.RateLimiting
 open BibleGuessr.Domain
 open BibleGuessr.Api
@@ -75,6 +76,13 @@ let main args =
             ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode
             ||| Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration)
     |> ignore
+
+    builder.Services.AddSerilog(fun services configuration ->
+    configuration
+        .ReadFrom.Configuration(builder.Configuration)
+        .ReadFrom.Services(services)
+            |> ignore)
+        |> ignore
 
     // No CORS setup here on purpose. The browser only ever reaches this
     // API same-origin: the web server in front (nginx in the server
