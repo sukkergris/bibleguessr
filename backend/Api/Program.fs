@@ -255,25 +255,9 @@ let main args =
 
     let app = builder.Build()
 
-/// Liveness probes poll constantly; logging each one at Information buries
-/// real traffic. They drop to Verbose unless they fail, so an unhealthy
-/// (503) or crashing probe still shows up.
-    let requestLogLevel (ctx: HttpContext) (_elapsedMs: float) (error: exn) =
-        let isProbe =
-            [ HealthzPath; ]
-            |> List.exists (fun path -> ctx.Request.Path.Equals(PathString path))
-
-        if not (isNull error) || ctx.Response.StatusCode >= StatusCodes.Status500InternalServerError then
-            LogEventLevel.Error
-        elif isProbe then
-            LogEventLevel.Verbose
-        else
-            LogEventLevel.Information
-
-
-
     app.UseSerilogRequestLogging(fun options ->
-    options.GetLevel <- Func<HttpContext, float, exn, LogEventLevel>(requestLogLevel)) |> ignore
+        options.GetLevel <- Func<HttpContext, float, exn, LogEventLevel>(RequestLogging.levelFor HealthzPath))
+    |> ignore
 
     let loggerFactory = app.Services.GetRequiredService<ILoggerFactory>()
     let startupLogger = loggerFactory.CreateLogger StartupLogCategory
@@ -321,11 +305,8 @@ let main args =
 
     // /healthz is the conventional name for a liveness endpoint, and the
     // connection panel names it directly rather than calling it "backend"
-    // — see docs/SCRUM/TODO/Feature.ConnectionPanelRefinements.md.
-    //
-    // /api/health stays mapped to the same handler: anything already
-    // pointing at it (a script, a container probe, a bookmark) keeps
-    // working. Renaming a health check is not worth breaking a probe over.
+    // — see docs/SCRUM/DONE/Feature.ConnectionPanelRefinements.md. It is
+    // the only health endpoint; the old /api/health alias was removed.
     //
     // No verses answers 503, not "ok": an API serving an empty game must
     // not look healthy (the connection panel shows any non-2xx as an error).
