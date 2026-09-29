@@ -22,6 +22,7 @@ git config --global --add safe.directory /xyz
 sudo chown -R container-user:container-user \
   "$HOME/.claude" \
   "$HOME/.continue" \
+  "$HOME/.gemini" \
   "$HOME/.gh" \
   "$HOME/.ssh" \
   "$HOME/.sshtemplate" 2>/dev/null || true
