@@ -40,6 +40,18 @@ services:
       GH_CONFIG_DIR: /home/container-user/.gh
     # Command to run when the container starts.
     # 'sleep infinity' keeps the container running indefinitely so VS Code can attach.
+    #
+    # 'init: true' puts Docker's tiny init (tini) in front of it as PID 1.
+    # Without it, 'sleep' itself is PID 1, and PID 1 is the process that
+    # inherits every orphaned process and must reap it once it exits. 'sleep'
+    # never does, so each VS Code window reload leaves its old extension-host
+    # children (the F# and C# language servers, test runs, shells) behind as
+    # zombies for the life of the container. They use no CPU or memory, but
+    # they still show up in process listings: `pgrep -x dotnet` (and so
+    # `task dotnet:status`) reports dead dotnet processes as running. tini
+    # also forwards stop signals, so the container shuts down promptly.
+    # Takes effect only on "Dev Containers: Rebuild Container".
+    init: true
     command: sleep infinity
 
     networks:
