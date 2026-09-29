@@ -1,4 +1,4 @@
-FROM isuperman/elm-devcontainer-foundation:0.1.10
+FROM isuperman/elm-devcontainer-foundation:0.1.11
 
 USER root
 
