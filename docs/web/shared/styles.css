@@ -367,3 +367,83 @@ footer.page-footer {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+
+/* Tag filter on the index page (shared/tag-filter.js). */
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 0.5rem;
+}
+
+.tag-filter[hidden] {
+  display: none;
+}
+
+.tag-filter-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tag-filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag-filter-button {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  /* At least 24x24 CSS px per WCAG 2.2's target-size minimum. */
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tag-filter-button:hover {
+  border-color: var(--accent);
+}
+
+.tag-filter-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Pressed state: filled, plus a check mark, so it is not conveyed by color
+   alone. --accent-text-on-soft rather than --accent: --bg text on --accent
+   is only ~4.4:1 in light mode; on --accent-text-on-soft it is ~7:1 in both
+   themes. */
+.tag-filter-button[aria-pressed='true'] {
+  background: var(--accent-text-on-soft);
+  border-color: var(--accent-text-on-soft);
+  color: var(--bg);
+}
+
+.tag-filter-check {
+  display: none;
+  margin-right: 0.3em;
+}
+
+.tag-filter-button[aria-pressed='true'] .tag-filter-check {
+  display: inline;
+}
+
+.tag-filter-status {
+  margin: 0 0 1rem;
+  min-height: 1.6em;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* .feature-card sets display: block, which would otherwise override the
+   hidden attribute the filter uses. */
+.feature-card[hidden] {
+  display: none;
+}

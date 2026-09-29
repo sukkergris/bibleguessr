@@ -29,7 +29,12 @@
       </div>
 
       <h2>Features</h2>
-      <div class="feature-grid">
+      <div class="tag-filter" role="group" aria-labelledby="tag-filter-label" data-tag-filter hidden>
+        <span class="tag-filter-label" id="tag-filter-label">Filter by tag</span>
+        <div class="tag-filter-buttons" data-tag-filter-buttons></div>
+      </div>
+      <p class="tag-filter-status" role="status" data-tag-filter-status></p>
+      <div class="feature-grid" data-tag-filter-grid>
         <a class="feature-card" href="multiplayer-rooms/index.html">
           <h3>Multiplayer rooms &amp; chat</h3>
           <p>
@@ -319,5 +324,6 @@
         BibleGuessr · docs/web · viewed via the project's VS Code extension
       </footer>
     </main>
+    <script src="shared/tag-filter.js" defer></script>
   </body>
 </html>
