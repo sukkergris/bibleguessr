@@ -98,4 +98,10 @@ describe('chapters', () => {
     expect(score({ book: 'Rut', chapter: 1, verseNumber: 15 })).toBe(0)
     expect(score({ book: 'Rut', chapter: 1, verseNumber: 16 })).toBe(1000)
   })
+
+  // In a shared result, what is given would always be ✅ — so it's left out.
+  it('leaves the given book out of a shared result — and a lone chapter too', () => {
+    expect(chapters.sharedColumns({ book: 'Rut', chapters: [1, 2] })).toEqual(['chapter', 'verseNumber'])
+    expect(chapters.sharedColumns({ book: 'Rut', chapters: [1] })).toEqual(['verseNumber'])
+  })
 })

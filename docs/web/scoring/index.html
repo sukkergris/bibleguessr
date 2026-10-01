@@ -143,6 +143,47 @@
         </p>
       </div>
 
+      <h2>Sharing a result</h2>
+      <p>
+        Both singleplayer's results and the <a href="../daily-quiz/index.html">daily quiz</a> have a
+        <em>Share result</em> button, and both write the shared text the same way —
+        <span class="file-ref">frontend/src/shared-kernel/result-sharing.ts</span>'s <code>composeShareText</code>:
+      </p>
+      <pre><code>BibleGuessr · Books
+1120 points
+Book · Chapter · Verse
+✅ ✅ ✅ 1110
+✅ ❌ ❌ 10
+❌ ❌ ❌ 0
+Played 2026-10-01 14:32 UTC
+https://www.bibleguessr.single/</code></pre>
+      <ul>
+        <li>
+          A heading (the game type, or the daily quiz and its date), the total, then a line per verse: ✅ (green
+          check) for each part guessed right, ❌ (red cross) otherwise, and that verse's points.
+        </li>
+        <li>
+          The marks come from <code>correctParts</code>, not from the points. Each game type says which columns its
+          shares show (<code>GameTypeDefinition.sharedColumns</code>): The Bible and Books all three; Chapters leaves
+          out what is given — the book, and the chapter too when only one was picked — since it would always be ✅.
+          So a one-chapter Chapters result is headed just <code>Verse</code>.
+        </li>
+        <li>
+          "Played …" with date and time in UTC, and — always last — a link to the game: the address it is served
+          from (<code>window.location.origin</code>), so it follows the environment. No share can leave the link
+          out: <code>composeShareText</code> always adds it.
+        </li>
+        <li>
+          No verses and no verse text: a share mustn't give answers away, and verse text never leaves the device.
+        </li>
+        <li>
+          <span class="file-ref">frontend/src/shared-ui/share-or-copy.ts</span> opens the device's share menu where
+          there is one and copies to the clipboard otherwise, for both buttons. It shares the text only, with no
+          separate title: some apps (Slack, for one) show the title in front of the text, which would repeat the
+          "BibleGuessr" the text already starts with.
+        </li>
+      </ul>
+
       <h2>Verify it</h2>
       <p>
         Both sides assert the identical scenarios (wrong book → 0; right book, wrong or missing chapter → 10; right

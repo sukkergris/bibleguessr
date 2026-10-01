@@ -12,6 +12,7 @@ import type { TemplateResult } from 'lit'
 import type { Guess, Verse, VerseRestriction, VerseSource } from '../shared-kernel/bible'
 import type { GameType } from '../shared-kernel/game-type-wire'
 import type { GuessConstraint } from '../shared-kernel/guess-constraint'
+import type { ResultColumn } from '../shared-kernel/result-sharing'
 import { books, type BooksSelection, type BooksWire } from './books/books'
 import { chapters, type ChaptersSelection, type ChaptersWire } from './chapters/chapters'
 import type { GameTypeDefinition } from './game-type-definition'
@@ -117,6 +118,13 @@ export function guessConstraintOf(choice: GameTypeChoice): GuessConstraint {
 export function scoreGuessOf(choice: GameTypeChoice, verse: Verse, guess: Guess): number {
   const playable: GameTypeChoice = isReady(choice) ? choice : FALLBACK
   return withDefinition(playable, (definition, selection) => definition.scoreGuess(selection!, verse, guess))
+}
+
+/** Which parts of each verse a shared result of this choice shows — by
+ * the choice's own game type. Nothing picked plays as FALLBACK. */
+export function sharedColumnsOf(choice: GameTypeChoice): readonly ResultColumn[] {
+  const playable: GameTypeChoice = isReady(choice) ? choice : FALLBACK
+  return withDefinition(playable, (definition, selection) => definition.sharedColumns(selection!))
 }
 
 /** The choice as sent with a play request or matchmaking entry, resolved

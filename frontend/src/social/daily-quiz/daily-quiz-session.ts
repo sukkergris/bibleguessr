@@ -38,7 +38,13 @@ export type DailyQuizSession =
       /** Every verse finished before the current one. */
       rounds: DailyQuizRound[]
     }
-  | { kind: 'finished'; quiz: DailyQuiz; rounds: DailyQuizRound[] }
+  | {
+      kind: 'finished'
+      quiz: DailyQuiz
+      rounds: DailyQuizRound[]
+      /** When the last verse was finished (ISO 8601) — for the shared result. */
+      finishedAt: string
+    }
 
 export const CHOOSING_BIBLE: DailyQuizSession = { kind: 'choosing-bible' }
 
@@ -85,11 +91,13 @@ export function skipped(session: DailyQuizSession): DailyQuizSession {
 }
 
 /** On to the next verse once the current one is finished — or to the end
- * after the last one. */
-export function advanced(session: DailyQuizSession): DailyQuizSession {
+ * after the last one, at `now` (passed in, so this stays pure). */
+export function advanced(session: DailyQuizSession, now: Date): DailyQuizSession {
   if (session.kind !== 'playing' || !session.feedback) return session
   const rounds = [...session.rounds, session.feedback]
-  if (session.roundIndex + 1 >= session.quiz.verses.length) return { kind: 'finished', quiz: session.quiz, rounds }
+  if (session.roundIndex + 1 >= session.quiz.verses.length) {
+    return { kind: 'finished', quiz: session.quiz, rounds, finishedAt: now.toISOString() }
+  }
   return { ...session, roundIndex: session.roundIndex + 1, current: { kind: 'looking-up' }, feedback: undefined, rounds }
 }
 

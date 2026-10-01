@@ -3,6 +3,7 @@ import { customElement, property, query, state } from 'lit/decorators.js'
 import type { Guess, VerseSource } from '../shared-kernel/bible'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import { layoutBooks, type BookCategoryGroup, type BookLayout } from './book-picker'
+import { buttonStyles } from './button-styles'
 
 const BOOK_FIELD = 'bg-book-guess'
 const CHAPTER_FIELD = 'bg-chapter-guess'
@@ -462,7 +463,9 @@ export class GuessForm extends LitElement {
     )
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -745,21 +748,9 @@ export class GuessForm extends LitElement {
       cursor: not-allowed;
     }
 
-    button {
-      padding: 0.6rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 1rem;
-      cursor: pointer;
-    }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

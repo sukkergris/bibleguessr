@@ -35,6 +35,8 @@ const verseFor = (r: VerseReference): Verse => ({
   reference: `${r.book} ${r.chapter}:${r.verseNumber}`,
 })
 
+const NOW = new Date('2026-10-01T14:32:09Z')
+
 const RUT = verseFor(quiz.verses[0])
 const JOHANNES = verseFor(quiz.verses[1])
 
@@ -96,7 +98,7 @@ describe('the daily quiz session', () => {
   })
 
   it('moves on to the next verse, keeping the round', () => {
-    const session = advanced(guessed(verseResolved(started(quiz), 0, RUT), { book: 'Rut' }))
+    const session = advanced(guessed(verseResolved(started(quiz), 0, RUT), { book: 'Rut' }), NOW)
     expect(session).toMatchObject({ kind: 'playing', roundIndex: 1, current: { kind: 'looking-up' }, feedback: undefined })
     if (session.kind !== 'playing') throw new Error('expected playing')
     expect(session.rounds.map((round) => round.points)).toEqual([10])
@@ -104,19 +106,21 @@ describe('the daily quiz session', () => {
 
   it('finishes after the last verse, with every round and the total', () => {
     let session = skipped(verseUnavailable(started(quiz), 0))
-    session = advanced(session)
+    session = advanced(session, NOW)
     session = guessed(verseResolved(session, 1, JOHANNES), { book: 'Johannes', chapter: 3, verseNumber: 16 })
-    session = advanced(session)
+    session = advanced(session, NOW)
 
     expect(session.kind).toBe('finished')
     if (session.kind !== 'finished') throw new Error('expected finished')
+    // When it was finished — for the shared result.
+    expect(session.finishedAt).toBe(NOW.toISOString())
     expect(session.rounds.map((round) => round.kind)).toEqual(['unavailable', 'answered'])
     expect(totalPoints(session.rounds)).toBe(1110)
   })
 
   it('does not move on before the current verse has been answered', () => {
     const session = verseResolved(started(quiz), 0, RUT)
-    expect(advanced(session)).toBe(session)
+    expect(advanced(session, NOW)).toBe(session)
   })
 
   it('can fail', () => {

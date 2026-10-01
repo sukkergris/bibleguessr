@@ -7,6 +7,7 @@ import { html } from 'lit'
 import { bookAtNumber, bookNumberOf } from '../../shared-kernel/book-numbers'
 import type { GameType } from '../../shared-kernel/game-type-wire'
 import { ANY_BOOK } from '../../shared-kernel/guess-constraint'
+import type { ResultColumn } from '../../shared-kernel/result-sharing'
 import { STANDARD_TIERS, tieredPoints } from '../../shared-kernel/scoring'
 import type { GameTypeDefinition } from '../game-type-definition'
 import './chapter-selector'
@@ -33,6 +34,11 @@ const CHAPTERS_TIERS = { ...STANDARD_TIERS, book: 0 }
 /** ...unless only one chapter was picked: then the chapter is a given
  * too, and only the verse is left to earn points for. */
 const LONE_CHAPTER_TIERS = { ...CHAPTERS_TIERS, chapter: 0 }
+
+/** The same given parts left out of a shared result, where they'd always
+ * show ✅. */
+const CHAPTERS_COLUMNS: readonly ResultColumn[] = ['chapter', 'verseNumber']
+const LONE_CHAPTER_COLUMNS: readonly ResultColumn[] = ['verseNumber']
 
 /** The wire format allows several books; this game type only ever sends
  * one, so the first is the one it's about. */
@@ -65,6 +71,7 @@ export const chapters: GameTypeDefinition<ChaptersSelection, ChaptersWire> = {
   // equivalent is backend/Domain/GameTypes/Chapters.fs's scoreGuess.
   scoreGuess: (selection, verse, guess) =>
     tieredPoints(verse, guess, selection.chapters.length === 1 ? LONE_CHAPTER_TIERS : CHAPTERS_TIERS),
+  sharedColumns: (selection) => (selection.chapters.length === 1 ? LONE_CHAPTER_COLUMNS : CHAPTERS_COLUMNS),
 
   toWire: (selection, booksInBibleOrder) => {
     const number = bookNumberOf(booksInBibleOrder, selection.book)

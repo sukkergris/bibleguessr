@@ -19,6 +19,12 @@
      keeps --corner-controls-inline-clearance free at both ends of its
      bottom line, so the buttons never cover it (see guess-form.ts's guess
      bar). Theme-independent, so only defined here. */
+  /* A filled destructive button (see shared-ui/button-styles.ts). The same
+     in both themes: dark red behind white text is well over 4.5:1, where
+     the dark theme's light --error would not be. */
+  --danger-solid: #b42318;
+  --danger-solid-text: #ffffff;
+
   --corner-button-size: 2.75rem;
   --corner-button-inset: 0.75rem;
   --corner-controls-inline-clearance: calc(var(--corner-button-inset) + var(--corner-button-size) + 0.5rem);

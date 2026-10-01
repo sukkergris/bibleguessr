@@ -1,5 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { buttonStyles } from '../../shared-ui/button-styles'
 
 const MS_PER_SECOND = 1000
 const SECONDS_PER_MINUTE = 60
@@ -64,7 +65,7 @@ export class NextQuizCountdown extends LitElement {
       return html`
         <div class="countdown">
           <p role="timer">A new quiz is ready.</p>
-          <button type="button" @click=${this._onPlayNewQuiz}>Play the new quiz</button>
+          <button type="button" class="compact secondary" @click=${this._onPlayNewQuiz}>Play the new quiz</button>
         </div>
       `
     }
@@ -79,7 +80,9 @@ export class NextQuizCountdown extends LitElement {
     this.dispatchEvent(new CustomEvent('new-quiz-requested', { bubbles: true, composed: true }))
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -99,21 +102,9 @@ export class NextQuizCountdown extends LitElement {
       font-variant-numeric: tabular-nums;
     }
 
-    button {
-      padding: 0.4rem 0.9rem;
-      border-radius: 8px;
-      border: 1px solid var(--accent);
-      background: transparent;
-      color: var(--accent);
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
 
-    button:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

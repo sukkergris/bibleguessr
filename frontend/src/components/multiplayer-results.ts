@@ -1,6 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import type { VerseReference } from '../types'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 /** One round's outcome for both players, accumulated client-side across a
  * multiplayer game — see multiplayer-game.ts, which builds this list by
@@ -100,7 +101,9 @@ export class MultiplayerResults extends LitElement {
     this.dispatchEvent(new CustomEvent('back-to-room', { bubbles: true, composed: true }))
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -170,16 +173,8 @@ export class MultiplayerResults extends LitElement {
       opacity: 0.7;
     }
 
-    button {
-      padding: 0.6rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 1rem;
-      cursor: pointer;
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

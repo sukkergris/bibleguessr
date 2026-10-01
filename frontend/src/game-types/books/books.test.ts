@@ -84,4 +84,8 @@ describe('books', () => {
     expect(score({ book: 'Rut', chapter: 1 })).toBe(110)
     expect(score({ book: 'Rut', chapter: 1, verseNumber: 16 })).toBe(1110)
   })
+
+  it('shares all three parts of each verse in a shared result', () => {
+    expect(books.sharedColumns({ books: ['Rut'] })).toEqual(['book', 'chapter', 'verseNumber'])
+  })
 })

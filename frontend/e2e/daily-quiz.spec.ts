@@ -224,3 +224,59 @@ test('the Bible pickers fit a phone screen without sideways scrolling', async ({
   expect(await overflow()).toBeLessThanOrEqual(0)
 })
 
+/** Plays the fixed quiz to the end, guessing just "Rut" each time:
+ * 10 + 0 + 0 + 0 + 0 points (only verse 1 is in Rut). */
+async function finishQuiz(page: Page) {
+  for (const round of [1, 2, 3, 4, 5]) {
+    await expect(quiz(page)).toContainText(`Verse ${round} of 5`)
+    await guessBook(page, 'Rut')
+    await page.getByRole('button', { name: round === 5 ? 'See results' : 'Next verse' }).click()
+  }
+  await expect(quiz(page)).toContainText("Today's score: 10 points")
+}
+
+test('the result can be shared through the device’s share menu, with date and time', async ({ page }) => {
+  await page.addInitScript(() => {
+    const shared: ShareData[] = []
+    ;(window as unknown as { shared: ShareData[] }).shared = shared
+    navigator.share = async (data?: ShareData) => {
+      if (data) shared.push(data)
+    }
+  })
+  await page.clock.install({ time: new Date('2026-10-01T14:32:00Z') })
+  await openDailyQuiz(page)
+  await finishQuiz(page)
+
+  await page.getByRole('button', { name: 'Share result' }).click()
+  await expect.poll(() => page.evaluate(() => (window as unknown as { shared: ShareData[] }).shared.length)).toBe(1)
+  const text = await page.evaluate(() => (window as unknown as { shared: ShareData[] }).shared[0].text)
+
+  expect(text).toContain('BibleGuessr daily quiz 2026-10-01')
+  expect(text).toContain('10 points')
+  // Which parts were right: only verse 1's book.
+  expect(text).toContain('Book · Chapter · Verse\n✅ ❌ ❌ 10\n❌ ❌ ❌ 0\n❌ ❌ ❌ 0\n❌ ❌ ❌ 0\n❌ ❌ ❌ 0')
+  // Always ends with the link — the address the game is served from.
+  expect(text?.split('\n').at(-1)).toBe(`${new URL(page.url()).origin}/`)
+  expect(text).toMatch(/Played 2026-10-01 14:3\d UTC/)
+  // No spoilers for anyone who hasn't played yet.
+  expect(text).not.toContain('Rut')
+})
+
+test('without a share menu, the result is copied to the clipboard', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.addInitScript(() => {
+    // As on a desktop browser without the Web Share API.
+    Object.defineProperty(Navigator.prototype, 'share', { value: undefined, configurable: true })
+  })
+  await page.clock.install({ time: new Date('2026-10-01T14:32:00Z') })
+  await openDailyQuiz(page)
+  await finishQuiz(page)
+
+  await page.getByRole('button', { name: 'Share result' }).click()
+  await expect(quiz(page).getByRole('status')).toHaveText('Result copied — paste it anywhere.')
+
+  const copied = await page.evaluate(() => navigator.clipboard.readText())
+  expect(copied).toContain('BibleGuessr daily quiz 2026-10-01')
+  expect(copied).toMatch(/Played 2026-10-01 14:3\d UTC/)
+})
+

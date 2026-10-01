@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { describeChallenge } from '../challenge-description'
 import type { PlayRequest, VerseSource } from '../types'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 /**
  * The list of play requests addressed to the viewing player, shown below
@@ -112,7 +113,7 @@ export class PlayRequests extends LitElement {
           ? html`
               <p class="sent">
                 Request sent to <strong>${this.sentRequestToName}</strong>
-                <button type="button" @click=${this._onWithdraw}>Withdraw</button>
+                <button type="button" class="compact" @click=${this._onWithdraw}>Withdraw</button>
               </p>
             `
           : null}
@@ -132,8 +133,8 @@ export class PlayRequests extends LitElement {
                         >
                       </span>
                       <span class="actions">
-                        <button type="button" @click=${() => this._onAccept(r.fromPlayerId)}>Accept</button>
-                        <button type="button" class="deny" @click=${() => this._onDeny(r.fromPlayerId)}>Deny</button>
+                        <button type="button" class="compact" @click=${() => this._onAccept(r.fromPlayerId)}>Accept</button>
+                        <button type="button" class="compact danger" @click=${() => this._onDeny(r.fromPlayerId)}>Deny</button>
                       </span>
                     </li>
                   `,
@@ -161,7 +162,9 @@ export class PlayRequests extends LitElement {
     )
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -217,22 +220,9 @@ export class PlayRequests extends LitElement {
       flex: none;
     }
 
-    button {
-      padding: 0.3rem 0.75rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
 
-    button.deny {
-      background: transparent;
-      color: var(--error);
-      border: 1px solid var(--error);
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

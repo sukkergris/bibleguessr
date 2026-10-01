@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Guess, Verse } from './bible'
-import { standardSingleplayerPoints as scoreGuess } from './scoring'
+import { correctParts, standardSingleplayerPoints as scoreGuess } from './scoring'
 
 const verse: Verse = {
   book: 'John',
@@ -48,3 +48,20 @@ describe('scoreGuess', () => {
     expect(scoreGuess(verse, makeGuess('  John  ', 3, 16))).toBe(1110)
   })
 })
+
+describe('correctParts', () => {
+  const guess = (book: string, chapter?: number, verseNumber?: number): Guess => ({ book, chapter, verseNumber })
+
+  it('marks each part right only when every part before it is right too', () => {
+    expect(correctParts(verse, guess('John', 3, 16))).toEqual({ book: true, chapter: true, verseNumber: true })
+    expect(correctParts(verse, guess('John', 3, 17))).toEqual({ book: true, chapter: true, verseNumber: false })
+    expect(correctParts(verse, guess('John', 4, 16))).toEqual({ book: true, chapter: false, verseNumber: false })
+    // The right numbers in the wrong book count for nothing.
+    expect(correctParts(verse, guess('Mark', 3, 16))).toEqual({ book: false, chapter: false, verseNumber: false })
+  })
+
+  it('counts a part that wasn’t guessed as not right', () => {
+    expect(correctParts(verse, guess('John'))).toEqual({ book: true, chapter: false, verseNumber: false })
+  })
+})
+

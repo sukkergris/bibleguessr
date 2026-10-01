@@ -5,6 +5,7 @@ import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBi
 import type { VerseSource } from '../shared-kernel/bible'
 import type { SubmitBibleFileReport } from './server-access'
 import './report-error'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 /** What the player has picked: a server translation name, or a
  * client-parsed/cached local file with its own VerseSource — see
@@ -371,7 +372,9 @@ export class TranslationSourceSelect extends LitElement {
     )
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -437,21 +440,7 @@ export class TranslationSourceSelect extends LitElement {
       text-overflow: ellipsis;
     }
 
-    button {
-      padding: 0.6rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
 
-    button.secondary {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
 
     .error {
       color: var(--error);
@@ -577,7 +566,8 @@ export class TranslationSourceSelect extends LitElement {
       border-color: var(--error);
       background: rgba(221, 51, 51, 0.08);
     }
-  `
+  `,
+  ]
 }
 
 declare global {

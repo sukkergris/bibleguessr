@@ -43,6 +43,7 @@ import '../bible-sources/translation-source-select'
 import type { ChallengeSettings } from './challenge-settings'
 import type { MultiplayerGameOverDetail } from './multiplayer-results'
 import type { TranslationChoice } from '../bible-sources/translation-source-select'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 type Screen =
   | { step: 'choose' }
@@ -782,7 +783,9 @@ export class RoomSetup extends LitElement {
     this.screen = { step: 'choose' }
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     .matchmaking {
       display: flex;
       flex-direction: column;
@@ -876,31 +879,14 @@ export class RoomSetup extends LitElement {
       flex: 1;
     }
 
-    button {
-      padding: 0.6rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 1rem;
-      cursor: pointer;
-    }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
 
-    button.secondary {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
 
     .error {
       color: var(--error);
     }
-  `
+  `,
+  ]
 }
 
 declare global {

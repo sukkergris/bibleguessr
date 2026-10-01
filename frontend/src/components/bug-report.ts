@@ -1,6 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 /** What the form is currently doing — an explicit state model, so
  * impossible combinations cannot be represented. */
@@ -189,7 +190,9 @@ export class BugReport extends LitElement {
     this.dispatchEvent(new CustomEvent('report-closed', { bubbles: true, composed: true }))
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -283,32 +286,11 @@ export class BugReport extends LitElement {
       margin-top: 0.75rem;
     }
 
-    button {
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 0.95rem;
-      cursor: pointer;
-    }
 
-    button.secondary {
-      background: transparent;
-      color: inherit;
-      border: 1px solid rgba(128, 128, 128, 0.6);
-    }
 
-    button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
 
-    button:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

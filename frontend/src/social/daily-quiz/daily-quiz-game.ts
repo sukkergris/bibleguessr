@@ -5,9 +5,12 @@ import '../../bible-sources/translation-source-select'
 import type { TranslationChoice } from '../../bible-sources/translation-source-select'
 import type { Guess, VerseReference, VerseSource } from '../../shared-kernel/bible'
 import { ANY_BOOK } from '../../shared-kernel/guess-constraint'
+import { buttonStyles } from '../../shared-ui/button-styles'
+import { SHARE_OUTCOME_MESSAGES, gameUrl, shareOrCopy } from '../../shared-ui/share-or-copy'
 import '../../shared-ui/guess-form'
 import '../../shared-ui/verse-card'
 import { fetchDailyQuiz } from './daily-quiz-client'
+import { shareText } from './daily-quiz-share'
 import './next-quiz-countdown'
 import {
   CHOOSING_BIBLE,
@@ -23,6 +26,7 @@ import {
   type DailyQuizRound,
   type DailyQuizSession,
 } from './daily-quiz-session'
+
 
 function formatReference(reference: VerseReference): string {
   return `${reference.book} ${reference.chapter}:${reference.verseNumber}`
@@ -62,6 +66,11 @@ export class DailyQuizGame extends LitElement {
   @state()
   private choice?: TranslationChoice
 
+  /** What sharing the result last did, for the status line under the
+   * button — undefined until the player shares. */
+  @state()
+  private shareStatus?: string
+
   @query('.next')
   private nextButton?: HTMLButtonElement
 
@@ -75,6 +84,7 @@ export class DailyQuizGame extends LitElement {
 
   private _loadQuiz() {
     this.session = LOADING
+    this.shareStatus = undefined
     fetchDailyQuiz()
       .then((quiz) => {
         this.session = started(quiz)
@@ -119,8 +129,19 @@ export class DailyQuizGame extends LitElement {
   }
 
   private _onNext = () => {
-    this.session = advanced(this.session)
+    this.session = advanced(this.session, new Date())
     this._lookUpCurrentVerse()
+  }
+
+  private _onShare = async () => {
+    const session = this.session
+    if (session.kind !== 'finished') return
+    const text = shareText(
+      { quizDate: session.quiz.date, rounds: session.rounds, finishedAt: session.finishedAt },
+      gameUrl(),
+    )
+    const outcome = await shareOrCopy(text)
+    if (outcome !== 'cancelled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]
   }
 
   private _onBack = () => {
@@ -223,6 +244,8 @@ export class DailyQuizGame extends LitElement {
               `,
             )}
           </ol>
+          <button type="button" @click=${this._onShare}>Share result</button>
+          <p class="share-status" role="status">${this.shareStatus ?? ''}</p>
           <button type="button" class="secondary" @click=${this._onBack}>Back to Social</button>
         `
     }
@@ -244,7 +267,9 @@ export class DailyQuizGame extends LitElement {
     `
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -283,10 +308,6 @@ export class DailyQuizGame extends LitElement {
       color: var(--text-muted);
     }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
 
     .feedback {
       padding: 0.75rem 1rem;
@@ -336,32 +357,23 @@ export class DailyQuizGame extends LitElement {
       font-variant-numeric: tabular-nums;
     }
 
+    .share-status {
+      margin: 0;
+      min-height: 1.2em;
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
     .error {
       color: var(--error);
       text-align: center;
     }
 
-    button {
-      padding: 0.7rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 1rem;
-      cursor: pointer;
-    }
 
-    button.secondary {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
 
-    button:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

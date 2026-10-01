@@ -1,21 +1,39 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import type { Guess, RoundResult } from '../types'
+import { ALL_COLUMNS, composeShareText, type ResultColumn } from '../shared-kernel/result-sharing'
+import { buttonStyles } from '../shared-ui/button-styles'
+import { SHARE_OUTCOME_MESSAGES, gameUrl, shareOrCopy } from '../shared-ui/share-or-copy'
 
 const MAX_POINTS_PER_ROUND = 1110 // book (10) + chapter (100) + verse (1000)
 
 /**
- * End-of-game summary: total score, a per-round breakdown, and a "Copy
- * result" button that builds a TimeGuessr-style shareable text block
- * (an emoji score bar per round, no external link).
+ * End-of-game summary: total score, a per-round breakdown, and a "Share
+ * result" button — the same kind of shared text as the daily quiz's (see
+ * shared-kernel/result-sharing.ts): which parts of each verse were right,
+ * when it was played and a link to the game.
  */
 @customElement('bg-game-results')
 export class GameResults extends LitElement {
   @property({ attribute: false })
   rounds: RoundResult[] = []
 
+  /** The game type played, e.g. "Books" — for the shared result. */
+  @property({ type: String })
+  gameTypeName = ''
+
+  /** Which parts of each verse the shared result shows — the game type
+   * decides (see GameTypeDefinition.sharedColumns). */
+  @property({ attribute: false })
+  columns: readonly ResultColumn[] = ALL_COLUMNS
+
+  /** When the game was finished (ISO 8601) — for the shared result. */
+  @property({ type: String })
+  finishedAt?: string
+
+  /** What sharing last did, for the status line — undefined until shared. */
   @state()
-  private copied = false
+  private shareStatus?: string
 
   private get totalScore() {
     return this.rounds.reduce((sum, r) => sum + r.points, 0)
@@ -48,9 +66,10 @@ export class GameResults extends LitElement {
         </ol>
 
         <div class="actions">
-          <button class="copy" @click=${this._copyResult}>${this.copied ? 'Copied!' : 'Copy result'}</button>
-          <button class="again" @click=${this._onPlayAgain}>Play again</button>
+          <button class="secondary" @click=${this._onShare}>Share result</button>
+          <button @click=${this._onPlayAgain}>Play again</button>
         </div>
+        <p class="share-status" role="status">${this.shareStatus ?? ''}</p>
       </div>
     `
   }
@@ -63,32 +82,27 @@ export class GameResults extends LitElement {
     return `${guess.book} ${guess.chapter}:${guess.verseNumber}`
   }
 
-  private _resultText(): string {
-    const lines = this.rounds.map((r) => {
-      const bookRight = r.points >= 10
-      const chapterRight = r.points >= 110
-      const verseRight = r.points >= 1110
-      return `${bookRight ? '📖' : '❌'}${chapterRight ? '📄' : ''}${verseRight ? '🔢' : ''} ${r.points} pts`
-    })
-
-    return [`bibleguessr — ${this.totalScore}/${this.maxScore}`, ...lines].join('\n')
-  }
-
-  private async _copyResult() {
-    try {
-      await navigator.clipboard.writeText(this._resultText())
-      this.copied = true
-      setTimeout(() => (this.copied = false), 2000)
-    } catch (error) {
-      console.error('[game-results] failed to copy result', error)
-    }
+  // Written like every share in the app — see
+  // shared-kernel/result-sharing.ts.
+  private _onShare = async () => {
+    const text = composeShareText(
+      [`BibleGuessr · ${this.gameTypeName}`, `${this.totalScore} points`],
+      this.rounds.map((round) => ({ kind: 'answered', verse: round.verse, guess: round.guess, points: round.points })),
+      this.finishedAt ?? new Date().toISOString(),
+      gameUrl(),
+      this.columns,
+    )
+    const outcome = await shareOrCopy(text)
+    if (outcome !== 'cancelled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]
   }
 
   private _onPlayAgain() {
     this.dispatchEvent(new CustomEvent('play-again', { bubbles: true, composed: true }))
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -153,31 +167,31 @@ export class GameResults extends LitElement {
       font-weight: 600;
     }
 
+    .share-status {
+      margin: 0;
+      min-height: 1.2em;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    /* Side by side, sharing the row — narrower side padding keeps each
+       label on one line at phone width. */
+    .actions button {
+      flex: 1;
+      padding-inline: 0.75rem;
+      white-space: nowrap;
+    }
+
     .actions {
       display: flex;
       gap: 0.75rem;
       margin-top: 0.5rem;
     }
 
-    button {
-      flex: 1;
-      padding: 0.7rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      font-size: 1rem;
-      cursor: pointer;
-    }
 
-    .copy {
-      background: rgba(170, 59, 255, 0.12);
-      color: var(--accent);
-    }
 
-    .again {
-      background: var(--accent);
-      color: var(--accent-text);
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

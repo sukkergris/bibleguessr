@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import type { ChatMessage, Player } from '../types'
 import type { ConnectionState } from '../signalr-client';
+import { buttonStyles } from '../shared-ui/button-styles';
 
 /**
  * The players list + message log + send form shared by any chat surface
@@ -202,7 +203,9 @@ export class ChatPanel extends LitElement {
     );
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     /* Available to screen readers, invisible on screen — a placeholder
        disappears as soon as the field has content, so it can't serve as
        the field's label (see docs/SCRUM/TODO/Feature.Accessibility.md). */
@@ -359,21 +362,9 @@ export class ChatPanel extends LitElement {
       font-size: 1rem;
     }
 
-    button {
-      padding: 0.6rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 1rem;
-      cursor: pointer;
-    }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  `;
+  `,
+  ];
 }
 
 declare global {

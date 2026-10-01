@@ -42,6 +42,31 @@
           answer; the next-verse button takes focus, so Enter carries on.
         </li>
         <li>After the fifth verse: today's total and each verse's result, then <em>Back to Social</em>.</li>
+        <li>
+          <em>Share result</em> shares a short text: the quiz's date, the total, verse by verse which parts were right
+          (✅, a green check) or not (❌, a red cross) with that verse's points, when it was played (date and time,
+          in UTC like the quiz itself) and a link to the game — e.g.
+          <pre><code>BibleGuessr daily quiz 2026-10-01
+1120 points
+Book · Chapter · Verse
+✅ ✅ ✅ 1110
+✅ ❌ ❌ 10
+skipped 0
+❌ ❌ ❌ 0
+❌ ❌ ❌ 0
+Played 2026-10-01 14:32 UTC
+https://www.bibleguessr.single/</code></pre>
+          A part counts as right by the same rule as the points (the shared kernel's <code>correctParts</code>): the
+          chapter only when the book is right too, the verse only when both are, and a part not guessed isn't right.
+          A verse missing from the player's own Bible shows as <em>skipped</em>. The column header and the marks'
+          different shapes mean the result doesn't rest on colour alone.
+          It is written like every share in the app (see <a href="../scoring/index.html">Scoring</a>), and the link
+          is the address the game is served from, so it follows the environment. It opens the device's own share
+          menu where there is one (phones, mostly) and copies the text to the clipboard otherwise, saying so in a
+          status line. Cancelling the share menu does nothing. The text
+          deliberately leaves the verses out, so it doesn't give today's answers away to someone who hasn't played
+          yet (and verse text never leaves the device).
+        </li>
         <li>Nothing about the player is saved: playing again replays the same five verses.</li>
       </ul>
 
@@ -143,7 +168,8 @@
         verse is being looked up, shown, or not in the chosen Bible), <code>daily-quiz-game.ts</code> renders it
         with the shared verse card and guess form (<span class="file-ref">frontend/src/shared-ui/</span>) and the
         shared Bible picker (<span class="file-ref">frontend/src/bible-sources/</span>), and
-        <code>next-quiz-countdown.ts</code> is the countdown.
+        <code>next-quiz-countdown.ts</code> is the countdown and <code>daily-quiz-share.ts</code> builds the shared
+        text (the session records when the quiz was finished, for its time).
       </p>
 
       <h2>Tests</h2>
@@ -155,13 +181,18 @@
         </li>
         <li><span class="file-ref">frontend/src/social/daily-quiz/daily-quiz-session.test.ts</span> — the flow.</li>
         <li>
+          <span class="file-ref">frontend/src/social/daily-quiz/daily-quiz-share.test.ts</span> — the shared text,
+          including that it gives no verses away.
+        </li>
+        <li>
           <span class="file-ref">frontend/src/social/daily-quiz/next-quiz-countdown.test.ts</span> — the time left
           and its format, in UTC.
         </li>
         <li>
           <span class="file-ref">frontend/e2e/daily-quiz.spec.ts</span> — choosing a Bible, playing a whole quiz
           (also from an uploaded file, with a verse it lacks), scoring, keyboard, a quiz that can't be loaded, the
-          countdown (with Playwright's clock frozen at set moments), and the pickers fitting a phone screen. It serves a fixed quiz instead of the server's random one, so the answers are
+          countdown (with Playwright's clock frozen at set moments), the pickers fitting a phone screen, and sharing
+          the result through a share menu or the clipboard. It serves a fixed quiz instead of the server's random one, so the answers are
           known.
         </li>
       </ul>

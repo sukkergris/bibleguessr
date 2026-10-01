@@ -7,6 +7,7 @@ import type { VerseSource } from '../types'
 import { loadRoundCount, saveRoundCount } from '../game-preferences'
 import { freshChoice, isReady, nameOf, renderSelector, type GameTypeChoice } from '../game-types/registry'
 import '../bible-sources/report-error'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 export interface GameOptions {
   translation: string
@@ -528,7 +529,9 @@ export class GameSetup extends LitElement {
     )
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     /* Available to screen readers, invisible on screen — see
        chat-panel.ts for the same pattern. */
     .visually-hidden {
@@ -657,26 +660,8 @@ export class GameSetup extends LitElement {
       font-weight: 600;
     }
 
-    button {
-      padding: 0.7rem 1.25rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 1rem;
-      cursor: pointer;
-    }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
 
-    button.secondary {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
 
     .error {
       color: var(--error);
@@ -802,7 +787,8 @@ export class GameSetup extends LitElement {
       border-color: var(--error);
       background: rgba(221, 51, 51, 0.08);
     }
-  `
+  `,
+  ]
 }
 
 declare global {

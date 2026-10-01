@@ -19,6 +19,7 @@ import type { GameOverReason, GameSession, GameType, Guess, Verse, VerseReferenc
 import type { MultiplayerGameOverDetail, MultiplayerRoundSummary } from './multiplayer-results'
 import '../shared-ui/verse-card'
 import '../shared-ui/guess-form'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 /** How often the local countdown re-renders — purely cosmetic, no network
  * traffic involved (see timer.ts's computeRemainingSeconds). 250ms rather
@@ -818,7 +819,7 @@ export class MultiplayerGame extends LitElement {
             <p class="loading">Waiting for the first verse…</p>
           `}
 
-      <button type="button" class="secondary" @click=${this._openForfeitDialog}>
+      <button type="button" class="compact danger forfeit" @click=${this._openForfeitDialog}>
         Forfeit
       </button>
       ${this.forfeitDialogOpen ? this._renderForfeitDialog() : null}
@@ -955,7 +956,7 @@ export class MultiplayerGame extends LitElement {
             </button>
             <button
               type="button"
-              class="danger"
+              class="danger-solid"
               @click=${this._confirmForfeit}
               ?disabled=${this.forfeiting}
             >
@@ -1063,7 +1064,9 @@ export class MultiplayerGame extends LitElement {
     }
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -1154,16 +1157,6 @@ export class MultiplayerGame extends LitElement {
       font-weight: 600;
     }
 
-    button.secondary {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      border: 1px solid var(--error);
-      background: transparent;
-      color: var(--error);
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
 
     .dialog-backdrop {
       position: fixed;
@@ -1204,20 +1197,13 @@ export class MultiplayerGame extends LitElement {
       gap: 0.6rem;
     }
 
-    .dialog-actions button {
-      margin-top: 0;
+    /* Opens the forfeit dialog; set apart from the round above it. */
+    .forfeit {
+      margin-top: 1rem;
     }
 
-    .dialog-actions .danger {
-      padding: 0.5rem 1rem;
-      border: 1px solid #b42318;
-      border-radius: 8px;
-      background: #b42318;
-      color: var(--accent-text);
-      cursor: pointer;
-    }
-
-  `;
+  `,
+  ];
 }
 
 declare global {

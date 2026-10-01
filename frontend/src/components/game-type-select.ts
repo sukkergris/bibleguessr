@@ -97,7 +97,9 @@ export class GameTypeSelect extends LitElement {
 
     .scopes button {
       flex: 1;
-      padding: 0.4rem 0.6rem;
+      /* Same size as the Server/File tabs (game-setup.ts,
+         translation-source-select.ts). */
+      padding: 0.5rem 0.75rem;
       border-radius: 999px;
       border: 1px solid #ccc;
       background: transparent;

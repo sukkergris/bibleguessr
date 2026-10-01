@@ -25,16 +25,24 @@ export const STANDARD_TIERS: Readonly<ScoringTiers> = { book: 10, chapter: 100, 
  * builds its own rule from this with its own tiers.
  */
 export function tieredPoints(verse: Verse, guess: Guess, tiers: Readonly<ScoringTiers>): number {
-  const bookCorrect = guess.book.trim().toLowerCase() === verse.book.trim().toLowerCase()
-  if (!bookCorrect) return 0
+  const correct = correctParts(verse, guess)
+  return (
+    (correct.book ? tiers.book : 0) +
+    (correct.chapter ? tiers.chapter : 0) +
+    (correct.verseNumber ? tiers.verseNumber : 0)
+  )
+}
 
-  const chapterCorrect = guess.chapter !== undefined && guess.chapter === verse.chapter
-  if (!chapterCorrect) return tiers.book
-
-  const verseNumberCorrect = guess.verseNumber !== undefined && guess.verseNumber === verse.verseNumber
-  if (!verseNumberCorrect) return tiers.book + tiers.chapter
-
-  return tiers.book + tiers.chapter + tiers.verseNumber
+/** Which parts of a guess count as right. Each part only counts when every
+ * part before it is right too — the right numbers in the wrong book count
+ * for nothing — and a part that wasn't guessed isn't right. The one source
+ * of truth for both the points (tieredPoints) and anything that shows the
+ * parts, like a shared daily-quiz result. */
+export function correctParts(verse: Verse, guess: Guess): Record<keyof ScoringTiers, boolean> {
+  const book = guess.book.trim().toLowerCase() === verse.book.trim().toLowerCase()
+  const chapter = book && guess.chapter !== undefined && guess.chapter === verse.chapter
+  const verseNumber = chapter && guess.verseNumber !== undefined && guess.verseNumber === verse.verseNumber
+  return { book, chapter, verseNumber }
 }
 
 /** The standard rule: tieredPoints with STANDARD_TIERS. Kept as a sibling

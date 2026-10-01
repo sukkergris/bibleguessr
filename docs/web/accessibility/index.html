@@ -78,6 +78,33 @@
         which was 4.39:1 in the dark theme until <code>--accent</code> was darkened to <code>#9b2bf0</code>.
       </p>
 
+      <h2>One set of button styles</h2>
+      <p>
+        Ordinary buttons all take their look from
+        <span class="file-ref">frontend/src/shared-ui/button-styles.ts</span>, which every component with buttons
+        includes first in its styles (shadow DOM keeps page CSS out). Before, each component had its own copy, and
+        they had drifted into four heights, four font sizes and two different secondary looks.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Markup</th><th>Look</th><th>Used for</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>&lt;button&gt;</code></td><td>filled accent</td><td>the main action (Guess, Start game, Share result…)</td></tr>
+          <tr><td><code>class="secondary"</code></td><td>accent outline</td><td>a second choice (Cancel, Share result in singleplayer, Back to Social…)</td></tr>
+          <tr><td><code>class="danger"</code></td><td>red outline</td><td>a destructive choice (Deny, Forfeit)</td></tr>
+          <tr><td><code>class="danger-solid"</code></td><td>filled red</td><td>confirming one (Forfeit in its dialog)</td></tr>
+          <tr><td><code>class="compact"</code></td><td>a smaller size of any of the above</td><td>buttons in lists, small forms and status lines</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Every variant has the same 1px border, so filled and outlined buttons line up side by side, and every one has
+        the shared <code>--focus</code> outline and the same disabled look. The filled red uses its own
+        <code>--danger-solid</code> token, the same in both themes (the dark theme's light <code>--error</code>
+        wouldn't carry white text). Special controls keep their own styles: the pill tabs (now one size everywhere),
+        the book tiles, the start screen's big menu buttons and icon buttons.
+      </p>
+
       <h2>What automation cannot settle</h2>
       <p>
         Contrast is only partly automated — the computed-colour checks above cover specific controls that regressed,

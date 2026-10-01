@@ -1,6 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import type { SubmitBibleFileReport } from './server-access'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 type Status = 'collapsed' | 'expanded' | 'sending' | 'sent' | 'failed'
 
@@ -64,10 +65,10 @@ export class ReportError extends LitElement {
         ${this._failureMessage ? html`<p class="error">${this._failureMessage}</p>` : null}
 
         <div class="actions">
-          <button type="button" @click=${this._onSubmit} ?disabled=${sending || !this._description.trim()}>
+          <button type="button" class="compact" @click=${this._onSubmit} ?disabled=${sending || !this._description.trim()}>
             ${sending ? 'Sending…' : 'Send report'}
           </button>
-          <button type="button" class="secondary" @click=${() => (this._status = 'collapsed')} ?disabled=${sending}>
+          <button type="button" class="compact secondary" @click=${() => (this._status = 'collapsed')} ?disabled=${sending}>
             Cancel
           </button>
         </div>
@@ -92,7 +93,9 @@ export class ReportError extends LitElement {
     }
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       display: block;
     }
@@ -151,27 +154,10 @@ export class ReportError extends LitElement {
       gap: 0.5rem;
     }
 
-    button {
-      padding: 0.45rem 1rem;
-      border-radius: 8px;
-      border: none;
-      background: var(--accent);
-      color: var(--accent-text);
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
 
-    button.secondary {
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
-  `
+  `,
+  ]
 }
 
 declare global {

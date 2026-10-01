@@ -12,6 +12,7 @@ import {
   isReady,
   nameOf,
   scoreGuessOf,
+  sharedColumnsOf,
   toWire,
   verseRestrictionOf,
   type GameTypeChoice,
@@ -129,3 +130,11 @@ describe('scoreGuessOf', () => {
     expect(theBibleRule).toHaveBeenCalled()
   })
 })
+
+describe('sharedColumnsOf', () => {
+  it('asks the choice’s own game type', () => {
+    expect(sharedColumnsOf({ gameType: 'chapters', selection: { book: 'Exodus', chapters: [3] } })).toEqual(['verseNumber'])
+    expect(sharedColumnsOf(freshChoice('the-bible'))).toEqual(['book', 'chapter', 'verseNumber'])
+  })
+})
+

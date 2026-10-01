@@ -11,6 +11,7 @@ import type { TemplateResult } from 'lit'
 import type { Guess, Verse, VerseRestriction, VerseSource } from '../shared-kernel/bible'
 import type { GameType } from '../shared-kernel/game-type-wire'
 import type { GuessConstraint } from '../shared-kernel/guess-constraint'
+import type { ResultColumn } from '../shared-kernel/result-sharing'
 
 /** What a game type's setup UI gets from whichever screen hosts it (the
  * singleplayer setup screen or the multiplayer challenge settings). */
@@ -50,6 +51,9 @@ export interface GameTypeDefinition<Selection, Wire extends GameType> {
    * the server, by the same game type's rule there (see
    * backend/Domain/GameTypes/). */
   scoreGuess(selection: Selection, verse: Verse, guess: Guess): number
+  /** Which parts of each verse a shared result shows marks for — a part
+   * that is given (and so would always be ✅) can be left out. */
+  sharedColumns(selection: Selection): readonly ResultColumn[]
 
   /** The selection as sent to the server, resolved against the sender's
    * own Bible order. */

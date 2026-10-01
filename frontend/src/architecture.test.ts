@@ -7,7 +7,7 @@
 //                   form): imports only itself and the shared kernel.
 //   bible-sources/  where verses come from — the server or the player's
 //                   own file (parsing, caching, the picker): imports only
-//                   itself and the shared kernel. Server access is handed
+//                   itself, the shared kernel and shared UI. Server access is handed
 //                   in (see bible-sources/server-access.ts).
 //   game-types/X/   one game type: imports only itself, the shared kernel
 //                   and the GameTypeDefinition contract. The rest of the
@@ -85,8 +85,9 @@ describe('layer boundaries', () => {
     expect(violations(sourceFilesUnder(SHARED_UI_DIR), allowed)).toEqual([])
   })
 
-  it('bible sources import only themselves and the shared kernel', () => {
-    const allowed: Rule = (t) => isInside(t, BIBLE_SOURCES_DIR) || isInside(t, SHARED_KERNEL_DIR)
+  it('bible sources import only themselves, the shared kernel and shared UI', () => {
+    const allowed: Rule = (t) =>
+      isInside(t, BIBLE_SOURCES_DIR) || isInside(t, SHARED_KERNEL_DIR) || isInside(t, SHARED_UI_DIR)
     expect(violations(sourceFilesUnder(BIBLE_SOURCES_DIR), allowed)).toEqual([])
   })
 

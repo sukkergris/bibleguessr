@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { freshChoice, guessConstraintOf, scoreGuessOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
+import { freshChoice, guessConstraintOf, nameOf, scoreGuessOf, sharedColumnsOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import '../shared-ui/verse-card'
@@ -89,6 +89,10 @@ export class BgApp extends LitElement {
 
   @state()
   private roundCount = 0
+
+  // When the game in progress was finished — for the shared result.
+  @state()
+  private finishedAt?: string
 
   @state()
   private roundIndex = 0
@@ -209,6 +213,7 @@ export class BgApp extends LitElement {
     const isLastRound = this.roundIndex + 1 >= this.roundCount
     if (isLastRound) {
       this.phase = 'gameOver'
+      this.finishedAt = new Date().toISOString()
       this.verse = undefined
       this.feedback = undefined
     } else {
@@ -380,7 +385,13 @@ export class BgApp extends LitElement {
               : this.phase === 'playing'
                 ? this._renderPlaying()
                 : this.phase === 'gameOver'
-                  ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
+                  ? html`<bg-game-results
+                      .rounds=${this.rounds}
+                      .gameTypeName=${nameOf(this.choice.gameType)}
+                      .columns=${sharedColumnsOf(this.choice)}
+                      .finishedAt=${this.finishedAt}
+                      @play-again=${this._onPlayAgain}
+                    ></bg-game-results>`
                   : this.phase === 'social'
                     ? html`<bg-social-home .serverSource=${api} .submitBibleFileReport=${api.submitBibleFileUploadReport}></bg-social-home>`
                     : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
