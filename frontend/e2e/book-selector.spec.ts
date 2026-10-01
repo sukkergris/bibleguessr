@@ -132,6 +132,28 @@ test('"Chapters" restricts to a single book\'s checked chapters', async ({ page 
   }
 })
 
+test('"Chapters" gives no points for what is given — the book, and a lone chapter', async ({ page }) => {
+  await openMode(page, 'Chapters')
+
+  // Only Daniel 1, so every round's verse is in Daniel 1: book and chapter
+  // are both given.
+  await page.getByLabel('Book').selectOption('Daniel')
+  await page.locator('.chapter', { hasText: '1' }).first().locator('input[type="checkbox"]').check()
+  await expect(page.getByText('1 chapter of Daniel selected.')).toBeVisible()
+  await page.getByRole('button', { name: 'Start game' }).click()
+  await expect(page.locator('.round')).toContainText('Verse 1')
+
+  // The lone chapter is already chosen, so the verse can be picked
+  // straight away.
+  const form = page.locator('bg-guess-form')
+  await expect(form.getByRole('slider', { name: 'Chapter (optional)' })).toHaveAttribute('aria-valuetext', 'Chapter 1')
+  await expect(form.getByRole('slider', { name: 'Verse (optional)' })).toBeEnabled()
+
+  // Book and chapter alone are right, but both were given.
+  await page.getByRole('button', { name: 'Guess' }).click()
+  await expect(page.locator('.feedback')).toContainText('No points')
+})
+
 test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text', async ({ page }) => {
   await openMode(page, 'Chapters')
 

@@ -136,7 +136,7 @@ export class GuessForm extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     if (this.constraint.kind === 'fixed-book') {
-      this._lockToBook(this.constraint.book)
+      this._lockToBook(this.constraint.book, this.constraint.chapters)
     } else {
       this._loadBooks()
     }
@@ -144,7 +144,7 @@ export class GuessForm extends LitElement {
 
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('constraint') && this.constraint.kind === 'fixed-book') {
-      this._lockToBook(this.constraint.book)
+      this._lockToBook(this.constraint.book, this.constraint.chapters)
     } else if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
       this._loadBooks()
     }
@@ -171,11 +171,14 @@ export class GuessForm extends LitElement {
   }
 
   // Fixes `this.book` to the one book a Chapters game committed to at
-  // setup, and loads its chapters immediately — there's no user
-  // interaction to trigger that load the way picking a book normally does.
-  private _lockToBook(book: string) {
+  // setup. When only one chapter was picked, that chapter is just as fixed,
+  // so it's selected too — the verse can then be picked straight away,
+  // rather than first moving the chapter slider to its only possible
+  // value.
+  private _lockToBook(book: string, chapters: number[]) {
     if (this.book === book) return
     this._selectBook(book)
+    if (chapters.length === 1) this._selectChapter(chapters[0])
   }
 
   private _loadBooks() {

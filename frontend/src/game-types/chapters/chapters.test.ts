@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { chapters } from './chapters'
 
+const RUT_1_16 = {
+  book: 'Rut',
+  chapter: 1,
+  verseNumber: 16,
+  text: 'not used',
+  translation: 'Test',
+  reference: 'Rut 1:16',
+}
+
 const GENESIS_TO_LEVITICUS = ['Genesis', 'Exodus', 'Leviticus']
 
 describe('chapters', () => {
@@ -66,5 +75,27 @@ describe('chapters', () => {
         kind: 'any-book',
       })
     })
+  })
+
+  // The book is fixed at setup, so it's a given, not an achievement: it
+  // earns nothing on its own. Chapter and verse keep the standard tiers.
+  it('gives no points for the book, which is given', () => {
+    const score = (guess: { book: string; chapter?: number; verseNumber?: number }) =>
+      chapters.scoreGuess({ book: 'Rut', chapters: [1, 2] }, RUT_1_16, guess)
+    expect(score({ book: 'Rut' })).toBe(0)
+    expect(score({ book: 'Rut', chapter: 2 })).toBe(0)
+    expect(score({ book: 'Rut', chapter: 1 })).toBe(100)
+    expect(score({ book: 'Rut', chapter: 1, verseNumber: 16 })).toBe(1100)
+  })
+
+  // With a single chapter picked, the chapter is a given too: only the
+  // verse is left to earn points for.
+  it('gives no points for the chapter either when only one was picked', () => {
+    const score = (guess: { book: string; chapter?: number; verseNumber?: number }) =>
+      chapters.scoreGuess({ book: 'Rut', chapters: [1] }, RUT_1_16, guess)
+    expect(score({ book: 'Rut' })).toBe(0)
+    expect(score({ book: 'Rut', chapter: 1 })).toBe(0)
+    expect(score({ book: 'Rut', chapter: 1, verseNumber: 15 })).toBe(0)
+    expect(score({ book: 'Rut', chapter: 1, verseNumber: 16 })).toBe(1000)
   })
 })

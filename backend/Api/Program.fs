@@ -45,7 +45,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 4
+let BackendRevision = 6
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"

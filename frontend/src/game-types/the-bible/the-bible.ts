@@ -4,6 +4,7 @@
 
 import { ANY_BOOK } from '../../shared-kernel/guess-constraint'
 import type { GameType } from '../../shared-kernel/game-type-wire'
+import { standardSingleplayerPoints } from '../../shared-kernel/scoring'
 import type { GameTypeDefinition } from '../game-type-definition'
 
 export type TheBibleWire = Extract<GameType, { Case: 'AllVerses' }>
@@ -23,6 +24,9 @@ export const theBible: GameTypeDefinition<TheBibleSelection, TheBibleWire> = {
 
   verseRestriction: () => undefined,
   guessConstraint: () => ANY_BOOK,
+  // The standard rule today; replace it here to give this game type its
+  // own scoring — no other game type is affected.
+  scoreGuess: (_selection, verse, guess) => standardSingleplayerPoints(verse, guess),
 
   toWire: () => ({ Case: 'AllVerses' }),
   describeWire: () => NAME,

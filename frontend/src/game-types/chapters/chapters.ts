@@ -7,6 +7,7 @@ import { html } from 'lit'
 import { bookAtNumber, bookNumberOf } from '../../shared-kernel/book-numbers'
 import type { GameType } from '../../shared-kernel/game-type-wire'
 import { ANY_BOOK } from '../../shared-kernel/guess-constraint'
+import { STANDARD_TIERS, tieredPoints } from '../../shared-kernel/scoring'
 import type { GameTypeDefinition } from '../game-type-definition'
 import './chapter-selector'
 
@@ -23,6 +24,15 @@ export interface ChaptersSelection {
 const NAME = 'Chapters'
 
 const ascending = (a: number, b: number) => a - b
+
+/** What's given at setup is no achievement, so it earns nothing: the
+ * book always is (it's fixed). Chapter and verse keep the standard
+ * points... */
+const CHAPTERS_TIERS = { ...STANDARD_TIERS, book: 0 }
+
+/** ...unless only one chapter was picked: then the chapter is a given
+ * too, and only the verse is left to earn points for. */
+const LONE_CHAPTER_TIERS = { ...CHAPTERS_TIERS, chapter: 0 }
 
 /** The wire format allows several books; this game type only ever sends
  * one, so the first is the one it's about. */
@@ -51,6 +61,10 @@ export const chapters: GameTypeDefinition<ChaptersSelection, ChaptersWire> = {
     chaptersByBook: { [selection.book]: selection.chapters },
   }),
   guessConstraint: (selection) => ({ kind: 'fixed-book', book: selection.book, chapters: selection.chapters }),
+  // This game type's own rule — see CHAPTERS_TIERS. The multiplayer
+  // equivalent is backend/Domain/GameTypes/Chapters.fs's scoreGuess.
+  scoreGuess: (selection, verse, guess) =>
+    tieredPoints(verse, guess, selection.chapters.length === 1 ? LONE_CHAPTER_TIERS : CHAPTERS_TIERS),
 
   toWire: (selection, booksInBibleOrder) => {
     const number = bookNumberOf(booksInBibleOrder, selection.book)

@@ -20,6 +20,7 @@
     <Compile Include="BookNumberTests.fs" />
     <Compile Include="GameTypeNumberTests.fs" />
     <Compile Include="GameTypeIsolationTests.fs" />
+    <Compile Include="GameTypeScoringTests.fs" />
     <Compile Include="MultiplayerScoringByNumberTests.fs" />
     <Compile Include="BibelenDkLoaderTests.fs" />
     <Compile Include="UniquePlayerNameTests.fs" />

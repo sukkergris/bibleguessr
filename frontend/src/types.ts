@@ -37,7 +37,7 @@ export interface Room {
 }
 
 /** A round's time limit — see docs/SCRUM/Feature.Time.md and
- * backend/Domain/Game.fs's TimeLimit, which this mirrors. Unlimited means
+ * backend/Domain/Scoring.fs's TimeLimit, which this mirrors. Unlimited means
  * no limit at all (the "infinite" end of the challenge-settings slider). */
 export type TimeLimit = { Case: 'Unlimited' } | { Case: 'LimitedTo'; Fields: [string] }
 

@@ -9,7 +9,7 @@
 // points out anything missed.
 
 import type { TemplateResult } from 'lit'
-import type { VerseRestriction, VerseSource } from '../shared-kernel/bible'
+import type { Guess, Verse, VerseRestriction, VerseSource } from '../shared-kernel/bible'
 import type { GameType } from '../shared-kernel/game-type-wire'
 import type { GuessConstraint } from '../shared-kernel/guess-constraint'
 import { books, type BooksSelection, type BooksWire } from './books/books'
@@ -109,6 +109,14 @@ export function guessConstraintOf(choice: GameTypeChoice): GuessConstraint {
   return withDefinition(choice, (definition, selection) =>
     selection === undefined ? theBible.guessConstraint(WHOLE_BIBLE) : definition.guessConstraint(selection),
   )
+}
+
+/** The points `guess` earns against `verse` in a singleplayer game with
+ * this choice — by the choice's own game type's rule. A choice with
+ * nothing picked plays, and so scores, as FALLBACK. */
+export function scoreGuessOf(choice: GameTypeChoice, verse: Verse, guess: Guess): number {
+  const playable: GameTypeChoice = isReady(choice) ? choice : FALLBACK
+  return withDefinition(playable, (definition, selection) => definition.scoreGuess(selection!, verse, guess))
 }
 
 /** The choice as sent with a play request or matchmaking entry, resolved

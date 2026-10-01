@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { scoreGuess } from './scoring'
-import type { Guess, Verse } from './types'
+import type { Guess, Verse } from './bible'
+import { standardSingleplayerPoints as scoreGuess } from './scoring'
 
 const verse: Verse = {
   book: 'John',

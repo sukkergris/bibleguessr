@@ -13,7 +13,7 @@
       <h1>Game types</h1>
       <p class="subtitle">
         Each game type (The Bible, Books, Chapters) is its own bounded context. A game type owns its setup UI, which
-        verses it draws, what the guess form offers and how it travels to the server. Game types never depend on
+        verses it draws, what the guess form offers, how guesses score and how it travels to the server. Game types never depend on
         each other, so one can change a lot without affecting the others.
       </p>
 
@@ -24,6 +24,7 @@
     book-numbers.ts         book name ⇄ book number
     game-type-wire.ts       the GameType JSON shared with the backend
     guess-constraint.ts     what the guess form may offer
+    scoring.ts              the standard singleplayer scoring rule
   game-types/
     game-type-definition.ts the contract every game type implements
     the-bible/              one folder per game type: definition, setup UI, tests
@@ -32,9 +33,11 @@
     registry.ts             the ONLY module that knows every game type
     architecture.test.ts    enforces the rules below
 
-backend/Domain/GameTypes/
-  TheBible.fs  Books.fs  Chapters.fs   one module per game type
-  GameType.fs                          the wire DU + dispatch, the only place that knows all three</code></pre>
+backend/Domain/
+  Scoring.fs                           shared kernel: Guess, TimeLimit, the standard scoring rules
+  GameTypes/
+    TheBible.fs  Books.fs  Chapters.fs one module per game type: verse restriction, scoring rule
+    GameType.fs                        the wire DU + dispatch, the only place that knows all three</code></pre>
 
       <h2>Rules</h2>
       <ul>
@@ -76,6 +79,7 @@ backend/Domain/GameTypes/
           <tr><td><code>renderSelector</code></td><td>Setup screen and challenge settings (each type owns its selector)</td></tr>
           <tr><td><code>verseRestriction</code></td><td>Singleplayer: which verses to draw</td></tr>
           <tr><td><code>guessConstraint</code></td><td>Singleplayer: what the guess form offers</td></tr>
+          <tr><td><code>scoreGuess</code></td><td>Singleplayer: how many points a guess earns (multiplayer: the backend module's <code>scoreGuess</code>)</td></tr>
           <tr><td><code>toWire</code></td><td>Multiplayer: the play request / matchmaking entry sent to the server</td></tr>
           <tr><td><code>describeWire</code></td><td>Multiplayer: the challenged player's description, in their own spelling</td></tr>
           <tr><td><code>guessConstraintForWire</code></td><td>Multiplayer: what the guess form offers, in the viewer's own spelling</td></tr>
@@ -85,6 +89,28 @@ backend/Domain/GameTypes/
         The guess form is told what to offer through one explicit union, <code>GuessConstraint</code>
         (<code>any-book</code> / <code>one-of-books</code> / <code>fixed-book</code>), instead of separate optional
         properties. A combination that no game type produces can't be expressed at all.
+      </p>
+
+      <h2>Game rules</h2>
+      <p>
+        Every rule that decides how a game plays belongs to its game type, so each type's rules can be changed
+        without touching the others:
+      </p>
+      <ul>
+        <li><strong>Which verses</strong> — <code>verseRestriction</code> / backend <code>restriction</code>.</li>
+        <li><strong>What can be guessed</strong> — <code>guessConstraint</code> / <code>guessConstraintForWire</code>.</li>
+        <li>
+          <strong>Scoring</strong> — singleplayer <code>scoreGuess</code> in the frontend definition (the server never
+          scores a singleplayer round), multiplayer <code>scoreGuess</code> in the backend module (the client never
+          scores a multiplayer round).
+        </li>
+      </ul>
+      <p>
+        The standard rules are building blocks in the shared kernel (<span class="file-ref">frontend/src/shared-kernel/scoring.ts</span>,
+        <span class="file-ref">backend/Domain/Scoring.fs</span>). Each game type <em>chooses</em> one explicitly —
+        The Bible and Books choose the standard ones, while Chapters has its own (what is given — the book, and a lone chapter — earns
+        nothing — see <a href="../scoring/index.html">Scoring</a>). Replacing a rule means editing that game type's
+        own file and its own test. Round count and time limit are still shared settings, not per-type rules.
       </p>
 
       <div class="callout">
@@ -113,9 +139,10 @@ backend/Domain/GameTypes/
           <code>GAME_TYPE_IDS</code>, <code>definitionForWire</code>). The compiler points out anything missed.
         </li>
         <li>
-          Add <code>backend/Domain/GameTypes/&lt;Name&gt;.fs</code> with its <code>restriction</code>, list it in
-          <code>BibleGuessr.Domain.fsproj</code> before <code>GameType.fs</code>, and dispatch to it from
-          <code>GameType.restrictionOf</code>.
+          Add <code>backend/Domain/GameTypes/&lt;Name&gt;.fs</code> with its <code>restriction</code> and
+          <code>scoreGuess</code>, list it in <code>BibleGuessr.Domain.fsproj</code> before <code>GameType.fs</code>,
+          dispatch to it from <code>GameType.restrictionOf</code> and <code>GameType.scoreGuess</code>, and add it to
+          <code>GameTypeScoringTests.fs</code>.
         </li>
       </ol>
       <p>The start screen, setup screen and multiplayer tabs then show the new game type without any changes.</p>

@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Compile Include="Verses.fs" />
+    <Compile Include="Scoring.fs" />
     <Compile Include="GameTypes/TheBible.fs" />
     <Compile Include="GameTypes/Books.fs" />
     <Compile Include="GameTypes/Chapters.fs" />

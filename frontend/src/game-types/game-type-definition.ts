@@ -8,7 +8,7 @@
 // architecture.test.ts enforces all of this.
 
 import type { TemplateResult } from 'lit'
-import type { VerseRestriction, VerseSource } from '../shared-kernel/bible'
+import type { Guess, Verse, VerseRestriction, VerseSource } from '../shared-kernel/bible'
 import type { GameType } from '../shared-kernel/game-type-wire'
 import type { GuessConstraint } from '../shared-kernel/guess-constraint'
 
@@ -45,6 +45,11 @@ export interface GameTypeDefinition<Selection, Wire extends GameType> {
   verseRestriction(selection: Selection): VerseRestriction | undefined
   /** What the guess form offers during a singleplayer game. */
   guessConstraint(selection: Selection): GuessConstraint
+  /** This game type's own singleplayer scoring rule: the points `guess`
+   * earns against the round's `verse`. Multiplayer rounds are scored by
+   * the server, by the same game type's rule there (see
+   * backend/Domain/GameTypes/). */
+  scoreGuess(selection: Selection, verse: Verse, guess: Guess): number
 
   /** The selection as sent to the server, resolved against the sender's
    * own Bible order. */

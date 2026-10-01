@@ -206,7 +206,7 @@ export function onRoomPlayers(handler: (players: Player[]) => void): () => void 
 /** Sends (or retargets) a play request to `toPlayerId`, for the
  * `gameType`/`roundCount`/`timeLimitSeconds` chosen beforehand — see
  * game-types/registry.ts. `timeLimitSeconds` undefined (or 0) means no limit; the
- * hub translates that into backend/Domain/Game.fs's TimeLimit, so this
+ * hub translates that into backend/Domain/Scoring.fs's TimeLimit, so this
  * never needs to construct a {Case:'Unlimited'}-shaped value by hand. */
 export async function sendPlayRequest(
   toPlayerId: string,

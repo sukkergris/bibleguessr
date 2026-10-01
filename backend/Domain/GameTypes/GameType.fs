@@ -1,5 +1,7 @@
 namespace BibleGuessr.Domain
 
+open System
+
 /// Which verses a challenged game will draw from — chosen by the challenger
 /// before sending the request (see docs/SCRUM/Feature.RequestToStartMPGame.md),
 /// so the challenged player can see what they're being invited to.
@@ -38,3 +40,11 @@ module GameType =
         | AllVerses -> GameTypes.TheBible.restriction
         | Books selection -> GameTypes.Books.restriction selection
         | Chapters selection -> GameTypes.Chapters.restriction selection
+
+    /// Scores one multiplayer guess by the game type's own rule — see each
+    /// module's scoreGuess. `elapsed` is the time since the round started.
+    let scoreGuess (gameType: GameType) (timeLimit: TimeLimit) (elapsed: TimeSpan) (verse: VerseReference) (guess: Guess) : GuessScore =
+        match gameType with
+        | AllVerses -> GameTypes.TheBible.scoreGuess timeLimit elapsed verse guess
+        | Books _ -> GameTypes.Books.scoreGuess timeLimit elapsed verse guess
+        | Chapters selection -> GameTypes.Chapters.scoreGuess selection timeLimit elapsed verse guess

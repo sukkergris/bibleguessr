@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import type { VerseSource } from '../shared-kernel/bible'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Verse, VerseSource } from '../shared-kernel/bible'
+import { books } from './books/books'
+import { chapters } from './chapters/chapters'
+import { theBible } from './the-bible/the-bible'
 import {
   GAME_TYPE_IDS,
   describeWire,
@@ -8,6 +11,7 @@ import {
   guessConstraintOf,
   isReady,
   nameOf,
+  scoreGuessOf,
   toWire,
   verseRestrictionOf,
   type GameTypeChoice,
@@ -94,5 +98,34 @@ describe('guessConstraintForWire', () => {
       book: 'Genesis',
       chapters: [3],
     })
+  })
+})
+
+describe('scoreGuessOf', () => {
+  const verse: Verse = { book: 'Exodus', chapter: 3, verseNumber: 14, text: '', translation: 'Test', reference: 'Exodus 3:14' }
+  const guess = { book: 'Exodus', chapter: 3 }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  // Each game type owns its scoring rule: the registry must ask the
+  // choice's own type and no other, so changing one type's rule can't
+  // affect a game of another type.
+  it('scores by the choice’s own game type only', () => {
+    const spies = {
+      theBible: vi.spyOn(theBible, 'scoreGuess').mockReturnValue(1),
+      books: vi.spyOn(books, 'scoreGuess').mockReturnValue(2),
+      chapters: vi.spyOn(chapters, 'scoreGuess').mockReturnValue(3),
+    }
+
+    expect(scoreGuessOf({ gameType: 'books', selection: { books: ['Exodus'] } }, verse, guess)).toBe(2)
+    expect(spies.books).toHaveBeenCalledWith({ books: ['Exodus'] }, verse, guess)
+    expect(spies.theBible).not.toHaveBeenCalled()
+    expect(spies.chapters).not.toHaveBeenCalled()
+  })
+
+  it('scores a choice with nothing picked as The Bible', () => {
+    const theBibleRule = vi.spyOn(theBible, 'scoreGuess').mockReturnValue(1)
+    expect(scoreGuessOf(freshChoice('chapters'), verse, guess)).toBe(1)
+    expect(theBibleRule).toHaveBeenCalled()
   })
 })

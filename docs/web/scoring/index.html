@@ -16,6 +16,50 @@
         correct.
       </p>
 
+      <div class="callout">
+        <span class="callout-title">Each game type owns its scoring</span>
+        <p>
+          The rules on this page are the <em>standard</em> rules. Every game type (The Bible, Books, Chapters) chooses
+          its own scoring rule — singleplayer in its <code>scoreGuess</code> in
+          <span class="file-ref">frontend/src/game-types/&lt;type&gt;/</span>, multiplayer in its
+          <code>scoreGuess</code> in <span class="file-ref">backend/Domain/GameTypes/&lt;Type&gt;.fs</span>. The Bible
+          and Books use the standard rules below; Chapters has its own (next section). Giving one type its own rule
+          is a change in that type's file only; the other types are unaffected. See
+          <a href="../game-types/index.html">Game types</a>.
+        </p>
+      </div>
+
+      <h2>Chapters: what's given earns nothing</h2>
+      <p>
+        In a Chapters game the book is fixed at setup, so getting it "right" is no achievement and earns nothing. The
+        same goes for the chapter when only one was picked: then it's just as given.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Chapters game</th><th>Book</th><th>+ Chapter</th><th>+ Verse number</th><th>All correct</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Several chapters picked</td><td>0</td><td>+100</td><td>+1000</td><td>1100</td></tr>
+          <tr><td>One chapter picked</td><td>0</td><td>0</td><td>+1000</td><td>1000</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>
+          <strong>Singleplayer:</strong> the shared kernel's <code>tieredPoints</code> with
+          <code>CHAPTERS_TIERS</code> / <code>LONE_CHAPTER_TIERS</code> in
+          <span class="file-ref">frontend/src/game-types/chapters/chapters.ts</span>.
+        </li>
+        <li>
+          <strong>Multiplayer:</strong> the standard rule counts a book-only guess as correct. In Chapters a guess is
+          only correct if the chapter is guessed and right — and, with one chapter picked, the verse number too — and
+          then scores like the standard rule (<span class="file-ref">backend/Domain/GameTypes/Chapters.fs</span>).
+        </li>
+        <li>
+          With one chapter picked, the guess form selects it from the start (like the fixed book), so the verse can be
+          picked straight away.
+        </li>
+      </ul>
+
       <h2>The tiers</h2>
       <table>
         <thead>
@@ -63,12 +107,12 @@
           <tr>
             <td>Function</td>
             <td><code>Scoring.pointsForVerseGuess</code></td>
-            <td><code>scoreGuess</code></td>
+            <td><code>standardSingleplayerPoints</code></td>
           </tr>
           <tr>
             <td>File</td>
-            <td><span class="file-ref">backend/Domain/Game.fs</span></td>
-            <td><span class="file-ref">frontend/src/scoring.ts</span></td>
+            <td><span class="file-ref">backend/Domain/Scoring.fs</span></td>
+            <td><span class="file-ref">frontend/src/shared-kernel/scoring.ts</span></td>
           </tr>
           <tr>
             <td>Book comparison</td>
@@ -78,25 +122,22 @@
           <tr>
             <td>Used by</td>
             <td>domain logic, tested directly</td>
-            <td><code>bg-app.ts</code>'s <code>_onGuessSubmitted</code> — this is what actually drives singleplayer scoring</td>
+            <td>each game type's <code>scoreGuess</code>, which <code>bg-app.ts</code>'s <code>_onGuessSubmitted</code> reaches through <code>registry.ts</code>'s <code>scoreGuessOf</code> — this is what actually drives singleplayer scoring</td>
           </tr>
         </tbody>
       </table>
-      <p>
-        <code>scoreGuess</code> was extracted out of <span class="file-ref">bg-app.ts</span> (it used to be a
-        private method there) specifically so it's directly unit-testable without instantiating the Lit element, and
-        so it can sit as a standalone sibling next to the backend's version for easy side-by-side comparison.
-      </p>
 
       <div class="callout">
         <span class="callout-title">A second scorer, for multiplayer specifically</span>
         <p>
           <code>Scoring.pointsForGuess</code> (time-decaying: full points minus a penalty proportional to how much
           of the round's time elapsed) and <code>Scoring.isCorrectGuess</code> (book-<strong>number</strong>-aware,
-          not name-based — see below) also exist in <span class="file-ref">Game.fs</span> — these are what
-          multiplayer rounds actually use for scoring, via <code>GameSession.scoreRound</code>. See
+          not name-based — see below) also exist in <span class="file-ref">Scoring.fs</span>, combined into
+          <code>Scoring.standardMultiplayer</code> (untimed rounds: a flat <code>unlimitedCorrectPoints</code>) — this
+          is the standard multiplayer rule each game type's <code>scoreGuess</code> chooses today, applied by
+          <code>GameSession.scoreRound</code> via <code>GameType.scoreGuess</code>. See
           <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the full multiplayer
-          scoring/timer picture. This page's <code>pointsForVerseGuess</code>/<code>scoreGuess</code> pair is the
+          scoring/timer picture. This page's <code>pointsForVerseGuess</code>/<code>standardSingleplayerPoints</code> pair is the
           singleplayer scorer — the two are deliberately separate (multiplayer never recomputes points locally, and
           singleplayer has no timer to decay against), don't confuse one for the other.
         </p>
@@ -110,12 +151,18 @@
       </p>
       <ul>
         <li><span class="file-ref">backend/Tests/ScoringTests.fs</span> — run via <code>task dotnet:test</code>.</li>
-        <li><span class="file-ref">frontend/src/scoring.test.ts</span> — run via <code>task frontend:test</code>.</li>
+        <li><span class="file-ref">frontend/src/shared-kernel/scoring.test.ts</span> — run via <code>task frontend:test</code>.</li>
+        <li>
+          Per game type: <span class="file-ref">backend/Tests/GameTypeScoringTests.fs</span> and each
+          <span class="file-ref">frontend/src/game-types/&lt;type&gt;/&lt;type&gt;.test.ts</span> pin down which rule
+          each type uses; <span class="file-ref">frontend/src/game-types/registry.test.ts</span> checks a game is
+          scored by its own type only.
+        </li>
       </ul>
 
       <footer class="page-footer">
-        Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
-        <span class="file-ref">frontend/src/scoring.ts</span> ·
+        Key files: <span class="file-ref">backend/Domain/Scoring.fs</span> ·
+        <span class="file-ref">frontend/src/shared-kernel/scoring.ts</span> ·
         <span class="file-ref">frontend/src/components/bg-app.ts</span>
       </footer>
     </main>

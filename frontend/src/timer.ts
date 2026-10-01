@@ -14,7 +14,7 @@ export function computeRemainingSeconds(deadline: string | undefined, now: numbe
 
 /** Parses a .NET TimeSpan's default JSON wire format ("00:01:00",
  * "00:00:30.500", optionally with a leading "d." for days) into
- * milliseconds. Only the pieces backend/Domain/Game.fs's TimeLimit
+ * milliseconds. Only the pieces backend/Domain/Scoring.fs's TimeLimit
  * actually needs (seconds-to-minutes-scale round limits) are exercised in
  * practice, but the full "[d.]hh:mm:ss[.fffffff]" shape is parsed so this
  * doesn't silently misparse an edge case. */

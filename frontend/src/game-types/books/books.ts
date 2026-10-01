@@ -5,6 +5,7 @@
 import { html } from 'lit'
 import { bookAtNumber, bookNumberOf } from '../../shared-kernel/book-numbers'
 import type { GameType } from '../../shared-kernel/game-type-wire'
+import { standardSingleplayerPoints } from '../../shared-kernel/scoring'
 import type { GameTypeDefinition } from '../game-type-definition'
 import './book-selector'
 
@@ -34,6 +35,9 @@ export const books: GameTypeDefinition<BooksSelection, BooksWire> = {
 
   verseRestriction: (selection) => ({ books: selection.books, chaptersByBook: {} }),
   guessConstraint: (selection) => ({ kind: 'one-of-books', books: selection.books }),
+  // The standard rule today; replace it here to give this game type its
+  // own scoring — no other game type is affected.
+  scoreGuess: (_selection, verse, guess) => standardSingleplayerPoints(verse, guess),
 
   // A name the sender's own source can't resolve (shouldn't happen — the
   // selector only offers names that source returned) is dropped rather

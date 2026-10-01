@@ -1,8 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { scoreGuess } from '../scoring'
-import { freshChoice, guessConstraintOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
+import { freshChoice, guessConstraintOf, scoreGuessOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import './verse-card'
@@ -187,7 +186,7 @@ export class BgApp extends LitElement {
     if (!this.verse) return
 
     const guess = event.detail
-    const points = scoreGuess(this.verse, guess)
+    const points = scoreGuessOf(this.choice, this.verse, guess)
 
     this.rounds = [...this.rounds, { verse: this.verse, guess, points }]
     this.feedback = { points, verse: this.verse, guess }
