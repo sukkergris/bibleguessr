@@ -1,7 +1,11 @@
 {
   "name": "bibleguessr - debian - .NET 9/10 and Elm Dev Container (Debian + Compose)",
   "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+    // moby: false — the base image is Debian trixie, which has no moby-cli
+    // packages; install the Docker CE CLI from Docker's apt repo instead.
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false
+    }
   },
   // --- Use Docker Compose configuration ---
   // Point to your docker-compose file (relative to this folder)
