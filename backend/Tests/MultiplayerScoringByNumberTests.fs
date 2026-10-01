@@ -7,7 +7,7 @@ module BibleGuessr.Tests.MultiplayerScoringByNumberTests
 // VerseReference happens to carry (itself derived from the server's own
 // pool, per BookNumberTests.fs), so matching by name silently fails a
 // genuinely correct guess. Guess.BookNumber is set client-side (see
-// frontend/src/game-type.ts) by resolving the guessed book name against
+// frontend/src/shared-kernel/book-numbers.ts) by resolving the guessed book name against
 // the GUESSING PLAYER'S OWN VerseSource's Bible-order position — the same
 // number VerseReference.BookNumber was assigned from the pool the round's
 // verse was drawn from, since both ultimately derive from each source's

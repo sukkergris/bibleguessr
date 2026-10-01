@@ -25,7 +25,7 @@ type Player =
 ///
 /// BookNumber is the guessed book's 1-based position in the GUESSING
 /// PLAYER'S OWN VerseSource's Bible order (see
-/// frontend/src/game-type.ts) — set alongside `Book` (which stays for
+/// frontend/src/shared-kernel/book-numbers.ts) — set alongside `Book` (which stays for
 /// display/singleplayer purposes) so multiplayer scoring can match by
 /// number rather than name (see Scoring.isCorrectGuess and
 /// VerseReference's doc comment on why name matching isn't reliable
@@ -65,45 +65,6 @@ type ChatMessage =
       PlayerName: string
       Text: string
       SentAt: DateTimeOffset }
-
-/// Which verses a challenged game will draw from — chosen by the challenger
-/// before sending the request (see docs/SCRUM/Feature.RequestToStartMPGame.md),
-/// so the challenged player can see what they're being invited to. Mirrors
-/// the shape of the /api/verses/random restriction query params (see
-/// Program.fs and Verse.matchesRestrictionByNumber) rather than
-/// introducing a new vocabulary: AllVerses is "no restriction", Books
-/// narrows to a subset of books, Chapters narrows further to specific
-/// chapters within books.
-///
-/// Books/Chapters are keyed by book NUMBER, not name — see
-/// Verses.fs's Verse.bookNumbers doc comment for why book names can't be
-/// trusted to match across two players' different translations/uploaded
-/// files (or even within the same one — bibelen-dk's own loader has
-/// produced both "Jeremias" and "Jeremias." for one book). The challenger
-/// picks books from their OWN VerseSource and sends the numbers THEIR OWN
-/// source assigned those books (its own Bible-order position); the server
-/// matches those numbers against its own pool's own book numbers (see
-/// Verse.matchesRestrictionByNumber) — same book, regardless of spelling.
-type GameType =
-    | AllVerses
-    | Books of int list
-    | Chapters of Map<int, int list>
-
-module GameType =
-    /// Converts a GameType into Verse.matchesRestrictionByNumber's (books,
-    /// chaptersByBook) shape — the server-side inverse of what
-    /// frontend/src/game-type.ts's gameTypeFromRestriction does client-side
-    /// for /api/verses/random's query params. Needed because the server
-    /// (not the client) picks the verse for a multiplayer round — see
-    /// GameHub.fs's AcceptPlayRequest/resolveRound.
-    let restrictionOf (gameType: GameType) : Set<int> * Map<int, Set<int>> =
-        match gameType with
-        | AllVerses -> Set.empty, Map.empty
-        | Books books -> Set.ofList books, Map.empty
-        | Chapters chaptersByBook ->
-            let books = chaptersByBook |> Map.toList |> List.map fst |> Set.ofList
-            let chaptersByBookSets = chaptersByBook |> Map.map (fun _ chapters -> Set.ofList chapters)
-            books, chaptersByBookSets
 
 /// A round's time limit, chosen by the challenger via a slider from
 /// "infinite" to 1 minute (see docs/SCRUM/Feature.Time.md). An explicit DU

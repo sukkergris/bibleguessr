@@ -41,8 +41,9 @@ test('uploading and playing a local file works with the backend fully unreachabl
   await expect(page.locator('.round')).toContainText('Verse 1')
 
   // A full round trip — guess, see feedback, advance — all client-side.
-  await page.locator('bg-guess-form input').first().fill('Genesis')
-  await page.keyboard.press('Enter')
+  const genesis = page.locator('bg-guess-form').getByRole('radio', { name: 'Genesis' })
+  await genesis.check()
+  await genesis.press('Enter')
   await expect(page.locator('.feedback')).toBeVisible()
 
   // Still no error banner anywhere in this flow.

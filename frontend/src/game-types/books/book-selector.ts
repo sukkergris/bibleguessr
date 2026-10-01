@@ -1,13 +1,14 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import type { VerseRestriction, VerseSource } from '../types'
+import type { VerseSource } from '../../shared-kernel/bible'
+import type { BooksSelection } from './books'
 
 /**
  * A checkbox grid to pick which books a game draws verses from — the
- * "Books" game type, see docs/SCRUM/Feature.BibleSelector.md. Used
- * standalone (not as a sub-mode of a shared selector — each of the three
- * game types is its own entry point, see mode-select.ts) so its selection
- * can be owned and persisted independently by the parent (bg-app.ts).
+ * "Books" game type's setup UI (see books.ts and
+ * docs/SCRUM/Feature.BibleSelector.md). Rendered only through
+ * books.renderSelector, so the hosting screen never needs to know it
+ * exists.
  *
  * Uses the translation's own full book name text as-is — the spec calls
  * for "acronyms" for the labels, but this codebase has no
@@ -19,7 +20,7 @@ import type { VerseRestriction, VerseSource } from '../types'
  * — see docs/SCRUM/Feature.BooksGameSorting.md and
  * VerseSource.getBooksInBibleOrder.
  *
- * Fires `restriction-changed` CustomEvent<VerseRestriction | undefined>
+ * Fires `books-selection-changed` CustomEvent<BooksSelection | undefined>
  * whenever the selection changes — undefined when nothing is checked, so
  * the parent knows there's not yet a valid selection to start a game with.
  */
@@ -35,7 +36,7 @@ export class BookSelector extends LitElement {
    * a selection made earlier (e.g. the player left this screen and came
    * back). Only read on connect/when the source changes, not on every
    * update, since after that this component owns the checked state itself
-   * and echoes changes back out via restriction-changed. */
+   * and echoes changes back out via books-selection-changed. */
   @property({ attribute: false })
   initialSelection?: string[]
 
@@ -116,12 +117,12 @@ export class BookSelector extends LitElement {
   }
 
   private _emitChange() {
-    const restriction: VerseRestriction | undefined =
-      this._selectedBooks.size === 0 ? undefined : { books: [...this._selectedBooks], chaptersByBook: {} }
+    const selection: BooksSelection | undefined =
+      this._selectedBooks.size === 0 ? undefined : { books: [...this._selectedBooks] }
 
     this.dispatchEvent(
-      new CustomEvent<VerseRestriction | undefined>('restriction-changed', {
-        detail: restriction,
+      new CustomEvent<BooksSelection | undefined>('books-selection-changed', {
+        detail: selection,
         bubbles: true,
         composed: true,
       }),

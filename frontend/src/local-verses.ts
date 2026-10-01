@@ -1,6 +1,6 @@
 // A VerseSource backed by an in-memory Verse[] parsed client-side from a
 // file the player supplied (see epub-parser.ts) — no backend involved.
-import { bookAtNumber } from './book-numbers'
+import { bookAtNumber } from './shared-kernel/book-numbers'
 import type { Verse, VerseReference, VerseRestriction, VerseSource } from './types'
 
 // Applies a VerseRestriction (see docs/SCRUM/Feature.BibleSelector.md) to an

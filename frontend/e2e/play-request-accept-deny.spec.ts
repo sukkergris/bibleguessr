@@ -45,7 +45,7 @@ test('challenged player can accept a play request, and it clears for both player
     // The game type Alice chose is shown alongside the request.
     // "The Bible" — the same vocabulary the challenger picked from, since
     // the selector and the request description now share one source of
-    // truth (see game-type.ts's GAME_TYPE_NAMES).
+    // truth (see game-types/registry.ts's nameOf).
     await expect(requestOnBobsScreen).toContainText('The Bible')
 
     await requestOnBobsScreen.getByRole('button', { name: 'Accept' }).click()

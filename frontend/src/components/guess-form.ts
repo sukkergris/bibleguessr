@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 import { customElement, property, query, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { layoutBooks, type BookCategoryGroup } from '../book-picker'
+import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import type { Guess, VerseSource } from '../types'
 
 type ComboField = 'chapter' | 'verseNumber'
@@ -37,30 +38,15 @@ export class GuessForm extends LitElement {
   @property({ attribute: false })
   verseSource: VerseSource = api
 
-  // When set (Books-mode games — see bg-app.ts's _allowedBooksForGuessForm),
-  // the book grid shows exactly these books instead of every book in the
-  // translation — a Books-mode player shouldn't be able to pick a book
-  // they explicitly excluded at setup. Undefined (the default, for "The
-  // Bible" games and unrestricted multiplayer) shows the full book list.
+  // What this game lets the player guess — decided by the game type (see
+  // game-types/registry.ts's guessConstraintOf/guessConstraintForWire),
+  // never by this form. 'any-book' shows every book of the translation;
+  // 'one-of-books' (Books games) shows only those, since a player shouldn't
+  // be able to pick a book they excluded at setup; 'fixed-book' (Chapters
+  // games) shows the already-chosen book as read-only text and the Chapter
+  // field as a closed <select> of exactly the chosen chapters.
   @property({ attribute: false })
-  allowedBooks?: string[]
-
-  // When set (Chapters-mode games — see bg-app.ts's _lockedBookForGuessForm),
-  // the player already committed to this one book at setup, so the Book
-  // field is shown as fixed, read-only text instead of any kind of input —
-  // there's nothing to choose, since a Chapters-mode game only ever draws
-  // verses from this single book.
-  @property({ type: String })
-  lockedBook?: string
-
-  // When set (Chapters-mode games — see bg-app.ts's
-  // _allowedChaptersForGuessForm), the Chapter field becomes a closed
-  // <select> restricted to exactly this list instead of the usual
-  // free-text autocomplete over every chapter of the locked book — a
-  // Chapters-mode player shouldn't be able to type or pick a chapter they
-  // explicitly excluded at setup.
-  @property({ attribute: false })
-  allowedChapters?: number[]
+  constraint: GuessConstraint = ANY_BOOK
 
   @state()
   private book = ''
@@ -90,30 +76,39 @@ export class GuessForm extends LitElement {
 
   // The book grid's tile to focus for a new question: the selected one if
   // any, otherwise the first — the same tile Tab would land on, so the
-  // arrow keys work straight away. Not present at all in Chapters-mode
-  // games (lockedBook set) — see updated()'s focus logic, which falls back
-  // to chapterField then.
+  // arrow keys work straight away. Not present at all for a fixed book
+  // (Chapters games) — see updated()'s focus logic, which falls back to
+  // chapterField then.
   @query('input[name="bg-book-guess"]:checked')
   private checkedBookTile?: HTMLInputElement
 
   @query('input[name="bg-book-guess"]')
   private firstBookTile?: HTMLInputElement
 
-  @query('input[name="bg-chapter-guess"]')
-  private chapterField?: HTMLInputElement
+  // The free-text combobox, or the closed <select> when the book is fixed
+  // — both carry this name so a fixed-book game can focus it.
+  @query('[name="bg-chapter-guess"]')
+  private chapterField?: HTMLInputElement | HTMLSelectElement
+
+  // Set when a new question becomes ready, cleared once focus has been
+  // placed. Needed because the book tiles render only after the book list
+  // has loaded, which can be after the form is enabled — focusing then
+  // would find nothing. Cleared again if the form is disabled first, so a
+  // late-loading list never pulls focus into a form that isn't active.
+  private focusPending = false
 
   connectedCallback() {
     super.connectedCallback()
-    if (this.lockedBook) {
-      this._lockToBook(this.lockedBook)
+    if (this.constraint.kind === 'fixed-book') {
+      this._lockToBook(this.constraint.book)
     } else {
       this._loadBooks()
     }
   }
 
   updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('lockedBook') && this.lockedBook) {
-      this._lockToBook(this.lockedBook)
+    if (changedProperties.has('constraint') && this.constraint.kind === 'fixed-book') {
+      this._lockToBook(this.constraint.book)
     } else if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
       this._loadBooks()
     }
@@ -122,17 +117,20 @@ export class GuessForm extends LitElement {
     // loading the verse) to enabled — put focus on whichever field is
     // actually interactive first: Chapter when the book is locked (nothing
     // to do on the read-only Book field), Book otherwise.
-    if (changedProperties.has('disabled') && changedProperties.get('disabled') === true && !this.disabled) {
-      if (this.lockedBook) {
-        this.chapterField?.focus()
-      } else {
-        const bookTile = this.checkedBookTile ?? this.firstBookTile
-        bookTile?.focus()
+    if (changedProperties.has('disabled')) {
+      this.focusPending = changedProperties.get('disabled') === true && !this.disabled
+    }
+    if (this.focusPending) {
+      const target =
+        this.constraint.kind === 'fixed-book' ? this.chapterField : (this.checkedBookTile ?? this.firstBookTile)
+      if (target) {
+        this.focusPending = false
+        target.focus()
       }
     }
   }
 
-  // Fixes `this.book` to the one book a Chapters-mode game committed to at
+  // Fixes `this.book` to the one book a Chapters game committed to at
   // setup, and loads its chapters immediately — there's no user
   // interaction to trigger that load the way picking a book normally does.
   private _lockToBook(book: string) {
@@ -203,10 +201,9 @@ export class GuessForm extends LitElement {
 
     return html`
       <form @submit=${this._onSubmit}>
-        ${this.lockedBook
-          ? this._renderLockedBook(this.lockedBook)
-          : this._renderBookPicker()}
-        ${this.allowedChapters ? this._renderChapterDropdown(this.allowedChapters) : this._renderChapterCombobox(showChapterSuggestions)}
+        ${this.constraint.kind === 'fixed-book'
+          ? html`${this._renderLockedBook(this.constraint.book)}${this._renderChapterDropdown(this.constraint.chapters)}`
+          : html`${this._renderBookPicker()}${this._renderChapterCombobox(showChapterSuggestions)}`}
         <label class="combo-field">
           Verse (optional)
           <div class="combobox">
@@ -251,10 +248,10 @@ export class GuessForm extends LitElement {
     `
   }
 
-  // The books a guess may name: the Books-mode restriction when there is
-  // one, otherwise every book of the selected Bible.
+  // The books a guess may name: only the listed ones in a Books game,
+  // otherwise every book of the selected Bible.
   private get availableBooks(): string[] {
-    return this.allowedBooks ?? this.booksInBibleOrder
+    return this.constraint.kind === 'one-of-books' ? this.constraint.books : this.booksInBibleOrder
   }
 
   // A grid of radio tiles (native radio-group keyboard behavior: Tab in,
@@ -325,6 +322,7 @@ export class GuessForm extends LitElement {
       <label class="combo-field">
         Chapter (optional)
         <select
+          name="bg-chapter-guess"
           .value=${this.chapter}
           @change=${(e: Event) => this._selectChapter((e.target as HTMLSelectElement).value)}
           @keydown=${this._onSelectFieldKeydown}

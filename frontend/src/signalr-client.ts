@@ -205,7 +205,7 @@ export function onRoomPlayers(handler: (players: Player[]) => void): () => void 
 
 /** Sends (or retargets) a play request to `toPlayerId`, for the
  * `gameType`/`roundCount`/`timeLimitSeconds` chosen beforehand — see
- * game-type.ts. `timeLimitSeconds` undefined (or 0) means no limit; the
+ * game-types/registry.ts. `timeLimitSeconds` undefined (or 0) means no limit; the
  * hub translates that into backend/Domain/Game.fs's TimeLimit, so this
  * never needs to construct a {Case:'Unlimited'}-shaped value by hand. */
 export async function sendPlayRequest(
@@ -239,7 +239,7 @@ export async function denyPlayRequest(fromPlayerId: string): Promise<void> {
 
 /** Submits the caller's guess for the current round of their active game.
  * `guess.bookNumber` (the guessed book's number in the CALLER'S OWN
- * VerseSource — see game-type.ts's bookNumberOfGuess) is what lets the
+ * VerseSource — see shared-kernel/book-numbers.ts's bookNumberOfGuess) is what lets the
  * server score by number instead of name; undefined falls back to name
  * matching server-side. The server determines correctness/points and
  * broadcasts RoundScored once both players have guessed or the round's

@@ -1,11 +1,8 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import {
-  allowedBooksForGuessForm,
-  allowedChaptersForGuessForm,
-  bookNumberOfGuess,
-  lockedBookForGuessForm,
-} from '../game-type'
+import { guessConstraintForWire } from '../game-types/registry'
+import { bookNumberOfGuess } from '../shared-kernel/book-numbers'
+import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import {
   forfeitGame,
   onGameOver,
@@ -204,18 +201,12 @@ export class MultiplayerGame extends LitElement {
   @state()
   private myGuess?: Guess;
 
-  /** The guess form's book restriction, resolved from `session.gameType`
-   * (which carries book NUMBERS — see types.ts's GameType doc comment)
-   * against MY OWN verseSource — see _resolveGuessFormRestriction. Kept
-   * as one object (rather than three separate @state fields) so a single
-   * resolution pass updates all three together, avoiding a render with
-   * only some of them updated. */
+  /** What the guess form offers, resolved from `session.gameType` (which
+   * carries book NUMBERS — see types.ts's GameType doc comment) against MY
+   * OWN verseSource by the game type itself — see
+   * _resolveGuessConstraint. */
   @state()
-  private guessFormRestriction: {
-    allowedBooks?: string[];
-    lockedBook?: string;
-    allowedChapters?: number[];
-  } = {};
+  private guessConstraint: GuessConstraint = ANY_BOOK;
 
   @state()
   private opponentConnectionState: 'connected' | 'disconnected' = 'connected';
@@ -465,7 +456,7 @@ export class MultiplayerGame extends LitElement {
     this._resolveCurrentVerse();
     // gameType is fixed for the whole game (see types.ts's GameSession),
     // so this only needs resolving once, on the first round.
-    if (isFirstRound) this._resolveGuessFormRestriction(session.gameType);
+    if (isFirstRound) this._resolveGuessConstraint(session.gameType);
   }
 
   // Whether `session`/`(playerA, playerB)` belongs to MY game with
@@ -602,25 +593,21 @@ export class MultiplayerGame extends LitElement {
       });
   }
 
-  // Resolves the guess form's book/chapter restriction from `gameType`
-  // (which carries book NUMBERS — see types.ts's GameType doc comment)
-  // against MY OWN verseSource, so the guess form shows MY OWN spelling
-  // for whatever books/chapters the challenger restricted the game to —
-  // see game-type.ts's allowedBooksForGuessForm/lockedBookForGuessForm.
-  private _resolveGuessFormRestriction(gameType: GameType) {
+  // Resolves what the guess form offers from `gameType` (which carries
+  // book NUMBERS — see types.ts's GameType doc comment) against MY OWN
+  // verseSource, so the guess form shows MY OWN spelling for whatever
+  // books/chapters the challenger restricted the game to — see
+  // game-types/registry.ts's guessConstraintForWire.
+  private _resolveGuessConstraint(gameType: GameType) {
     if (!this.verseSource) return;
-    const verseSource = this.verseSource;
 
-    Promise.all([
-      allowedBooksForGuessForm(gameType, verseSource, this.translation),
-      lockedBookForGuessForm(gameType, verseSource, this.translation),
-    ]).then(([allowedBooks, lockedBook]) => {
-      this.guessFormRestriction = {
-        allowedBooks,
-        lockedBook,
-        allowedChapters: allowedChaptersForGuessForm(gameType),
-      };
-    });
+    guessConstraintForWire(gameType, this.verseSource, this.translation)
+      .then((constraint) => {
+        this.guessConstraint = constraint;
+      })
+      .catch((err) => {
+        console.error('[bg-multiplayer-game] failed to resolve the guess constraint', err);
+      });
   }
 
   private get _revealed() {
@@ -876,9 +863,7 @@ export class MultiplayerGame extends LitElement {
                 .disabled=${!this.resolvedVerse}
                 .translation=${this.translation}
                 .verseSource=${this.verseSource}
-                .allowedBooks=${this.guessFormRestriction.allowedBooks}
-                .lockedBook=${this.guessFormRestriction.lockedBook}
-                .allowedChapters=${this.guessFormRestriction.allowedChapters}
+                .constraint=${this.guessConstraint}
                 @guess-submitted=${this._onGuessSubmitted}
               ></bg-guess-form>
             `}
@@ -918,7 +903,7 @@ export class MultiplayerGame extends LitElement {
   }
 
   // Resolves MY OWN book number for the guessed book (see
-  // game-type.ts's bookNumberOfGuess) before submitting — this is what
+  // shared-kernel/book-numbers.ts's bookNumberOfGuess) before submitting — this is what
   // lets the server score the guess by number instead of name (see
   // Guess.bookNumber's doc comment), fixing the bug where a correct
   // guess against a differently-spelled book would score as wrong.

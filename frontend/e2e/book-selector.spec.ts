@@ -146,6 +146,10 @@ test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text
   await expect(guessForm.getByText('Daniel', { exact: true })).toBeVisible()
   await expect(guessForm.getByRole('radio')).toHaveCount(0)
 
+  // With the book fixed, focus lands on the Chapter field — the first
+  // thing there is to answer.
+  await expect(guessForm.getByLabel('Chapter (optional)')).toBeFocused()
+
   // A guess still submits successfully with the locked book, scored
   // correctly, without the player ever choosing a book themselves.
   await page.getByRole('button', { name: 'Guess' }).click()

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game types — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Architecture</span>
+      <h1>Game types</h1>
+      <p class="subtitle">
+        Each game type (The Bible, Books, Chapters) is its own bounded context. A game type owns its setup UI, which
+        verses it draws, what the guess form offers and how it travels to the server. Game types never depend on
+        each other, so one can change a lot without affecting the others.
+      </p>
+
+      <h2>Layout</h2>
+      <pre><code>frontend/src/
+  shared-kernel/            vocabulary every game type may use
+    bible.ts                Verse, VerseReference, Guess, VerseSource, VerseRestriction
+    book-numbers.ts         book name ⇄ book number
+    game-type-wire.ts       the GameType JSON shared with the backend
+    guess-constraint.ts     what the guess form may offer
+  game-types/
+    game-type-definition.ts the contract every game type implements
+    the-bible/              one folder per game type: definition, setup UI, tests
+    books/
+    chapters/
+    registry.ts             the ONLY module that knows every game type
+    architecture.test.ts    enforces the rules below
+
+backend/Domain/GameTypes/
+  TheBible.fs  Books.fs  Chapters.fs   one module per game type
+  GameType.fs                          the wire DU + dispatch, the only place that knows all three</code></pre>
+
+      <h2>Rules</h2>
+      <ul>
+        <li>
+          A game type imports only from <strong>its own folder</strong>, the <strong>shared kernel</strong> and the
+          <strong>contract</strong> (<code>game-type-definition.ts</code>). It never imports from another game type
+          or from the app shell.
+        </li>
+        <li>The shared kernel imports only from itself. It must never know about a particular game type.</li>
+        <li>
+          The rest of the app (components, <code>bg-app.ts</code>, multiplayer) reaches game types
+          <strong>only through <code>registry.ts</code></strong>, and never branches on which game type is in play.
+        </li>
+        <li>
+          Backend: a module in <code>Domain/GameTypes/</code> never references a sibling module. Only
+          <code>GameType.fs</code> composes them.
+        </li>
+      </ul>
+      <p>
+        These rules are tests, not conventions. <span class="file-ref">frontend/src/game-types/architecture.test.ts</span>
+        reads every file's imports, and <span class="file-ref">backend/Tests/GameTypeIsolationTests.fs</span> reads
+        the F# modules. Both find the game types by folder or file, so a new game type is covered automatically.
+      </p>
+
+      <h2>The contract</h2>
+      <p>
+        <code>GameTypeDefinition&lt;Selection, Wire&gt;</code> in
+        <span class="file-ref">frontend/src/game-types/game-type-definition.ts</span>. <code>Selection</code> is
+        what the player configures, in book <em>names</em> from their own Bible. <code>Wire</code> is the game type's
+        own case of the shared <code>GameType</code>, in book <em>numbers</em>.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Member</th><th>Used by</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>name</code>, <code>hint</code></td><td>Start screen, multiplayer tabs, play-request text</td></tr>
+          <tr><td><code>defaultSelection</code></td><td>Whether a game can start before anything is picked</td></tr>
+          <tr><td><code>renderSelector</code></td><td>Setup screen and challenge settings (each type owns its selector)</td></tr>
+          <tr><td><code>verseRestriction</code></td><td>Singleplayer: which verses to draw</td></tr>
+          <tr><td><code>guessConstraint</code></td><td>Singleplayer: what the guess form offers</td></tr>
+          <tr><td><code>toWire</code></td><td>Multiplayer: the play request / matchmaking entry sent to the server</td></tr>
+          <tr><td><code>describeWire</code></td><td>Multiplayer: the challenged player's description, in their own spelling</td></tr>
+          <tr><td><code>guessConstraintForWire</code></td><td>Multiplayer: what the guess form offers, in the viewer's own spelling</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The guess form is told what to offer through one explicit union, <code>GuessConstraint</code>
+        (<code>any-book</code> / <code>one-of-books</code> / <code>fixed-book</code>), instead of separate optional
+        properties. A combination that no game type produces can't be expressed at all.
+      </p>
+
+      <div class="callout">
+        <span class="callout-title">Rules that span game types live in the registry</span>
+        <p>
+          A game type with nothing picked yet plays as <em>The Bible</em>. For example, a challenge sent from the
+          Books tab before any book is ticked is sent as <code>AllVerses</code>, and an empty <code>Books</code>
+          is described as "The Bible". The registry owns that rule; no game type knows about another.
+        </p>
+      </div>
+
+      <h2>Adding a game type</h2>
+      <ol>
+        <li>
+          Create <code>frontend/src/game-types/&lt;name&gt;/</code> with a definition implementing
+          <code>GameTypeDefinition</code>, its selector component (if it has one) and its tests.
+        </li>
+        <li>
+          Add a case to the wire type in <span class="file-ref">frontend/src/shared-kernel/game-type-wire.ts</span>
+          and <span class="file-ref">backend/Domain/GameTypes/GameType.fs</span>. They are the same JSON contract
+          and must change together.
+        </li>
+        <li>
+          Register it in <span class="file-ref">frontend/src/game-types/registry.ts</span>
+          (<code>GameTypeId</code>, <code>SelectionById</code>, <code>WireById</code>, <code>DEFINITIONS</code>,
+          <code>GAME_TYPE_IDS</code>, <code>definitionForWire</code>). The compiler points out anything missed.
+        </li>
+        <li>
+          Add <code>backend/Domain/GameTypes/&lt;Name&gt;.fs</code> with its <code>restriction</code>, list it in
+          <code>BibleGuessr.Domain.fsproj</code> before <code>GameType.fs</code>, and dispatch to it from
+          <code>GameType.restrictionOf</code>.
+        </li>
+      </ol>
+      <p>The start screen, setup screen and multiplayer tabs then show the new game type without any changes.</p>
+
+      <h2>Tests</h2>
+      <p>
+        Each game type has its own unit tests next to it (e.g.
+        <span class="file-ref">frontend/src/game-types/books/books.test.ts</span>). The registry's cross-type rules
+        are tested in <span class="file-ref">frontend/src/game-types/registry.test.ts</span>. The end-to-end
+        behaviour is covered by the existing Playwright specs (<code>book-selector.spec.ts</code>,
+        <code>book-picker.spec.ts</code>, <code>play-request-accept-deny.spec.ts</code>, the multiplayer specs).
+      </p>
+    </main>
+  </body>
+</html>

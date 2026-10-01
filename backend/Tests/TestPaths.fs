@@ -34,3 +34,17 @@ let apiProjectDirectory =
         | d -> search d.Parent
 
     search (DirectoryInfo(System.AppContext.BaseDirectory))
+
+let private gameTypesRelativePath = Path.Combine("backend", "Domain", "GameTypes")
+
+/// The folder holding one module per game type — see
+/// GameTypeIsolationTests.fs. Found the same way as bibelenDkArchive.
+let gameTypesDirectory =
+    let rec search (directory: DirectoryInfo) =
+        match directory with
+        | null -> failwith $"Could not find {gameTypesRelativePath} above {System.AppContext.BaseDirectory}"
+        | d when File.Exists(Path.Combine(d.FullName, gameTypesRelativePath, "GameType.fs")) ->
+            Path.Combine(d.FullName, gameTypesRelativePath)
+        | d -> search d.Parent
+
+    search (DirectoryInfo(System.AppContext.BaseDirectory))

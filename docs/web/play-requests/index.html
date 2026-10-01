@@ -66,7 +66,7 @@ type PlayRequest =
         <code>GameType</code> mirrors the shape of the existing <code>/api/verses/random</code> restriction query
         params (<code>book</code>/<code>bookChapter</code>, see <span class="file-ref">backend/Api/Program.fs</span>
         and <code>Verse.matchesRestriction</code>) rather than inventing new vocabulary — it's the same
-        all/books/chapters split as singleplayer's <code>SetupScope</code>. <code>Books</code>/<code>Chapters</code>
+        one case per game type as singleplayer (see <a href="../game-types/index.html">Game types</a>). <code>Books</code>/<code>Chapters</code>
         are keyed by book <strong>number</strong>, not name — the challenger picks books from their own
         translation/file, and a number survives being matched against a different player's/the server's own
         differently-spelled pool where a name wouldn't. See
@@ -202,8 +202,8 @@ type PlayRequest =
         <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a>). <code>&lt;bg-game-type-select&gt;</code>
         still fires its own <code>game-type-changed</code>, bubbled up as part of <code>&lt;bg-challenge-settings&gt;</code>'s
         <code>challenge-settings-changed</code>; <span class="file-ref">bg-room-setup.ts</span> keeps the current
-        selection and turns it into a <code>GameType</code> (via <span class="file-ref">frontend/src/game-type.ts</span>'s
-        <code>gameTypeFromRestriction</code>) each time a player is challenged.
+        selection and turns it into a <code>GameType</code> (via <span class="file-ref">frontend/src/game-types/registry.ts</span>'s
+        <code>toWire</code>) each time a player is challenged.
       </p>
       <p>
         <span class="file-ref">frontend/src/components/play-requests.ts</span> (<code>&lt;bg-play-requests&gt;</code>)
@@ -252,7 +252,7 @@ type PlayRequest =
       <footer class="page-footer">
         Key files: <span class="file-ref">backend/Domain/Game.fs</span> ·
         <span class="file-ref">backend/Api/GameHub.fs</span> ·
-        <span class="file-ref">frontend/src/game-type.ts</span> ·
+        <span class="file-ref">frontend/src/game-types/registry.ts</span> ·
         <span class="file-ref">frontend/src/components/game-type-select.ts</span> ·
         <span class="file-ref">frontend/src/components/play-requests.ts</span> ·
         <span class="file-ref">frontend/src/components/chat-panel.ts</span> ·

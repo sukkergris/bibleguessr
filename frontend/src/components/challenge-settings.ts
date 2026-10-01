@@ -10,8 +10,8 @@ import {
   saveRoundCount,
   saveTimeLimitSeconds,
 } from '../game-preferences';
-import type { GameTypeScope } from '../game-type'
-import type { VerseRestriction, VerseSource } from '../types'
+import { freshChoice, type GameTypeChoice } from '../game-types/registry'
+import type { VerseSource } from '../types'
 import './game-type-select'
 
 const MIN_ROUNDS = 3
@@ -25,8 +25,7 @@ const MIN_TIME_LIMIT_SECONDS = 0
 const MAX_TIME_LIMIT_SECONDS = 60
 
 export interface ChallengeSettings {
-  scope: GameTypeScope
-  restriction?: VerseRestriction
+  choice: GameTypeChoice
   roundCount: number
   /** undefined means "no limit" — see MIN_TIME_LIMIT_SECONDS. */
   timeLimitSeconds?: number
@@ -34,7 +33,7 @@ export interface ChallengeSettings {
 
 /**
  * Everything a challenger picks before sending a play request — wraps the
- * existing <bg-game-type-select> (All/Books/Chapters) with two more
+ * existing <bg-game-type-select> (one tab per game type) with two more
  * sliders: how many rounds, and a per-verse time limit (see
  * docs/SCRUM/Feature.Time.md). Sits above the players list in the room
  * screen — see bg-room-setup.ts.
@@ -51,10 +50,7 @@ export class ChallengeSettingsSelect extends LitElement {
   translation?: string;
 
   @state()
-  private scope: GameTypeScope = 'all';
-
-  @state()
-  private restriction?: VerseRestriction;
+  private choice: GameTypeChoice = freshChoice('the-bible');
 
   @state()
   private roundCount = loadRoundCount();
@@ -132,11 +128,8 @@ export class ChallengeSettingsSelect extends LitElement {
     `;
   }
 
-  private _onGameTypeChanged(
-    event: CustomEvent<{ scope: GameTypeScope; restriction?: VerseRestriction }>
-  ) {
-    this.scope = event.detail.scope;
-    this.restriction = event.detail.restriction;
+  private _onGameTypeChanged(event: CustomEvent<GameTypeChoice>) {
+    this.choice = event.detail;
     this._emitChange();
   }
 
@@ -179,8 +172,7 @@ export class ChallengeSettingsSelect extends LitElement {
     this.dispatchEvent(
       new CustomEvent<ChallengeSettings>('challenge-settings-changed', {
         detail: {
-          scope: this.scope,
-          restriction: this.restriction,
+          choice: this.choice,
           roundCount: this.roundCount,
           timeLimitSeconds: this.timeLimitSeconds,
         },

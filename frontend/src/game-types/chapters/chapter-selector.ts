@@ -1,23 +1,19 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import type { VerseRestriction, VerseSource } from '../types'
-
-/** What the player has picked in "Chapters" mode, for restoring a
- * selection made earlier — see bg-app.ts's chapterRestriction state. */
-export interface ChapterSelection {
-  book: string
-  chapters: number[]
-}
+import type { VerseSource } from '../../shared-kernel/bible'
+import type { ChaptersSelection } from './chapters'
 
 /**
  * Pick one book, then a checkbox grid of just that book's chapters — the
- * "Chapters" game type, see docs/SCRUM/Feature.BibleSelector.md.
+ * "Chapters" game type's setup UI (see chapters.ts and
+ * docs/SCRUM/Feature.BibleSelector.md). Rendered only through
+ * chapters.renderSelector.
  *
  * The book dropdown lists books in Bible order (Genesis..Revelation), not
  * alphabetically — see docs/SCRUM/Feature.BooksGameSorting.md and
  * VerseSource.getBooksInBibleOrder.
  *
- * Fires `restriction-changed` CustomEvent<VerseRestriction | undefined>
+ * Fires `chapters-selection-changed` CustomEvent<ChaptersSelection | undefined>
  * whenever the selection changes — undefined until a book is chosen AND at
  * least one of its chapters is checked, so the parent knows there's not
  * yet a valid selection to start a game with.
@@ -33,7 +29,7 @@ export class ChapterSelector extends LitElement {
   /** Restores a selection made earlier (e.g. the player left this screen
    * and came back) — read on connect/when the source changes only. */
   @property({ attribute: false })
-  initialSelection?: ChapterSelection
+  initialSelection?: ChaptersSelection
 
   @state()
   private _books: string[] = []
@@ -160,17 +156,14 @@ export class ChapterSelector extends LitElement {
   }
 
   private _emitChange() {
-    const restriction: VerseRestriction | undefined =
+    const selection: ChaptersSelection | undefined =
       this._selectedBook && this._selectedChapters.size > 0
-        ? {
-            books: [this._selectedBook],
-            chaptersByBook: { [this._selectedBook]: [...this._selectedChapters].sort((a, b) => a - b) },
-          }
+        ? { book: this._selectedBook, chapters: [...this._selectedChapters].sort((a, b) => a - b) }
         : undefined
 
     this.dispatchEvent(
-      new CustomEvent<VerseRestriction | undefined>('restriction-changed', {
-        detail: restriction,
+      new CustomEvent<ChaptersSelection | undefined>('chapters-selection-changed', {
+        detail: selection,
         bubbles: true,
         composed: true,
       }),

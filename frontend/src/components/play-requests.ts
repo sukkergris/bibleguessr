@@ -1,6 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import { describeChallenge } from '../game-type'
+import { describeChallenge } from '../challenge-description'
 import type { PlayRequest, VerseSource } from '../types'
 
 /**
@@ -8,7 +8,7 @@ import type { PlayRequest, VerseSource } from '../types'
  * the chat window — see docs/SCRUM/Feature.StartMPGame.md and
  * docs/SCRUM/Feature.RequestToStartMPGame.md. Also shows the player's own
  * outstanding sent request (if any), with a Withdraw button. Each incoming
- * request shows the game type the challenger chose (see game-type.ts) and
+ * request shows the game type the challenger chose (see game-types/registry.ts) and
  * Accept/Deny buttons.
  *
  * Accepting/denying only resolves the request itself — actually starting a
@@ -34,7 +34,7 @@ export class PlayRequests extends LitElement {
   /** The VIEWING player's own chosen verse source — used to resolve each
    * request's GameType (book NUMBERS — see types.ts's GameType doc
    * comment) to THIS viewer's own book-name spelling for display (see
-   * game-type.ts's describeGameType, which is async for this reason). */
+   * challenge-description.ts's describeChallenge, which is async for this reason). */
   @property({ attribute: false })
   verseSource?: VerseSource
 

@@ -3,26 +3,19 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { createLocalVerseSource } from '../local-verses'
 import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible, fileNameFromFingerprint } from '../verse-cache'
-import type { VerseRestriction, VerseSource } from '../types'
+import type { VerseSource } from '../types'
 import { loadRoundCount, saveRoundCount } from '../game-preferences'
-import type { ChapterSelection } from './chapter-selector'
-import './book-selector'
-import './chapter-selector'
+import { freshChoice, isReady, nameOf, renderSelector, type GameTypeChoice } from '../game-types/registry'
 import './report-error'
 
 export interface GameOptions {
   translation: string
   verseSource: VerseSource
   roundCount: number
-  /** Which books/chapters to draw verses from — see
-   * docs/SCRUM/Feature.BibleSelector.md. Undefined means "default ALL". */
-  restriction?: VerseRestriction
+  /** The game type and what was picked for it — see
+   * game-types/registry.ts. Always ready to play (see isReady). */
+  choice: GameTypeChoice
 }
-
-/** Which of the three game types (see mode-select.ts) this setup screen is
- * configuring — fixed for the lifetime of one screen visit, chosen before
- * landing here rather than switched live within the screen. */
-export type SetupScope = 'all' | 'books' | 'chapters'
 
 const MIN_ROUNDS = 3
 const MAX_ROUNDS = 10
@@ -45,16 +38,12 @@ type FileState =
  */
 @customElement('bg-game-setup')
 export class GameSetup extends LitElement {
-  /** Which game type this screen is configuring — see mode-select.ts.
-   * Fixed for this screen visit; there's no in-screen way to switch it. */
+  /** Which game type this screen is configuring (see mode-select.ts),
+   * with whatever was picked for it on an earlier visit — see bg-app.ts's
+   * savedChoices. The game type is fixed for this screen visit; there's
+   * no in-screen way to switch it. */
   @property({ attribute: false })
-  scope: SetupScope = 'all'
-
-  /** Restores a selection made on an earlier visit to this same scope —
-   * see bg-app.ts's per-scope restriction state. Ignored for scope 'all',
-   * which has nothing to select. */
-  @property({ attribute: false })
-  initialRestriction?: VerseRestriction
+  initialChoice: GameTypeChoice = freshChoice('the-bible')
 
   @state()
   private mode: Mode = 'server'
@@ -80,22 +69,21 @@ export class GameSetup extends LitElement {
   @state()
   private dragOver = false
 
-  /** Undefined = no valid selection yet ('all' scope never needs one;
-   * 'books'/'chapters' do). Seeded from `initialRestriction` the first
-   * time a source becomes available, so returning to this scope restores
+  /** Undefined until a source is available. Seeded from `initialChoice`
+   * the first time one is, so returning to this game type restores
    * whatever was picked on an earlier visit — see bg-app.ts. */
   @state()
-  private restriction?: VerseRestriction
+  private choice?: GameTypeChoice
 
   // Tracks what _currentSource/_currentTranslation resolved to as of the
   // last render, so willUpdate can tell when the underlying source has
   // actually changed (switched mode, translation, or file) and reset a
-  // book/chapter selection that no longer applies to a DIFFERENT source —
-  // <bg-book-selector>/<bg-chapter-selector> reset their own internal UI
-  // state the same way, keyed off the same change. Undefined means "no
-  // source resolved yet", which is also the state right after construction
-  // — the first source to resolve is seeded from initialRestriction rather
-  // than reset to undefined (see willUpdate).
+  // selection that no longer applies to a DIFFERENT source — the game
+  // types' selectors reset their own internal UI state the same way, keyed
+  // off the same change. Undefined means "no source resolved yet", which
+  // is also the state right after construction — the first source to
+  // resolve is seeded from initialChoice rather than reset (see
+  // willUpdate).
   private _lastSourceKey?: string
 
   connectedCallback() {
@@ -204,24 +192,24 @@ export class GameSetup extends LitElement {
       const isFirstSource = this._lastSourceKey === undefined
       this._lastSourceKey = sourceKey
       // The very first source to resolve restores whatever the player
-      // picked on an earlier visit to this scope; switching to a
-      // DIFFERENT source afterwards (changed translation/file) clears it,
-      // since a book/chapter selection only makes sense for the source it
-      // was made against.
-      this.restriction = isFirstSource ? this.initialRestriction : undefined
+      // picked on an earlier visit to this game type; switching to a
+      // DIFFERENT source afterwards (changed translation/file) starts
+      // fresh, since a selection only makes sense for the source it was
+      // made against.
+      this.choice = isFirstSource ? this.initialChoice : freshChoice(this.initialChoice.gameType)
     }
   }
 
   private get _canStart(): boolean {
     if (this.mode === 'server' ? !this.selectedTranslation : this.fileState.status !== 'ready') return false
-    // 'all' has nothing to select; 'books'/'chapters' need an actual
-    // selection before there's a valid game to start.
-    return this.scope === 'all' || !!this.restriction
+    // Whether the game type still needs something picked is its own
+    // business — see GameTypeDefinition.defaultSelection.
+    return !!this.choice && isReady(this.choice)
   }
 
-  // The VerseSource + translation the book/chapter selector should query
+  // The VerseSource + translation the game type's selector should query
   // right now — undefined until a translation/file is actually chosen, so
-  // <bg-book-selector> stays hidden until there's something to select from.
+  // the selector stays hidden until there's something to select from.
   private get _currentSource(): VerseSource | undefined {
     if (this.mode === 'server') return this.selectedTranslation ? api : undefined
     return this.fileState.status === 'ready' ? this.fileState.verseSource : undefined
@@ -236,54 +224,34 @@ export class GameSetup extends LitElement {
   }
 
   private _renderScopeSelector() {
-    if (this.scope === 'all') return null
-
     const source = this._currentSource
-    if (!source) return null
+    if (!source || !this.choice) return null
 
-    if (this.scope === 'books') {
-      return html`
-        <div class="scope-selector-block">
-          <span class="scope-selector-label">Books</span>
-          <bg-book-selector
-            .verseSource=${source}
-            .translation=${this._currentTranslation}
-            .initialSelection=${this.restriction?.books}
-            @restriction-changed=${this._onRestrictionChanged}
-          ></bg-book-selector>
-        </div>
-      `
-    }
-
-    const initialChapterSelection: ChapterSelection | undefined = this.restriction?.books[0]
-      ? { book: this.restriction.books[0], chapters: this.restriction.chaptersByBook[this.restriction.books[0]] ?? [] }
-      : undefined
+    const selector = renderSelector(this.choice, {
+      verseSource: source,
+      translation: this._currentTranslation,
+      onChange: this._onChoiceChanged,
+    })
+    if (!selector) return null
 
     return html`
       <div class="scope-selector-block">
-        <span class="scope-selector-label">Chapters</span>
-        <bg-chapter-selector
-          .verseSource=${source}
-          .translation=${this._currentTranslation}
-          .initialSelection=${initialChapterSelection}
-          @restriction-changed=${this._onRestrictionChanged}
-        ></bg-chapter-selector>
+        <span class="scope-selector-label">${nameOf(this.choice.gameType)}</span>
+        ${selector}
       </div>
     `
   }
 
-  private _onRestrictionChanged(event: CustomEvent<VerseRestriction | undefined>) {
-    this.restriction = event.detail
+  private _onChoiceChanged = (choice: GameTypeChoice) => {
+    this.choice = choice
 
-    // Re-dispatch as our own event (distinct from the child selector's,
-    // which doesn't cross this component's public API boundary otherwise)
-    // so the parent can track the in-progress selection live — not just
-    // once the player hits "Start game" — and persist it per scope across
-    // visits to this screen. See bg-app.ts's booksRestriction/
-    // chaptersRestriction.
+    // Re-dispatched as this component's own event so the parent can track
+    // the in-progress selection live — not just once the player hits
+    // "Start game" — and persist it per game type across visits to this
+    // screen. See bg-app.ts's savedChoices.
     this.dispatchEvent(
-      new CustomEvent<VerseRestriction | undefined>('scope-restriction-changed', {
-        detail: this.restriction,
+      new CustomEvent<GameTypeChoice>('game-type-choice-changed', {
+        detail: choice,
         bubbles: true,
         composed: true,
       }),
@@ -538,13 +506,13 @@ export class GameSetup extends LitElement {
             translation: this.selectedTranslation,
             verseSource: api,
             roundCount: this.roundCount,
-            restriction: this.restriction,
+            choice: this.choice!,
           }
         : {
             translation: (this.fileState as Extract<FileState, { status: 'ready' }>).translation,
             verseSource: (this.fileState as Extract<FileState, { status: 'ready' }>).verseSource,
             roundCount: this.roundCount,
-            restriction: this.restriction,
+            choice: this.choice!,
           }
 
     this.dispatchEvent(

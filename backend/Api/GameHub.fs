@@ -631,7 +631,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
     /// Submits the caller's guess for the current round of their active
     /// game. `bookNumber` is the guessed book's 1-based position in the
     /// CALLER'S OWN VerseSource's Bible order (see
-    /// frontend/src/game-type.ts) — None if their own source couldn't
+    /// frontend/src/shared-kernel/book-numbers.ts) — None if their own source couldn't
     /// resolve one for what they typed, in which case scoring falls back
     /// to name matching (see Scoring.isCorrectGuess). Errors (caller-only,
     /// no broadcast) if the caller isn't in a room, isn't in an active

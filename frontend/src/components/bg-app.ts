@@ -2,11 +2,13 @@ import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { scoreGuess } from '../scoring'
-import type { Guess, RoundResult, Verse, VerseRestriction, VerseSource } from '../types'
+import { freshChoice, guessConstraintOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
+import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
+import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import './verse-card'
 import './guess-form'
 import './game-setup'
-import type { GameOptions, SetupScope } from './game-setup'
+import type { GameOptions } from './game-setup'
 import './game-results'
 import './mode-select'
 import type { GameMode } from './mode-select'
@@ -19,12 +21,6 @@ import './bug-report'
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
 type GamePhase = 'mode-select' | 'setup' | 'playing' | 'gameOver' | 'room-setup'
-
-const SETUP_SCOPE_BY_MODE: Record<Exclude<GameMode, 'multiplayer'>, SetupScope> = {
-  'singleplayer-all': 'all',
-  'singleplayer-books': 'books',
-  'singleplayer-chapters': 'chapters',
-}
 
 @customElement('bg-app')
 export class BgApp extends LitElement {
@@ -67,28 +63,29 @@ export class BgApp extends LitElement {
   @state()
   private verseSource: VerseSource = api
 
-  // Which books/chapters this game's verses are drawn from — see
-  // docs/SCRUM/Feature.BibleSelector.md. Undefined means "default ALL",
-  // chosen per game by bg-game-setup's book/chapter selector.
+  // The game type and selection of the game in progress — see
+  // game-types/registry.ts. This shell never branches on which game type
+  // it is; it only asks the registry.
   @state()
-  private restriction?: VerseRestriction
+  private choice: GameTypeChoice = freshChoice('the-bible')
 
-  // Which of the three singleplayer game types (see mode-select.ts) is
-  // currently being set up — drives which selector bg-game-setup shows.
+  // What the guess form offers for the game in progress — derived from
+  // `choice` once at game start rather than on every render.
   @state()
-  private setupScope: SetupScope = 'all'
+  private guessConstraint: GuessConstraint = ANY_BOOK
 
-  // Each game type's own book/chapter selection, kept alive across visits
-  // to mode-select and back — e.g. picking a handful of books in "Books"
-  // mode, backing out to Home, then coming back into "Books" mode restores
-  // that same selection rather than starting empty again. Deliberately
-  // three separate slots (not one shared `restriction`) so switching game
-  // types never clobbers another type's selection.
+  // Which singleplayer game type (see mode-select.ts) is currently being
+  // set up.
   @state()
-  private booksRestriction?: VerseRestriction
+  private setupGameType: GameTypeId = 'the-bible'
 
+  // Each game type's own selection, kept alive across visits to
+  // mode-select and back — e.g. picking a handful of books in "Books",
+  // backing out to Home, then coming back into "Books" restores that same
+  // selection rather than starting empty again. One slot per game type so
+  // switching types never clobbers another type's selection.
   @state()
-  private chaptersRestriction?: VerseRestriction
+  private savedChoices: Partial<Record<GameTypeId, GameTypeChoice>> = {}
 
   @state()
   private roundCount = 0
@@ -135,12 +132,12 @@ export class BgApp extends LitElement {
   }
 
   private _onModeSelected = (event: CustomEvent<GameMode>) => {
-    if (event.detail === 'multiplayer') {
+    if (event.detail.kind === 'multiplayer') {
       this.phase = 'room-setup'
       return
     }
 
-    this.setupScope = SETUP_SCOPE_BY_MODE[event.detail]
+    this.setupGameType = event.detail.gameType
     this.phase = 'setup'
   }
 
@@ -148,63 +145,34 @@ export class BgApp extends LitElement {
     this.translation = event.detail.translation
     this.verseSource = event.detail.verseSource
     this.roundCount = event.detail.roundCount
-    this.restriction = event.detail.restriction
+    this.choice = event.detail.choice
+    this.guessConstraint = guessConstraintOf(event.detail.choice)
     this.roundIndex = 0
     this.rounds = []
     this.phase = 'playing'
     void this._loadNextVerse()
   }
 
-  // The persisted selection to hand bg-game-setup for the game type it's
-  // currently configuring, so returning to a scope restores what was
-  // picked last time — see booksRestriction/chaptersRestriction.
-  private get _initialRestrictionForScope(): VerseRestriction | undefined {
-    if (this.setupScope === 'books') return this.booksRestriction
-    if (this.setupScope === 'chapters') return this.chaptersRestriction
-    return undefined
+  // The persisted choice to hand bg-game-setup for the game type it's
+  // currently configuring, so returning to a game type restores what was
+  // picked last time — see savedChoices.
+  private get _initialChoiceForSetup(): GameTypeChoice {
+    return this.savedChoices[this.setupGameType] ?? freshChoice(this.setupGameType)
   }
 
-  // Tracks the in-progress selection live, as the player checks/unchecks
+  // Tracks the in-progress choice live, as the player checks/unchecks
   // books or chapters — not just once they hit "Start game" — so leaving
   // this screen (Home, or picking a different game type) without starting
   // a game still keeps whatever they'd selected so far.
-  private _onScopeRestrictionChanged = (event: CustomEvent<VerseRestriction | undefined>) => {
-    if (this.setupScope === 'books') this.booksRestriction = event.detail
-    if (this.setupScope === 'chapters') this.chaptersRestriction = event.detail
-  }
-
-  // In "Books" mode specifically, the guess form's Book field should be a
-  // closed dropdown of exactly the selected books — no free typing, and no
-  // suggesting books outside the selection (today's guess-form otherwise
-  // autocompletes from every book in the translation, which would let a
-  // Books-mode player type/guess a book they explicitly excluded).
-  // "Chapters" mode also restricts to one book, but via _lockedBookForGuessForm
-  // instead — this only applies to "Books" mode's multi-book selection.
-  private get _allowedBooksForGuessForm(): string[] | undefined {
-    return this.setupScope === 'books' ? this.restriction?.books : undefined
-  }
-
-  // In "Chapters" mode, the player already committed to one book at setup
-  // — there's nothing left to choose, so the guess form shows it as fixed,
-  // read-only text instead of any kind of editable field.
-  private get _lockedBookForGuessForm(): string | undefined {
-    return this.setupScope === 'chapters' ? this.restriction?.books[0] : undefined
-  }
-
-  // In "Chapters" mode, the Chapter field should likewise be a closed
-  // dropdown of exactly the selected chapters — not a free-text combobox
-  // suggesting every chapter of the (locked) book, which would let a
-  // Chapters-mode player guess a chapter they explicitly excluded.
-  private get _allowedChaptersForGuessForm(): number[] | undefined {
-    const book = this._lockedBookForGuessForm
-    return book ? this.restriction?.chaptersByBook[book] : undefined
+  private _onGameTypeChoiceChanged = (event: CustomEvent<GameTypeChoice>) => {
+    this.savedChoices = { ...this.savedChoices, [event.detail.gameType]: event.detail }
   }
 
   private async _loadNextVerse() {
     this.error = undefined
     this.feedback = undefined
     try {
-      this.verse = await this.verseSource.getRandomVerse(this.translation, this.restriction)
+      this.verse = await this.verseSource.getRandomVerse(this.translation, verseRestrictionOf(this.choice))
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load a verse.'
     }
@@ -396,10 +364,9 @@ export class BgApp extends LitElement {
             ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
             : this.phase === 'setup'
               ? html`<bg-game-setup
-                  .scope=${this.setupScope}
-                  .initialRestriction=${this._initialRestrictionForScope}
+                  .initialChoice=${this._initialChoiceForSetup}
                   @game-started=${this._onGameStarted}
-                  @scope-restriction-changed=${this._onScopeRestrictionChanged}
+                  @game-type-choice-changed=${this._onGameTypeChoiceChanged}
                 ></bg-game-setup>`
               : this.phase === 'playing'
                 ? this._renderPlaying()
@@ -490,9 +457,7 @@ export class BgApp extends LitElement {
             .disabled=${!this.verse}
             .translation=${this.verse?.translation}
             .verseSource=${this.verseSource}
-            .allowedBooks=${this._allowedBooksForGuessForm}
-            .lockedBook=${this._lockedBookForGuessForm}
-            .allowedChapters=${this._allowedChaptersForGuessForm}
+            .constraint=${this.guessConstraint}
             @guess-submitted=${this._onGuessSubmitted}
           ></bg-guess-form>`}
     `

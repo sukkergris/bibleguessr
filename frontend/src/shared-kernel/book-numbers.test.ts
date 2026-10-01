@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { bookAtNumber, bookNumberOf } from './book-numbers'
+import type { VerseSource } from './bible'
+import { bookAtNumber, bookNumberOf, bookNumberOfGuess } from './book-numbers'
 
 // Mirrors backend/Domain/Verses.fs's Verse.bookNumberOf/bookAtNumber — see
 // BookNumberTests.fs's doc comment for the bug this fixes: two players'
@@ -52,5 +53,19 @@ describe('bookAtNumber', () => {
     const number = bookNumberOf(listA, 'Dommer')
     expect(number).toBe(7)
     expect(bookAtNumber(listB, number!)).toBe('Dommerne')
+  })
+})
+
+describe('bookNumberOfGuess', () => {
+  const source = {
+    getBooksInBibleOrder: () => Promise.resolve(['Genesis', 'Exodus', 'Leviticus']),
+  } as unknown as VerseSource
+
+  it('resolves a guessed book name to its number in the source', async () => {
+    expect(await bookNumberOfGuess('Exodus', source, undefined)).toBe(2)
+  })
+
+  it('returns undefined for a book the source does not recognize', async () => {
+    expect(await bookNumberOfGuess('Numbers', source, undefined)).toBeUndefined()
   })
 })

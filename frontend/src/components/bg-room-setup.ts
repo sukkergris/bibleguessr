@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { gameTypeFromRestriction } from '../game-type'
+import { freshChoice, toWire } from '../game-types/registry'
 import {
   acceptPlayRequest,
   denyPlayRequest,
@@ -157,10 +157,10 @@ export class RoomSetup extends LitElement {
 
   /** The game type/round count/time limit I've currently got selected in
    * <bg-challenge-settings> — used to build the play request I send when I
-   * click a player's name (see game-type.ts's gameTypeFromRestriction).
+   * click a player's name (see game-types/registry.ts's toWire).
    * Defaults match the selector's own defaults. */
   @state()
-  private challengeSettings: ChallengeSettings = { scope: 'all', roundCount: 5 }
+  private challengeSettings: ChallengeSettings = { choice: freshChoice('the-bible'), roundCount: 5 }
 
   /** Set once a play request involving me is accepted — the game screen
    * (<bg-multiplayer-game>) replaces the game-type-select/chat/play-requests
@@ -621,11 +621,11 @@ export class RoomSetup extends LitElement {
     // no reason to send a request that can only come back as an error.
     if (this.busyPlayerIds.has(targetId)) return
 
-    const { scope, restriction, roundCount, timeLimitSeconds } = this.challengeSettings
+    const { choice, roundCount, timeLimitSeconds } = this.challengeSettings
     const verseSource = this.myTranslationChoice?.verseSource
     if (!verseSource) return
 
-    gameTypeFromRestriction(scope, verseSource, this.myTranslationChoice?.translation, restriction)
+    toWire(choice, verseSource, this.myTranslationChoice?.translation)
       .then((gameType) => sendPlayRequest(targetId, gameType, roundCount, timeLimitSeconds))
       .catch((err) => {
         console.error('[bg-room-setup] failed to send play request', err)
@@ -673,11 +673,11 @@ export class RoomSetup extends LitElement {
   }
 
   private _onFindMatch() {
-    const { scope, restriction, roundCount, timeLimitSeconds } = this.challengeSettings
+    const { choice, roundCount, timeLimitSeconds } = this.challengeSettings
     const verseSource = this.myTranslationChoice?.verseSource
     if (!verseSource) return
 
-    gameTypeFromRestriction(scope, verseSource, this.myTranslationChoice?.translation, restriction)
+    toWire(choice, verseSource, this.myTranslationChoice?.translation)
       .then((gameType) => findMatch(gameType, roundCount, timeLimitSeconds))
       .catch((err) => {
         console.error('[bg-room-setup] failed to look for a match', err)
@@ -765,7 +765,7 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = ''
     this.playRequests = []
     this.sentRequestToId = undefined
-    this.challengeSettings = { scope: 'all', roundCount: 5 }
+    this.challengeSettings = { choice: freshChoice('the-bible'), roundCount: 5 }
     this.activeGameOpponent = undefined
     this.initialSession = undefined
     this.mpResults = undefined

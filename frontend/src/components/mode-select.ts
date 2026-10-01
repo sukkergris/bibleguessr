@@ -1,12 +1,13 @@
 import { LitElement, css, html } from 'lit'
 import { customElement } from 'lit/decorators.js'
+import { GAME_TYPE_IDS, hintOf, nameOf, type GameTypeId } from '../game-types/registry'
 
-// Singleplayer is split into three separate game types, chosen up front —
-// see docs/SCRUM/Feature.BibleSelector.md. Each is its own entry point
-// (rather than a single "setup" screen with a mode dropdown inside it) so
-// each one's book/chapter selection can persist independently — see
-// bg-app.ts's allRestriction/booksRestriction/chapterRestriction state.
-export type GameMode = 'singleplayer-all' | 'singleplayer-books' | 'singleplayer-chapters' | 'multiplayer'
+// Singleplayer offers each game type as its own entry point, chosen up
+// front — see docs/SCRUM/Feature.BibleSelector.md and docs/web/game-types.
+// Each is its own entry point (rather than a single "setup" screen with a
+// mode dropdown inside it) so each one's selection can persist
+// independently — see bg-app.ts's savedChoices.
+export type GameMode = { kind: 'singleplayer'; gameType: GameTypeId } | { kind: 'multiplayer' }
 
 /**
  * The very first screen: choose a game type. Fires a `mode-selected`
@@ -23,22 +24,20 @@ export class ModeSelect extends LitElement {
         <div class="group">
           <h2>Singleplayer</h2>
           <div class="modes">
-            <button type="button" @click=${() => this._select('singleplayer-all')}>
-              The Bible <span class="hint">quiz on any verse</span>
-            </button>
-            <button type="button" @click=${() => this._select('singleplayer-books')}>
-              Books <span class="hint">choose which books to use</span>
-            </button>
-            <button type="button" @click=${() => this._select('singleplayer-chapters')}>
-              Chapters <span class="hint">choose chapters in one book</span>
-            </button>
+            ${GAME_TYPE_IDS.map(
+              (gameType) => html`
+                <button type="button" @click=${() => this._select({ kind: 'singleplayer', gameType })}>
+                  ${nameOf(gameType)} <span class="hint">${hintOf(gameType)}</span>
+                </button>
+              `,
+            )}
           </div>
         </div>
 
         <div class="group">
           <h2>Multiplayer</h2>
           <div class="modes">
-            <button type="button" class="secondary" @click=${() => this._select('multiplayer')}>Multiplayer</button>
+            <button type="button" class="secondary" @click=${() => this._select({ kind: 'multiplayer' })}>Multiplayer</button>
           </div>
         </div>
       </div>
