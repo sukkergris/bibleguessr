@@ -16,10 +16,11 @@ import './connection-status'
 import './nerd-panel'
 import './report-abuse'
 import './bug-report'
+import '../social/social-home'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
-type GamePhase = 'mode-select' | 'setup' | 'playing' | 'gameOver' | 'room-setup'
+type GamePhase = 'mode-select' | 'setup' | 'playing' | 'gameOver' | 'room-setup' | 'social'
 
 @customElement('bg-app')
 export class BgApp extends LitElement {
@@ -133,6 +134,10 @@ export class BgApp extends LitElement {
   private _onModeSelected = (event: CustomEvent<GameMode>) => {
     if (event.detail.kind === 'multiplayer') {
       this.phase = 'room-setup'
+      return
+    }
+    if (event.detail.kind === 'social') {
+      this.phase = 'social'
       return
     }
 
@@ -376,7 +381,9 @@ export class BgApp extends LitElement {
                 ? this._renderPlaying()
                 : this.phase === 'gameOver'
                   ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
-                  : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
+                  : this.phase === 'social'
+                    ? html`<bg-social-home></bg-social-home>`
+                    : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
     `
   }
 

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Social — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Social</h1>
+      <p class="subtitle">
+        A standalone area of the app with its own section on the front page. For now it is an empty placeholder.
+      </p>
+
+      <h2>What the player sees</h2>
+      <p>
+        The front page has a third section, <strong>Social</strong>, below Singleplayer and Multiplayer. Its
+        <em>Social</em> button opens the Social screen, which so far only says "Coming soon." The usual
+        <em>← Home</em> button returns to the front page.
+      </p>
+
+      <h2>Standalone by design</h2>
+      <p>
+        Social lives in its own folder, <span class="file-ref">frontend/src/social/</span>, and may import only from
+        that folder and the shared kernel (<span class="file-ref">frontend/src/shared-kernel/</span>). It never imports
+        from the game types, the multiplayer code or the app shell, so it can grow without getting tangled up in them.
+        <span class="file-ref">frontend/src/social/architecture.test.ts</span> enforces this.
+      </p>
+      <p>
+        The app shell only knows how to get there: <code>mode-select.ts</code>'s <code>GameMode</code> has a
+        <code>{ kind: 'social' }</code> case, and <code>bg-app.ts</code> renders <code>&lt;bg-social-home&gt;</code>
+        for its <code>'social'</code> phase.
+      </p>
+
+      <h2>Tests</h2>
+      <p>
+        <span class="file-ref">frontend/e2e/social.spec.ts</span> checks the section's place on the front page and the
+        way in and back out.
+      </p>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">frontend/src/social/social-home.ts</span> ·
+        <span class="file-ref">frontend/src/components/mode-select.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-app.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>
