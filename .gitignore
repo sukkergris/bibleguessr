@@ -334,3 +334,6 @@ test-results/
 .env
 .secrets
 .github/workflows/.vars
+
+# The app database (SQLite) in development — see docs/web/daily-quiz.
+/.data/

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daily quiz — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Daily quiz</h1>
+      <p class="subtitle">
+        Every day at 00:00 UTC the server draws five random verses from the whole Bible and stores them in a small
+        SQLite database. Everyone who plays that day gets the same five, from Social.
+      </p>
+
+      <h2>What the player sees</h2>
+      <ul>
+        <li>Social → <em>Play today's quiz</em> opens the quiz: the day's date and "Verse 1 of 5".</li>
+        <li>
+          At the top, a countdown to the next quiz ("Next quiz in 05:12:47"), counted to the next 00:00 UTC in the
+          browser — midnight UTC is the same moment everywhere, so the server needn't send it. Once the day has moved
+          past the quiz on screen it says "A new quiz is ready." with a <em>Play the new quiz</em> button; it never
+          swaps the quiz itself, so a game in progress is never interrupted. It is a <code>role="timer"</code>, which
+          screen readers don't announce on every tick.
+        </li>
+        <li>
+          Each verse is guessed with the usual guess form (any book) and scored by the standard rules — see
+          <a href="../scoring/index.html">Scoring</a>. After each guess the feedback shows the points and the right
+          answer; the next-verse button takes focus, so Enter carries on.
+        </li>
+        <li>After the fifth verse: today's total and each verse's result, then <em>Back to Social</em>.</li>
+        <li>Nothing about the player is saved: playing again replays the same five verses.</li>
+      </ul>
+
+      <h2>How a day's quiz is made</h2>
+      <ol>
+        <li>
+          <code>DailyQuizScheduler</code> (<span class="file-ref">backend/Api/DailyQuizService.fs</span>) makes the
+          day's quiz at startup and then at every 00:00 UTC.
+        </li>
+        <li>
+          If that ever didn't happen — the server was down at midnight, say — <code>GET /api/daily-quiz</code> makes
+          it on the day's first request instead (<code>DailyQuizService.getOrCreate</code>).
+        </li>
+        <li>
+          Either way a day gets exactly one quiz: storing a second one for the same day is refused
+          (<code>INSERT OR IGNORE</code> on the day's primary key), and whoever lost that race reads the stored one.
+          A day's quiz never changes, also across restarts.
+        </li>
+      </ol>
+      <p>
+        The rules are pure functions in <span class="file-ref">backend/Domain/DailyQuiz.fs</span>: which UTC day a
+        moment belongs to, when the next one starts, and drawing a number of <em>distinct</em> verses (the same verse in
+        two translations counts once). The randomness is passed in, so the draw is testable.
+      </p>
+
+      <div class="callout">
+        <span class="callout-title">References only, never verse text</span>
+        <p>
+          The database and the endpoint carry only book number, chapter and verse number (plus the server's own book
+          spelling for display). Each player looks the text up from their own source, the same way a multiplayer round
+          does. See "Data security" in <span class="file-ref">CLAUDE.md</span>.
+        </p>
+      </div>
+
+      <h2>The database</h2>
+      <p>
+        One SQLite file, opened through <code>Microsoft.Data.Sqlite</code> — no database server. It suits the setup:
+        a single API process, which also holds rooms and games in memory.
+      </p>
+      <table>
+        <thead>
+          <tr><th></th><th>Development</th><th>Production (Docker image)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>File</td>
+            <td><code>.data/bibleguessr.db</code> at the repository root (gitignored)</td>
+            <td><code>/data/db/bibleguessr.db</code> on the <code>/data/db</code> volume</td>
+          </tr>
+          <tr>
+            <td>Setting</td>
+            <td colspan="2"><code>Database:FilePath</code> (env <code>Database__FilePath</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>
+          <strong>Schema:</strong> <span class="file-ref">backend/Api/Database.fs</span> holds an ordered list of
+          migrations, applied once each at startup; the version reached is kept in SQLite's own
+          <code>PRAGMA user_version</code>. A schema change is a new entry, never an edit of an old one. Tables:
+          <code>daily_quizzes</code> (one row per day) and <code>daily_quiz_verses</code> (its verses, in order).
+        </li>
+        <li>
+          <strong>WAL mode:</strong> the database file has two companions, <code>-wal</code> and <code>-shm</code>.
+          Keep all three together.
+        </li>
+        <li>
+          <strong>Backup:</strong> unlike <code>/data/bibles</code>, the <code>/data/db</code> volume can't be
+          recreated from the image — keep it across deploys and back it up. While the API runs, don't copy the file;
+          use <code>sqlite3 bibleguessr.db ".backup backup.db"</code>. With the API stopped, copying the files is fine.
+        </li>
+      </ul>
+
+      <div class="callout limitation">
+        <span class="callout-title">"Today's quiz couldn't be loaded (404)"</span>
+        <p>
+          The backend serving the page predates the daily quiz: <code>/api/daily-quiz</code> doesn't exist in it.
+          Restart it (check with <code>/api/revision</code>). nginx needs no change — it forwards everything under
+          <code>/api/</code>.
+        </p>
+      </div>
+
+      <h2>Settings</h2>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Default</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Database:FilePath</code></td><td><code>../../.data/bibleguessr.db</code></td><td>The database file; its folder is created if missing.</td></tr>
+          <tr><td><code>DailyQuiz:VerseCount</code></td><td><code>5</code></td><td>Verses per quiz.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Frontend</h2>
+      <p>
+        The quiz lives in Social (<span class="file-ref">frontend/src/social/daily-quiz/</span>):
+        <code>daily-quiz-client.ts</code> fetches the day's quiz, <code>daily-quiz-session.ts</code> is the flow as an
+        explicit state model (loading → playing → finished, or failed), <code>daily-quiz-game.ts</code> renders it
+        with the shared verse card and guess form (<span class="file-ref">frontend/src/shared-ui/</span>), and
+        <code>next-quiz-countdown.ts</code> is the countdown.
+      </p>
+
+      <h2>Tests</h2>
+      <ul>
+        <li><span class="file-ref">backend/Tests/DailyQuizTests.fs</span> — the UTC day, the next midnight, the draw.</li>
+        <li>
+          <span class="file-ref">backend/Tests/DailyQuizStoreTests.fs</span> — migrations, storing and reading a quiz,
+          one quiz per day, get-or-create; against an in-memory SQLite database.
+        </li>
+        <li><span class="file-ref">frontend/src/social/daily-quiz/daily-quiz-session.test.ts</span> — the flow.</li>
+        <li>
+          <span class="file-ref">frontend/src/social/daily-quiz/next-quiz-countdown.test.ts</span> — the time left
+          and its format, in UTC.
+        </li>
+        <li>
+          <span class="file-ref">frontend/e2e/daily-quiz.spec.ts</span> — playing a whole quiz, scoring, keyboard, a
+          quiz that can't be loaded, and the countdown (with Playwright's clock frozen at set moments). It serves a fixed quiz instead of the server's random one, so the answers are
+          known.
+        </li>
+      </ul>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/DailyQuiz.fs</span> ·
+        <span class="file-ref">backend/Api/Database.fs</span> ·
+        <span class="file-ref">backend/Api/DailyQuizStore.fs</span> ·
+        <span class="file-ref">backend/Api/DailyQuizService.fs</span> ·
+        <span class="file-ref">frontend/src/social/daily-quiz/</span>
+      </footer>
+    </main>
+  </body>
+</html>

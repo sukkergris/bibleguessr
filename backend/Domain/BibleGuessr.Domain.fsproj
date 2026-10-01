@@ -13,6 +13,7 @@
     <Compile Include="GameTypes/Chapters.fs" />
     <Compile Include="GameTypes/GameType.fs" />
     <Compile Include="Game.fs" />
+    <Compile Include="DailyQuiz.fs" />
     <Compile Include="BibleFileUploadReport.fs" />
     <Compile Include="AbuseReport.fs" />
     <Compile Include="GeneralBugReport.fs" />

@@ -1,21 +1,26 @@
-// Enforces the game-type boundaries described in game-type-definition.ts
-// and docs/web/game-types, by reading every source file's imports:
+// The frontend's layer rules, checked by reading every source file's
+// imports — see docs/web/game-types and docs/web/social.
 //
-// 1. A game type (a folder here) imports only from its own folder, the
-//    shared kernel, and the GameTypeDefinition contract — never from a
-//    sibling game type or from the app shell.
-// 2. The shared kernel imports only from itself.
-// 3. Outside this folder, the app reaches game types only through
-//    registry.ts.
+//   shared-kernel/  the shared vocabulary (verses, guesses, scoring rules):
+//                   imports only itself.
+//   shared-ui/      UI components any area may use (verse card, guess
+//                   form): imports only itself and the shared kernel.
+//   game-types/X/   one game type: imports only itself, the shared kernel
+//                   and the GameTypeDefinition contract. The rest of the
+//                   app reaches game types only through registry.ts.
+//   social/         a standalone area: imports only itself, the shared
+//                   kernel and shared UI.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const GAME_TYPES_DIR = dirname(fileURLToPath(import.meta.url))
-const SRC_DIR = resolve(GAME_TYPES_DIR, '..')
+const SRC_DIR = dirname(fileURLToPath(import.meta.url))
 const SHARED_KERNEL_DIR = join(SRC_DIR, 'shared-kernel')
+const SHARED_UI_DIR = join(SRC_DIR, 'shared-ui')
+const GAME_TYPES_DIR = join(SRC_DIR, 'game-types')
+const SOCIAL_DIR = join(SRC_DIR, 'social')
 const CONTRACT_FILE = join(GAME_TYPES_DIR, 'game-type-definition')
 const REGISTRY_FILE = join(GAME_TYPES_DIR, 'registry')
 const SOURCE_EXTENSION = '.ts'
@@ -40,46 +45,57 @@ export function relativeImportsOf(file: string, source: string): string[] {
 
 const isInside = (path: string, directory: string) => path === directory || path.startsWith(directory + sep)
 
-const gameTypeFolders = readdirSync(GAME_TYPES_DIR)
-  .map((entry) => join(GAME_TYPES_DIR, entry))
-  .filter((path) => statSync(path).isDirectory())
-
-type Rule = (file: string, target: string) => boolean
+type Rule = (target: string) => boolean
 
 function violations(files: string[], allowed: Rule): string[] {
   return files.flatMap((file) =>
     relativeImportsOf(file, readFileSync(file, 'utf-8'))
-      .filter((target) => !allowed(file, target))
+      .filter((target) => !allowed(target))
       .map((target) => `${relative(SRC_DIR, file)} imports ${relative(SRC_DIR, target)}`),
   )
 }
 
-describe('game-type boundaries', () => {
-  it('finds the game types to check', () => {
+const gameTypeFolders = readdirSync(GAME_TYPES_DIR)
+  .map((entry) => join(GAME_TYPES_DIR, entry))
+  .filter((path) => statSync(path).isDirectory())
+
+describe('layer boundaries', () => {
+  it('finds the layers to check', () => {
     // Guards against every rule below passing vacuously.
+    expect(sourceFilesUnder(SHARED_KERNEL_DIR).length).toBeGreaterThan(0)
+    expect(sourceFilesUnder(SHARED_UI_DIR).length).toBeGreaterThan(0)
+    expect(sourceFilesUnder(SOCIAL_DIR).length).toBeGreaterThan(0)
     expect(gameTypeFolders.map((folder) => relative(GAME_TYPES_DIR, folder)).sort()).toEqual(
       expect.arrayContaining(['books', 'chapters', 'the-bible']),
     )
   })
 
+  it('the shared kernel imports only itself', () => {
+    expect(violations(sourceFilesUnder(SHARED_KERNEL_DIR), (t) => isInside(t, SHARED_KERNEL_DIR))).toEqual([])
+  })
+
+  it('shared UI imports only itself and the shared kernel', () => {
+    const allowed: Rule = (t) => isInside(t, SHARED_UI_DIR) || isInside(t, SHARED_KERNEL_DIR)
+    expect(violations(sourceFilesUnder(SHARED_UI_DIR), allowed)).toEqual([])
+  })
+
   it.each(gameTypeFolders.map((folder) => [relative(GAME_TYPES_DIR, folder), folder]))(
-    '%s imports only itself, the shared kernel and the contract',
+    'game type %s imports only itself, the shared kernel and the contract',
     (_name, folder) => {
-      const allowed: Rule = (_file, target) =>
-        isInside(target, folder) || isInside(target, SHARED_KERNEL_DIR) || target === CONTRACT_FILE
+      const allowed: Rule = (t) => isInside(t, folder) || isInside(t, SHARED_KERNEL_DIR) || t === CONTRACT_FILE
       expect(violations(sourceFilesUnder(folder), allowed)).toEqual([])
     },
   )
 
-  it('the shared kernel imports only itself', () => {
-    const allowed: Rule = (_file, target) => isInside(target, SHARED_KERNEL_DIR)
-    expect(violations(sourceFilesUnder(SHARED_KERNEL_DIR), allowed)).toEqual([])
-  })
-
   it('the rest of the app reaches game types only through the registry', () => {
     const appFiles = sourceFilesUnder(SRC_DIR).filter((file) => !isInside(file, GAME_TYPES_DIR))
-    const allowed: Rule = (_file, target) => !isInside(target, GAME_TYPES_DIR) || target === REGISTRY_FILE
+    const allowed: Rule = (t) => !isInside(t, GAME_TYPES_DIR) || t === REGISTRY_FILE
     expect(violations(appFiles, allowed)).toEqual([])
+  })
+
+  it('Social imports only itself, the shared kernel and shared UI', () => {
+    const allowed: Rule = (t) => isInside(t, SOCIAL_DIR) || isInside(t, SHARED_KERNEL_DIR) || isInside(t, SHARED_UI_DIR)
+    expect(violations(sourceFilesUnder(SOCIAL_DIR), allowed)).toEqual([])
   })
 })
 

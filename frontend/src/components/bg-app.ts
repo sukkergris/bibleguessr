@@ -4,8 +4,8 @@ import { api } from '../api'
 import { freshChoice, guessConstraintOf, scoreGuessOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import type { Guess, RoundResult, Verse, VerseSource } from '../types'
-import './verse-card'
-import './guess-form'
+import '../shared-ui/verse-card'
+import '../shared-ui/guess-form'
 import './game-setup'
 import type { GameOptions } from './game-setup'
 import './game-results'
@@ -382,7 +382,7 @@ export class BgApp extends LitElement {
                 : this.phase === 'gameOver'
                   ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
                   : this.phase === 'social'
-                    ? html`<bg-social-home></bg-social-home>`
+                    ? html`<bg-social-home .verseSource=${api}></bg-social-home>`
                     : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
     `
   }

@@ -31,7 +31,7 @@
     books/
     chapters/
     registry.ts             the ONLY module that knows every game type
-    architecture.test.ts    enforces the rules below
+  architecture.test.ts      enforces the rules below (and those of shared-ui/ and social/)
 
 backend/Domain/
   Scoring.fs                           shared kernel: Guess, TimeLimit, the standard scoring rules
@@ -57,7 +57,7 @@ backend/Domain/
         </li>
       </ul>
       <p>
-        These rules are tests, not conventions. <span class="file-ref">frontend/src/game-types/architecture.test.ts</span>
+        These rules are tests, not conventions. <span class="file-ref">frontend/src/architecture.test.ts</span>
         reads every file's imports, and <span class="file-ref">backend/Tests/GameTypeIsolationTests.fs</span> reads
         the F# modules. Both find the game types by folder or file, so a new game type is covered automatically.
       </p>

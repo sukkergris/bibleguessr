@@ -1,9 +1,8 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, query, state } from 'lit/decorators.js'
-import { api } from '../api'
-import { layoutBooks, type BookCategoryGroup, type BookLayout } from '../book-picker'
+import type { Guess, VerseSource } from '../shared-kernel/bible'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
-import type { Guess, VerseSource } from '../types'
+import { layoutBooks, type BookCategoryGroup, type BookLayout } from './book-picker'
 
 const BOOK_FIELD = 'bg-book-guess'
 const CHAPTER_FIELD = 'bg-chapter-guess'
@@ -74,9 +73,12 @@ export class GuessForm extends LitElement {
   translation?: string
 
   // Where the book/chapter/verse-number lists are loaded from: the backend
-  // (default) or a Bible file the player parsed client-side — see local-verses.ts.
+  // or a Bible file the player parsed client-side — see local-verses.ts.
+  // Always given by the host screen; this shared component never reaches
+  // for the app's own API client itself (see shared-ui's rules in
+  // architecture.test.ts). Nothing loads until it is set.
   @property({ attribute: false })
-  verseSource: VerseSource = api
+  verseSource?: VerseSource
 
   // What this game lets the player guess — decided by the game type (see
   // game-types/registry.ts's guessConstraintOf/guessConstraintForWire),
@@ -183,6 +185,7 @@ export class GuessForm extends LitElement {
 
   private _loadBooks() {
     const source = this.verseSource
+    if (!source) return
     const key = this.translation ?? NO_TRANSLATION_KEY
     const cached = booksInBibleOrderCache.get(source)?.get(key)
     if (cached) {
@@ -207,6 +210,7 @@ export class GuessForm extends LitElement {
   // so a slow response for a book or chapter the player has already moved
   // on from can't replace the tiles they're looking at.
   private _loadChapters(book: string) {
+    if (!this.verseSource) return
     this.verseSource
       .getChapters(book, this.translation)
       .then((chapters) => {
@@ -216,6 +220,7 @@ export class GuessForm extends LitElement {
   }
 
   private _loadVerseNumbers(book: string, chapter: number) {
+    if (!this.verseSource) return
     this.verseSource
       .getVerseNumbers(book, chapter, this.translation)
       .then((verseNumbers) => {

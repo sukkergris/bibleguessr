@@ -36,8 +36,8 @@ WORKDIR /app
 # ownership; a bind mount must instead be writable by apiuser's UID.
 RUN adduser --disabled-password --home /app --gecos '' apiuser \
     && chown -R apiuser /app \
-    && mkdir -p /data/bibles \
-    && chown apiuser /data/bibles
+    && mkdir -p /data/bibles /data/db \
+    && chown apiuser /data/bibles /data/db
 USER apiuser
 
 COPY --from=build --chown=apiuser /app/publish .
@@ -50,6 +50,10 @@ COPY --from=build --chown=apiuser /app/publish .
 COPY --chown=apiuser ["bibles/bibelen-dk/src/Bibelen Files.zip", "/app/bibles/bibelen-dk/src/"]
 
 VOLUME /data/bibles
+# The SQLite database (see docs/web/daily-quiz). Its own volume: unlike
+# /data/bibles it can't be recreated from the image, so it must be kept —
+# and backed up — across deploys.
+VOLUME /data/db
 
 ARG BUILD_SHA
 ARG BUILD_CONTEXT
@@ -57,6 +61,7 @@ ARG BUILD_CONTEXT
 ENV ASPNETCORE_URLS=http://+:8080 \
     Verses__ArchivePath="/app/bibles/bibelen-dk/src/Bibelen Files.zip" \
     Verses__DataDirectory=/data/bibles \
+    Database__FilePath=/data/db/bibleguessr.db \
     BUILD_SHA="${BUILD_SHA}" \
     BUILD_CONTEXT="${BUILD_CONTEXT}"
 

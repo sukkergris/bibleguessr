@@ -11,6 +11,9 @@
     <Compile Include="BibleArchiveUnpacker.fs" />
     <Compile Include="GameHub.fs" />
     <Compile Include="MailSender.fs" />
+    <Compile Include="Database.fs" />
+    <Compile Include="DailyQuizStore.fs" />
+    <Compile Include="DailyQuizService.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
@@ -20,6 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="FSharp.SystemTextJson" Version="1.4.36" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
   </ItemGroup>
 

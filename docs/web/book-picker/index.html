@@ -96,7 +96,7 @@
 
       <h2>Grouping rules</h2>
       <p>
-        <span class="file-ref">frontend/src/book-picker.ts</span> holds the category table
+        <span class="file-ref">frontend/src/shared-ui/book-picker.ts</span> holds the category table
         (<code>BOOK_CATEGORIES</code>, book-number ranges) and the pure function <code>layoutBooks</code>. Ranges, not exact positions, are used so a source that orders books slightly
         differently within a category still groups correctly. The bundled bibelen-dk, for example, places Jakob
         after 3. Johannes, and both still fall in General letters (59–65).
@@ -111,7 +111,7 @@
       <ul>
         <li>
           While the next verse loads, the verse card keeps the height it had (see
-          <span class="file-ref">frontend/src/components/verse-card.ts</span>) instead of collapsing to one line, and
+          <span class="file-ref">frontend/src/shared-ui/verse-card.ts</span>) instead of collapsing to one line, and
           the previous verse is no longer shown — or guessable — meanwhile.
         </li>
         <li>
@@ -166,13 +166,13 @@
 
       <h2>Implementation and tests</h2>
       <p>
-        The grid lives in <span class="file-ref">frontend/src/components/guess-form.ts</span>
+        The grid lives in <span class="file-ref">frontend/src/shared-ui/guess-form.ts</span>
         (<code>_renderBookPicker</code> and <code>_renderSlider</code>). They replaced the free-text
         comboboxes and the Books/Chapters-mode <code>&lt;select&gt;</code>s. A guess can now only name a book,
         chapter and verse that exist in the player's own Bible.
       </p>
       <p>
-        Grouping is unit tested in <span class="file-ref">frontend/src/book-picker.test.ts</span>.
+        Grouping is unit tested in <span class="file-ref">frontend/src/shared-ui/book-picker.test.ts</span>.
         The grids' behaviour (grouping, tiles and book slider in sync, chapter/verse scoping and resets, stacking order, the pinned bar, keyboard operation) is covered
         by <span class="file-ref">frontend/e2e/book-picker.spec.ts</span>.
       </p>

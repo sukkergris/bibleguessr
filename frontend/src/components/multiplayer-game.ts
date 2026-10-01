@@ -17,8 +17,8 @@ import { FORFEIT_RESPONSE_TIMEOUT_MS, forfeitOutcomeAfter } from '../forfeit-sta
 import { computeRemainingSeconds, deadlineOf, parseTimeSpanMs } from '../timer'
 import type { GameOverReason, GameSession, GameType, Guess, Verse, VerseReference, VerseSource } from '../types'
 import type { MultiplayerGameOverDetail, MultiplayerRoundSummary } from './multiplayer-results'
-import './verse-card'
-import './guess-form'
+import '../shared-ui/verse-card'
+import '../shared-ui/guess-form'
 
 /** How often the local countdown re-renders — purely cosmetic, no network
  * traffic involved (see timer.ts's computeRemainingSeconds). 250ms rather

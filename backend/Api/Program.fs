@@ -45,7 +45,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 6
+let BackendRevision = 7
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"
@@ -154,6 +154,28 @@ let main args =
     let verses = BibelenDkLoader.loadFromHtmlDirectory versesDirectory
 
     builder.Services.AddSingleton<Verse list>(verses) |> ignore
+
+    // The app's single SQLite database file — see Database.fs and
+    // docs/web/daily-quiz. A volume in production (see
+    // build/Dockerfile.api), the gitignored .data/ folder in development.
+    let databaseSettings: Database.Settings =
+        { FilePath =
+            builder.Configuration["Database:FilePath"]
+            |> Option.ofObj
+            |> Option.defaultValue "../../.data/bibleguessr.db" }
+
+    builder.Services.AddSingleton<Database.Settings>(databaseSettings) |> ignore
+
+    let dailyQuizSettings: DailyQuizService.Settings =
+        { VerseCount =
+            builder.Configuration["DailyQuiz:VerseCount"]
+            |> Option.ofObj
+            |> Option.map int
+            |> Option.defaultValue 5 }
+
+    builder.Services.AddSingleton<DailyQuizService.Settings>(dailyQuizSettings) |> ignore
+    builder.Services.AddSingleton<TimeProvider>(TimeProvider.System) |> ignore
+    builder.Services.AddHostedService<DailyQuizService.DailyQuizScheduler>() |> ignore
 
     // How often RoundTimeoutService checks for an expired round — see
     // GameHub.fs's RoundTimeoutSettings/RoundTimeoutService. Same
@@ -302,6 +324,11 @@ let main args =
 
     startupLogger.LogInformation("SMTP host for bug reports: {Host}:{Port}", smtpSettings.Host, smtpSettings.Port)
 
+    // Before anything can read or write it — including DailyQuizScheduler,
+    // which starts with the app below.
+    Database.initialize databaseSettings
+    startupLogger.LogInformation("Database ready at {Path}", IO.Path.GetFullPath databaseSettings.FilePath)
+
 
     // /healthz is the conventional name for a liveness endpoint, and the
     // connection panel names it directly rather than calling it "backend"
@@ -321,6 +348,28 @@ let main args =
                 ))
 
     app.MapGet(HealthzPath, healthResponse) |> ignore
+
+    // Today's quiz (UTC) — references only, never verse text: each player
+    // looks the text up in their own source, as in a multiplayer round. See
+    // docs/web/daily-quiz. Made here if the midnight job hasn't made it
+    // (DailyQuizService.getOrCreate); 503 only when there are no verses.
+    app.MapGet(
+        "/api/daily-quiz",
+        Func<Database.Settings, DailyQuizService.Settings, Verse list, TimeProvider, IResult>
+            (fun database settings verses timeProvider ->
+                match DailyQuizService.today (Database.connectionString database) settings verses timeProvider with
+                | Some quiz ->
+                    Results.Json(
+                        {| date = quiz.Date.ToString("yyyy-MM-dd", Globalization.CultureInfo.InvariantCulture)
+                           verses = quiz.Verses |}
+                    )
+                | None ->
+                    Results.Problem(
+                        statusCode = StatusCodes.Status503ServiceUnavailable,
+                        detail = "No verses are loaded, so there is no daily quiz."
+                    ))
+    )
+    |> ignore
 
     app.MapGet(
         "/api/revision",

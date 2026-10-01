@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import { styleMap } from 'lit/directives/style-map.js'
-import type { Verse } from '../types'
+import type { Verse } from '../shared-kernel/bible'
 
 /**
  * Displays a Bible verse's text without revealing its reference —
