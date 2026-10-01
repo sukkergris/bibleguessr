@@ -1,11 +1,50 @@
-import { LitElement, css, html } from 'lit'
+import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, query, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { layoutBooks, type BookCategoryGroup } from '../book-picker'
+import { layoutBooks, type BookCategoryGroup, type BookLayout } from '../book-picker'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import type { Guess, VerseSource } from '../types'
 
-type ComboField = 'chapter' | 'verseNumber'
+const BOOK_FIELD = 'bg-book-guess'
+const CHAPTER_FIELD = 'bg-chapter-guess'
+const VERSE_FIELD = 'bg-verse-guess'
+
+/** The slider position that picks nothing: no book yet, or "any"
+ * chapter/verse (those two are optional). */
+const NONE_POSITION = 0
+
+/** One slider in the guess bar: the book, the chapter or the verse. */
+interface SliderSpec<T> {
+  label: string
+  name: string
+  /** What NONE_POSITION shows next to the slider, e.g. "Any". */
+  noneDisplay: string
+  /** What NONE_POSITION reads as to a screen reader, e.g. "Any chapter". */
+  noneValueText: string
+  /** What a value reads as to a screen reader, e.g. "Chapter 12". */
+  valueText: (value: T) => string
+  /** Why the slider is disabled: the step before isn't done yet, or its
+   * options are still loading. */
+  waitingFor?: string
+  options: T[]
+  selected: T | undefined
+  onSelect: (value: T | undefined) => void
+}
+
+/** Each source's book list per translation, shared by every guess form.
+ * A new form is created for every verse, and without this it would start
+ * with an empty book grid and grow once the list had loaded again —
+ * making the screen jump on every verse. The list never changes for a
+ * given source and translation. */
+const booksInBibleOrderCache = new WeakMap<VerseSource, Map<string, string[]>>()
+const NO_TRANSLATION_KEY = ''
+
+/** Every book in a layout, in the order the grid shows them. */
+function booksInLayoutOrder(layout: BookLayout): string[] {
+  return layout.kind === 'flat'
+    ? layout.books
+    : layout.testaments.flatMap((testament) => testament.categories.flatMap((category) => category.books))
+}
 
 /**
  * Fires a `guess-submitted` CustomEvent<Guess> when the player submits.
@@ -15,13 +54,14 @@ type ComboField = 'chapter' | 'verseNumber'
  * needed. Tile names always come from the selected Bible via
  * VerseSource.getBooksInBibleOrder.
  *
- * The chapter and verse fields each show a filtered suggestion list as the
- * player types — chapter suggestions are scoped to whichever book is
- * selected, and verse-number suggestions to the book + chapter, so they
- * only ever offer numbers that actually exist there. A
- * native <input list>/<datalist> pair was tried first, but `list=` lookups
- * don't reliably cross into a Lit component's shadow DOM across browsers,
- * so suggestions are rendered manually instead.
+ * Below the grid, a bar pinned to the bottom of the screen holds, always
+ * stacked in this order: a summary of the guess so far, a book slider (an
+ * alternative to the tiles, kept in sync with them), a chapter slider, a
+ * verse slider and the Guess button — so none of it ever scrolls out of
+ * reach below the book grid. The chapter slider runs over the selected
+ * book's chapters, the verse slider over the selected chapter's verses, so
+ * they only ever offer numbers that exist. Both are optional — the
+ * leftmost position is "Any …", which leaves that part out of the guess.
  */
 @customElement('bg-guess-form')
 export class GuessForm extends LitElement {
@@ -43,8 +83,8 @@ export class GuessForm extends LitElement {
   // never by this form. 'any-book' shows every book of the translation;
   // 'one-of-books' (Books games) shows only those, since a player shouldn't
   // be able to pick a book they excluded at setup; 'fixed-book' (Chapters
-  // games) shows the already-chosen book as read-only text and the Chapter
-  // field as a closed <select> of exactly the chosen chapters.
+  // games) shows the already-chosen book as read-only text and offers
+  // exactly the chosen chapters.
   @property({ attribute: false })
   constraint: GuessConstraint = ANY_BOOK
 
@@ -52,10 +92,10 @@ export class GuessForm extends LitElement {
   private book = ''
 
   @state()
-  private chapter = ''
+  private chapter?: number
 
   @state()
-  private verseNumber = ''
+  private verseNumber?: number
 
   // The selected Bible's own book names, in Bible order — the grid's
   // tiles, and what book-picker.ts groups by position.
@@ -68,27 +108,19 @@ export class GuessForm extends LitElement {
   @state()
   private verseNumbers: number[] = []
 
-  @state()
-  private openField: ComboField | undefined
-
-  @state()
-  private activeSuggestion = -1
-
   // The book grid's tile to focus for a new question: the selected one if
   // any, otherwise the first — the same tile Tab would land on, so the
   // arrow keys work straight away. Not present at all for a fixed book
-  // (Chapters games) — see updated()'s focus logic, which falls back to
-  // chapterField then.
-  @query('input[name="bg-book-guess"]:checked')
+  // (Chapters games) — see updated()'s focus logic, which uses the
+  // chapter slider then.
+  @query(`input[name="${BOOK_FIELD}"]:checked`)
   private checkedBookTile?: HTMLInputElement
 
-  @query('input[name="bg-book-guess"]')
+  @query(`input[name="${BOOK_FIELD}"]`)
   private firstBookTile?: HTMLInputElement
 
-  // The free-text combobox, or the closed <select> when the book is fixed
-  // — both carry this name so a fixed-book game can focus it.
-  @query('[name="bg-chapter-guess"]')
-  private chapterField?: HTMLInputElement | HTMLSelectElement
+  @query(`input[name="${CHAPTER_FIELD}"]`)
+  private chapterSlider?: HTMLInputElement
 
   // Set when a new question becomes ready, cleared once focus has been
   // placed. Needed because the book tiles render only after the book list
@@ -96,6 +128,10 @@ export class GuessForm extends LitElement {
   // would find nothing. Cleared again if the form is disabled first, so a
   // late-loading list never pulls focus into a form that isn't active.
   private focusPending = false
+
+  // Set when the book slider picks a book, so updated() can bring that
+  // book's tile into view in the grid — the two controls show one choice.
+  private revealBookTile = false
 
   connectedCallback() {
     super.connectedCallback()
@@ -115,14 +151,18 @@ export class GuessForm extends LitElement {
 
     // A new question is ready as soon as the form goes from disabled (still
     // loading the verse) to enabled — put focus on whichever field is
-    // actually interactive first: Chapter when the book is locked (nothing
-    // to do on the read-only Book field), Book otherwise.
+    // actually interactive first: the chapter slider when the book is locked
+    // (nothing to do on the read-only Book field), the book tiles otherwise.
     if (changedProperties.has('disabled')) {
       this.focusPending = changedProperties.get('disabled') === true && !this.disabled
     }
+    if (this.revealBookTile) {
+      this.revealBookTile = false
+      this._scrollCheckedBookTileIntoView()
+    }
     if (this.focusPending) {
       const target =
-        this.constraint.kind === 'fixed-book' ? this.chapterField : (this.checkedBookTile ?? this.firstBookTile)
+        this.constraint.kind === 'fixed-book' ? this.chapterSlider : (this.checkedBookTile ?? this.firstBookTile)
       if (target) {
         this.focusPending = false
         target.focus()
@@ -135,116 +175,132 @@ export class GuessForm extends LitElement {
   // interaction to trigger that load the way picking a book normally does.
   private _lockToBook(book: string) {
     if (this.book === book) return
-    this.book = book
-    this.chapter = ''
-    this.verseNumber = ''
-    this.verseNumbers = []
-    this._loadChapters(book)
+    this._selectBook(book)
   }
 
   private _loadBooks() {
-    this.verseSource
+    const source = this.verseSource
+    const key = this.translation ?? NO_TRANSLATION_KEY
+    const cached = booksInBibleOrderCache.get(source)?.get(key)
+    if (cached) {
+      this.booksInBibleOrder = cached
+      return
+    }
+
+    source
       .getBooksInBibleOrder(this.translation)
-      .then((books) => (this.booksInBibleOrder = books))
+      .then((books) => {
+        const bySource = booksInBibleOrderCache.get(source) ?? new Map<string, string[]>()
+        bySource.set(key, books)
+        booksInBibleOrderCache.set(source, bySource)
+        if (this.verseSource === source && (this.translation ?? NO_TRANSLATION_KEY) === key) {
+          this.booksInBibleOrder = books
+        }
+      })
       .catch((error) => console.error('[guess-form] failed to load book list', error))
   }
 
+  // Each load checks the selection is still the one it was started for,
+  // so a slow response for a book or chapter the player has already moved
+  // on from can't replace the tiles they're looking at.
   private _loadChapters(book: string) {
-    if (!book.trim()) {
-      this.chapters = []
-      return
-    }
     this.verseSource
-      .getChapters(book.trim(), this.translation)
-      .then((chapters) => (this.chapters = chapters))
+      .getChapters(book, this.translation)
+      .then((chapters) => {
+        if (this.book === book) this.chapters = chapters
+      })
       .catch((error) => console.error('[guess-form] failed to load chapter list', error))
   }
 
-  private _loadVerseNumbers(book: string, chapter: string) {
-    const chapterNum = chapter ? Number(chapter) : undefined
-    if (!book.trim() || !chapterNum) {
-      this.verseNumbers = []
-      return
-    }
+  private _loadVerseNumbers(book: string, chapter: number) {
     this.verseSource
-      .getVerseNumbers(book.trim(), chapterNum, this.translation)
-      .then((verseNumbers) => (this.verseNumbers = verseNumbers))
+      .getVerseNumbers(book, chapter, this.translation)
+      .then((verseNumbers) => {
+        if (this.book === book && this.chapter === chapter) this.verseNumbers = verseNumbers
+      })
       .catch((error) => console.error('[guess-form] failed to load verse-number list', error))
   }
 
-  private get chapterSuggestions(): string[] {
-    const query = this.chapter.trim()
-    const candidates = this.chapters.map(String)
-    if (!query) return candidates.slice(0, 8)
-    return candidates.filter((chapter) => chapter.startsWith(query)).slice(0, 8)
-  }
-
-  private get verseNumberSuggestions(): string[] {
-    const query = this.verseNumber.trim()
-    const candidates = this.verseNumbers.map(String)
-    if (!query) return candidates.slice(0, 8)
-    return candidates.filter((verseNumber) => verseNumber.startsWith(query)).slice(0, 8)
-  }
-
-  private _suggestionsFor(field: ComboField): string[] {
-    switch (field) {
-      case 'chapter':
-        return this.chapterSuggestions
-      case 'verseNumber':
-        return this.verseNumberSuggestions
-    }
-  }
-
   render() {
-    const showChapterSuggestions = this.openField === 'chapter' && this.chapterSuggestions.length > 0
-    const showVerseNumberSuggestions = this.openField === 'verseNumber' && this.verseNumberSuggestions.length > 0
-
+    const fixedBook = this.constraint.kind === 'fixed-book'
+    const layout = layoutBooks(this.booksInBibleOrder, this.availableBooks)
+    const chapterOptions = this.constraint.kind === 'fixed-book' ? this.constraint.chapters : this.chapters
     return html`
       <form @submit=${this._onSubmit}>
-        ${this.constraint.kind === 'fixed-book'
-          ? html`${this._renderLockedBook(this.constraint.book)}${this._renderChapterDropdown(this.constraint.chapters)}`
-          : html`${this._renderBookPicker()}${this._renderChapterCombobox(showChapterSuggestions)}`}
-        <label class="combo-field">
-          Verse (optional)
-          <div class="combobox">
-            <input
-              type="number"
-              min="1"
-              role="combobox"
-              aria-expanded=${showVerseNumberSuggestions}
-              aria-autocomplete="list"
-              autocomplete="off"
-              .value=${this.verseNumber}
-              @input=${this._onVerseNumberInput}
-              @focus=${() => (this.openField = 'verseNumber')}
-              @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'verseNumber')}
-              @blur=${this._onComboBlur}
-              ?disabled=${this.disabled}
-            />
-            ${showVerseNumberSuggestions
-              ? this._renderSuggestions(this.verseNumberSuggestions, (verseNumber) =>
-                  this._selectVerseNumber(verseNumber),
-                )
-              : null}
+        ${fixedBook ? null : this._renderBookPicker(layout)}
+        <div class="guess-bar">
+          <p class="guess-summary">${this._summary()}</p>
+          ${this.constraint.kind === 'fixed-book'
+            ? this._renderLockedBook(this.constraint.book)
+            : this._renderSlider<string>({
+                label: 'Book',
+                name: `${BOOK_FIELD}-slider`,
+                noneDisplay: '—',
+                noneValueText: 'No book picked',
+                valueText: (book) => book,
+                waitingFor: this.booksInBibleOrder.length === 0 ? 'Loading books…' : undefined,
+                options: booksInLayoutOrder(layout),
+                selected: this.book || undefined,
+                onSelect: (book) => {
+                  this._selectBook(book ?? '')
+                  this.revealBookTile = book !== undefined
+                },
+              })}
+          ${this._renderSlider<number>({
+            label: 'Chapter (optional)',
+            name: CHAPTER_FIELD,
+            noneDisplay: 'Any',
+            noneValueText: 'Any chapter',
+            valueText: (chapter) => `Chapter ${chapter}`,
+            waitingFor: !this.book ? 'Pick a book first.' : chapterOptions.length === 0 ? 'Loading chapters…' : undefined,
+            options: chapterOptions,
+            selected: this.chapter,
+            onSelect: (chapter) => this._selectChapter(chapter),
+          })}
+          ${this._renderSlider<number>({
+            label: 'Verse (optional)',
+            name: VERSE_FIELD,
+            noneDisplay: 'Any',
+            noneValueText: 'Any verse',
+            valueText: (verseNumber) => `Verse ${verseNumber}`,
+            waitingFor:
+              this.chapter === undefined
+                ? 'Pick a chapter first.'
+                : this.verseNumbers.length === 0
+                  ? 'Loading verses…'
+                  : undefined,
+            options: this.verseNumbers,
+            selected: this.verseNumber,
+            onSelect: (verseNumber) => (this.verseNumber = verseNumber),
+          })}
+          <div class="guess-actions">
+            <button type="submit" ?disabled=${this.disabled}>Guess</button>
           </div>
-        </label>
-        <button type="submit" ?disabled=${this.disabled}>Guess</button>
+        </div>
       </form>
     `
   }
 
+  // The guess so far, in the same "Book chapter:verse" form the feedback
+  // uses. Deliberately not a live region: every control that changes it
+  // already announces its own new value, so announcing this too would say
+  // everything twice.
+  private _summary(): string {
+    if (!this.book) return 'Your guess: pick a book'
+    if (this.chapter === undefined) return `Your guess: ${this.book}`
+    if (this.verseNumber === undefined) return `Your guess: ${this.book} ${this.chapter}`
+    return `Your guess: ${this.book} ${this.chapter}:${this.verseNumber}`
+  }
+
   // Chapters-mode games only — the book was already chosen at setup (the
-  // whole point of that game type), so it's shown as fixed, read-only
-  // text rather than any kind of editable field: nothing to pick, nothing
-  // to type over. A hidden input still carries the value into the form
-  // submission the same way the other Book fields do.
+  // whole point of that game type), so the Book row shows it as fixed,
+  // read-only text rather than any kind of control: nothing to pick.
   private _renderLockedBook(lockedBook: string) {
     return html`
-      <label class="combo-field">
-        Book
-        <div class="locked-book" title="Already chosen for this game — see the setup screen">${lockedBook}</div>
-        <input type="hidden" .value=${lockedBook} />
-      </label>
+      <div class="slider-row">
+        <span class="slider-label">Book</span>
+        <span class="locked-book" title="Already chosen for this game — see the setup screen">${lockedBook}</span>
+      </div>
     `
   }
 
@@ -257,14 +313,11 @@ export class GuessForm extends LitElement {
   // A grid of radio tiles (native radio-group keyboard behavior: Tab in,
   // arrow keys to move and select). Grouped by testament/category when the selected Bible is a
   // standard 66-book canon, one flat list otherwise — see book-picker.ts.
-  private _renderBookPicker() {
-    const layout = layoutBooks(this.booksInBibleOrder, this.availableBooks)
-
+  private _renderBookPicker(layout: BookLayout) {
     return html`
       <fieldset class="book-picker" ?disabled=${this.disabled}>
         <legend>Book</legend>
-        <p class="book-status" role="status">${this._bookStatus()}</p>
-        <div class="book-grid-scroll">
+        <div class="grid-scroll book-grid-scroll">
           ${layout.kind === 'grouped'
             ? layout.testaments.map(
                 (testament) => html`
@@ -292,10 +345,10 @@ export class GuessForm extends LitElement {
   private _renderBookTile(book: string) {
     const checked = this.book === book
     return html`
-      <label class="book-tile ${checked ? 'checked' : ''}">
+      <label class="tile book-tile ${checked ? 'checked' : ''}">
         <input
           type="radio"
-          name="bg-book-guess"
+          name=${BOOK_FIELD}
           .value=${book}
           .checked=${checked}
           @change=${() => this._selectBook(book)}
@@ -303,182 +356,84 @@ export class GuessForm extends LitElement {
           required
         />
         <span class="book-tile-name">${book}</span>
-        ${checked ? html`<span class="book-tile-mark" aria-hidden="true">✓</span>` : null}
+        ${checked ? html`<span class="tile-mark" aria-hidden="true">✓</span>` : null}
       </label>
     `
   }
 
-  private _bookStatus(): string {
-    return this.book ? `Selected: ${this.book}` : 'Pick a book.'
+  // Brings the selected tile into view inside the grid's own scroll box
+  // only — never scrolls the page itself, which would yank the screen
+  // around while the player is dragging the book slider.
+  private _scrollCheckedBookTileIntoView() {
+    const box = this.renderRoot.querySelector<HTMLElement>('.book-grid-scroll')
+    const tile = this.checkedBookTile?.closest('label')
+    if (!box || !tile) return
+
+    const boxRect = box.getBoundingClientRect()
+    const tileRect = tile.getBoundingClientRect()
+    if (tileRect.top < boxRect.top) box.scrollTop += tileRect.top - boxRect.top
+    else if (tileRect.bottom > boxRect.bottom) box.scrollTop += tileRect.bottom - boxRect.bottom
   }
 
-  // Chapters-mode games only — a closed dropdown of exactly the selected
-  // chapters, so it's impossible to submit anything but one of them (or
-  // leave it blank, same as today's optional combobox — a Chapters-mode
-  // guess doesn't have to include a chapter any more than any other mode's
-  // does).
-  private _renderChapterDropdown(allowedChapters: number[]) {
+  // The slider runs over POSITIONS, not the values themselves: position
+  // NONE_POSITION picks nothing, position k is options[k - 1]. That keeps
+  // it correct for book names and for numbers that aren't 1..n (a
+  // Chapters game may allow, say, only chapters 3 and 7), and
+  // aria-valuetext tells a screen reader the actual book, chapter or verse
+  // rather than the position.
+  private _renderSlider<T>(spec: SliderSpec<T>) {
+    const position = spec.selected === undefined ? NONE_POSITION : spec.options.indexOf(spec.selected) + 1
+    const valueText = spec.selected === undefined ? spec.noneValueText : spec.valueText(spec.selected)
+    const hintId = `${spec.name}-hint`
+    const disabled = this.disabled || !!spec.waitingFor
+
     return html`
-      <label class="combo-field">
-        Chapter (optional)
-        <select
-          name="bg-chapter-guess"
-          .value=${this.chapter}
-          @change=${(e: Event) => this._selectChapter((e.target as HTMLSelectElement).value)}
+      <div class="slider-row">
+        <label class="slider-label" for=${spec.name}>${spec.label}</label>
+        <div class="slider-track">
+        <input
+          id=${spec.name}
+          name=${spec.name}
+          type="range"
+          min=${NONE_POSITION}
+          max=${spec.options.length}
+          step="1"
+          .value=${String(position)}
+          aria-valuetext=${valueText}
+          aria-describedby=${spec.waitingFor ? hintId : nothing}
+          ?disabled=${disabled}
+          @input=${(event: Event) => {
+            const next = Number((event.target as HTMLInputElement).value)
+            spec.onSelect(next === NONE_POSITION ? undefined : spec.options[next - 1])
+          }}
           @keydown=${this._onSelectFieldKeydown}
-          ?disabled=${this.disabled}
-        >
-          <option value="" ?selected=${!this.chapter}>Any chapter</option>
-          ${allowedChapters.map((chapter) => html`<option value=${chapter}>${chapter}</option>`)}
-        </select>
-      </label>
-    `
-  }
-
-  private _renderChapterCombobox(showChapterSuggestions: boolean) {
-    return html`
-      <label class="combo-field">
-        Chapter (optional)
-        <div class="combobox">
-          <input
-            type="number"
-            name="bg-chapter-guess"
-            min="1"
-            role="combobox"
-            aria-expanded=${showChapterSuggestions}
-            aria-autocomplete="list"
-            autocomplete="off"
-            .value=${this.chapter}
-            @input=${this._onChapterInput}
-            @focus=${() => (this.openField = 'chapter')}
-            @keydown=${(e: KeyboardEvent) => this._onComboKeydown(e, 'chapter')}
-            @blur=${this._onComboBlur}
-            ?disabled=${this.disabled}
-          />
-          ${showChapterSuggestions
-            ? this._renderSuggestions(this.chapterSuggestions, (chapter) => this._selectChapter(chapter))
-            : null}
+        />
+        ${spec.waitingFor ? html`<p id=${hintId} class="picker-hint">${spec.waitingFor}</p>` : null}
         </div>
-      </label>
+        <span class="slider-value" aria-hidden="true">
+          ${spec.selected === undefined ? spec.noneDisplay : String(spec.selected)}
+        </span>
+      </div>
     `
-  }
-
-  private _renderSuggestions(suggestions: string[], onSelect: (value: string) => void) {
-    return html`
-      <ul class="suggestions" role="listbox">
-        ${suggestions.map(
-          (value, i) => html`
-            <li
-              role="option"
-              aria-selected=${i === this.activeSuggestion}
-              class=${i === this.activeSuggestion ? 'active' : ''}
-              @mousedown=${(e: Event) => {
-                e.preventDefault()
-                onSelect(value)
-              }}
-            >
-              ${value}
-            </li>
-          `,
-        )}
-      </ul>
-    `
-  }
-
-  private _onChapterInput(e: Event) {
-    this.chapter = (e.target as HTMLInputElement).value
-    this.openField = 'chapter'
-    this.activeSuggestion = -1
-    // The verse-number field's suggestions depend on the chapter, and any
-    // previously-entered verse number may no longer be valid for it.
-    this.verseNumber = ''
-    this._loadVerseNumbers(this.book, this.chapter)
-  }
-
-  private _onVerseNumberInput(e: Event) {
-    this.verseNumber = (e.target as HTMLInputElement).value
-    this.openField = 'verseNumber'
-    this.activeSuggestion = -1
-  }
-
-  private _onComboKeydown(e: KeyboardEvent, field: ComboField) {
-    const suggestions = this._suggestionsFor(field)
-    if (this.openField !== field || suggestions.length === 0) return
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        this.activeSuggestion = (this.activeSuggestion + 1) % suggestions.length
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        this.activeSuggestion = (this.activeSuggestion - 1 + suggestions.length) % suggestions.length
-        break
-      case 'Enter':
-        if (this.activeSuggestion >= 0) {
-          e.preventDefault()
-          this._selectForField(field, suggestions[this.activeSuggestion])
-        }
-        break
-      case 'Tab':
-        // Let focus move on to the next field as normal — just also commit
-        // the highlighted suggestion first, the way Enter does.
-        if (this.activeSuggestion >= 0) {
-          this._selectForField(field, suggestions[this.activeSuggestion])
-        }
-        break
-      case 'Escape':
-        this.openField = undefined
-        break
-    }
-  }
-
-  private _selectForField(field: ComboField, value: string) {
-    switch (field) {
-      case 'chapter':
-        this._selectChapter(value)
-        break
-      case 'verseNumber':
-        this._selectVerseNumber(value)
-        break
-    }
-  }
-
-  private _onComboBlur() {
-    // Delay so a click on a suggestion (mousedown) still registers before
-    // the list disappears.
-    setTimeout(() => (this.openField = undefined), 100)
   }
 
   private _selectBook(book: string) {
     this.book = book
-    this.chapter = ''
-    this.verseNumber = ''
-    this.verseNumbers = []
-    this.openField = undefined
-    this.activeSuggestion = -1
-    this._loadChapters(book)
+    this.chapters = []
+    this._selectChapter(undefined)
+    if (book) this._loadChapters(book)
   }
 
-  private _selectChapter(chapter: string) {
+  private _selectChapter(chapter: number | undefined) {
     this.chapter = chapter
-    this.verseNumber = ''
-    this.openField = undefined
-    this.activeSuggestion = -1
-    this._loadVerseNumbers(this.book, chapter)
+    this.verseNumber = undefined
+    this.verseNumbers = []
+    if (chapter !== undefined) this._loadVerseNumbers(this.book, chapter)
   }
 
-  private _selectVerseNumber(verseNumber: string) {
-    this.verseNumber = verseNumber
-    this.openField = undefined
-    this.activeSuggestion = -1
-  }
-
-  // Unlike a text <input>, a focused native <select> or radio doesn't
-  // reliably submit its form on Enter. Submit explicitly so Enter behaves
-  // the same way here as it does in every other field in this form (and
-  // the rest of the app). Shared by the book tiles and the Chapter
-  // dropdown (Chapters-mode games).
+  // Unlike a text <input>, a focused radio or range slider doesn't submit
+  // its form on Enter. Submit explicitly so Enter guesses from any tile or
+  // slider, the same as Enter does in the rest of the app.
   private _onSelectFieldKeydown(e: KeyboardEvent) {
     if (e.key !== 'Enter') return
     e.preventDefault()
@@ -494,13 +449,9 @@ export class GuessForm extends LitElement {
 
   private _onSubmit(event: SubmitEvent) {
     event.preventDefault()
-    if (!this.book.trim()) return
+    if (!this.book) return
 
-    const guess: Guess = {
-      book: this.book.trim(),
-      chapter: this.chapter ? Number(this.chapter) : undefined,
-      verseNumber: this.verseNumber ? Number(this.verseNumber) : undefined,
-    }
+    const guess: Guess = { book: this.book, chapter: this.chapter, verseNumber: this.verseNumber }
 
     this.dispatchEvent(
       new CustomEvent<Guess>('guess-submitted', {
@@ -530,22 +481,6 @@ export class GuessForm extends LitElement {
       font-size: 0.9rem;
     }
 
-    .combo-field {
-      position: relative;
-    }
-
-    .combobox {
-      position: relative;
-    }
-
-    input,
-    select {
-      padding: 0.5rem 0.65rem;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      font-size: 1rem;
-    }
-
     .locked-book {
       padding: 0.5rem 0.65rem;
       border-radius: 8px;
@@ -556,7 +491,7 @@ export class GuessForm extends LitElement {
     }
 
     /* Book grid — see docs/web/book-picker. Takes the whole first row of
-       the form; chapter/verse/Guess wrap onto the row below it. */
+       the form; the guess bar sits below it. */
     .book-picker {
       flex: 1 1 100%;
       min-width: 0;
@@ -571,20 +506,143 @@ export class GuessForm extends LitElement {
       font-size: 0.9rem;
     }
 
-    .book-status {
-      margin: 0.35rem 0;
+    .picker-hint {
       font-size: 0.8rem;
       color: var(--text-muted);
     }
 
-    /* Capped so the Guess button stays on screen below a 66-book grid. */
-    .book-grid-scroll {
-      --book-grid-max-height: min(24rem, 55vh);
-      max-height: var(--book-grid-max-height);
+    /* Capped so the grid doesn't push the rest of the round far down the
+       page; the guess bar below stays reachable either way. */
+    .grid-scroll {
+      max-height: var(--grid-max-height);
       overflow-y: auto;
       padding: 0.25rem;
       border: 1px solid var(--border);
       border-radius: 8px;
+    }
+
+    .book-grid-scroll {
+      --grid-max-height: min(24rem, 55vh);
+    }
+
+    /* The guess bar — summary, book, chapter, verse, Guess — pinned to
+       the bottom of the screen while the form is in view, so none of it
+       ever scrolls out of reach below the book grid. Always one row per
+       control, in that order, whatever the width. Opaque, so the grid
+       doesn't show through behind it. */
+    .guess-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      flex: 1 1 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.6rem 0 calc(var(--corner-button-inset) + env(safe-area-inset-bottom, 0px));
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+
+    .guess-summary {
+      margin: 0;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    /* label | slider | current value, with any "why disabled" hint under
+       the slider. */
+    .slider-row {
+      display: grid;
+      grid-template-columns: var(--slider-label-width) minmax(0, 1fr) var(--slider-value-width);
+      align-items: center;
+      column-gap: 0.75rem;
+      --slider-label-width: 8.5rem;
+      --slider-value-width: 6.5rem;
+    }
+
+    .slider-label {
+      font-size: 0.9rem;
+    }
+
+    .slider-value {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .slider-row input[type='range'] {
+      width: 100%;
+      min-height: 1.75rem;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .slider-row input[type='range']:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .slider-row input[type='range']:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* The "why disabled" hint is laid over the (faded) slider rather than
+       on a line of its own, so it appearing and disappearing — e.g. while
+       chapters load — never changes the bar's height. */
+    .slider-track {
+      position: relative;
+      min-width: 0;
+    }
+
+    .slider-track .picker-hint {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      transform: translateY(-50%);
+      width: fit-content;
+      max-width: 100%;
+      margin-inline: auto;
+      box-sizing: border-box;
+      margin-block: 0;
+      padding: 0 0.5rem;
+      border-radius: 999px;
+      background: var(--bg);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .slider-row .locked-book {
+      grid-column: 2 / -1;
+    }
+
+    /* Narrow screens: the label goes above its slider instead of beside
+       it, so the slider keeps a usable width (also at 200% zoom). */
+    @media (max-width: 30rem) {
+      .slider-row {
+        grid-template-columns: minmax(0, 1fr) var(--slider-value-width);
+        --slider-value-width: 5.5rem;
+      }
+
+      .slider-label {
+        grid-column: 1 / -1;
+      }
+    }
+
+    /* The Guess button shares the bottom line with the round report
+       buttons fixed in the screen's corners (see index.css), so it is
+       inset from both sides by their width instead of the bar reserving a
+       whole empty row for them. */
+    .guess-actions {
+      display: flex;
+      padding-inline: var(--corner-controls-inline-clearance);
+    }
+
+    .guess-actions button {
+      flex: 1;
+      min-height: var(--corner-button-size);
     }
 
     .testament,
@@ -618,13 +676,14 @@ export class GuessForm extends LitElement {
     }
 
     .book-grid {
-      --book-tile-min-width: 6.75rem;
+      --tile-min-width: 6.75rem;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(var(--book-tile-min-width), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(var(--tile-min-width), 1fr));
       gap: 4px;
     }
 
-    .book-tile {
+    /* min-height keeps every tile a comfortable touch target. */
+    .tile {
       position: relative;
       display: flex;
       flex-direction: row;
@@ -632,28 +691,28 @@ export class GuessForm extends LitElement {
       min-height: 2.75rem;
       padding: 0.35rem 0.5rem;
       box-sizing: border-box;
-      background: var(--book-tile-1);
-      color: var(--book-tile-text);
+      background: var(--tile-1);
+      color: var(--tile-text);
       font-size: 0.85rem;
       line-height: 1.2;
       cursor: pointer;
     }
 
-    .tone-2 .book-tile {
-      background: var(--book-tile-2);
+    .tone-2 .tile {
+      background: var(--tile-2);
     }
 
-    .tone-3 .book-tile {
-      background: var(--book-tile-3);
+    .tone-3 .tile {
+      background: var(--tile-3);
     }
 
-    .book-tile:hover {
+    .tile:hover {
       text-decoration: underline;
     }
 
     /* The radio stays in the accessibility tree and keyboard order; only
        its circle is hidden, the tile itself shows the state. */
-    .book-tile input {
+    .tile input {
       position: absolute;
       opacity: 0;
       width: 1px;
@@ -661,24 +720,24 @@ export class GuessForm extends LitElement {
       margin: 0;
     }
 
-    .book-tile:has(input:focus-visible) {
+    .tile:has(input:focus-visible) {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
       z-index: 1;
     }
 
-    /* Selected = accent fill + a check mark + a bold name, so the state
+    /* Selected = accent fill + a check mark + bold text, so the state
        never rests on color alone. */
-    .book-tile.checked,
-    .tone-2 .book-tile.checked,
-    .tone-3 .book-tile.checked {
+    .tile.checked,
+    .tone-2 .tile.checked,
+    .tone-3 .tile.checked {
       background: var(--accent);
       color: var(--accent-text);
       font-weight: 700;
     }
 
     /* Top-right corner, out of the name's way. */
-    .book-tile-mark {
+    .tile-mark {
       position: absolute;
       top: 0.1rem;
       right: 0.25rem;
@@ -690,39 +749,9 @@ export class GuessForm extends LitElement {
       overflow-wrap: break-word;
     }
 
-    .book-picker:disabled .book-tile {
+    fieldset:disabled .tile {
       opacity: 0.5;
       cursor: not-allowed;
-    }
-
-    .suggestions {
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      right: 0;
-      z-index: 10;
-      margin: 0;
-      padding: 0.25rem;
-      list-style: none;
-      background: var(--surface-raised);
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-      max-height: 12rem;
-      overflow-y: auto;
-    }
-
-    .suggestions li {
-      padding: 0.4rem 0.6rem;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.95rem;
-    }
-
-    .suggestions li.active,
-    .suggestions li:hover {
-      background: var(--accent);
-      color: var(--accent-text);
     }
 
     button {

@@ -100,7 +100,7 @@ export const api = {
   },
   // Book spellings differ by translation (e.g. bibelen-dk's "1.Mosebog" vs.
   // the NWT sources' "1. Mosebog") — pass the current verse's translation so
-  // the suggestion list only offers spellings that can actually match it.
+  // only spellings that can actually match it are offered.
   getBooks: (translation?: string) =>
     getJson<string[]>(
       `/api/books${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`
@@ -112,13 +112,13 @@ export const api = {
     getJson<string[]>(
       `/api/books-in-bible-order${translation ? `?translation=${encodeURIComponent(translation)}` : ''}`
     ),
-  // Chapter suggestions are scoped to the book the player already guessed.
+  // The guess form's chapter tiles: the chapters of the book already picked.
   getChapters: (book: string, translation?: string) => {
     const params = new URLSearchParams({ book });
     if (translation) params.set('translation', translation);
     return getJson<number[]>(`/api/chapters?${params}`);
   },
-  // Verse-number suggestions are scoped to the book+chapter already guessed.
+  // The guess form's verse tiles: the verses of the book+chapter already picked.
   getVerseNumbers: (book: string, chapter: number, translation?: string) => {
     const params = new URLSearchParams({ book, chapter: String(chapter) });
     if (translation) params.set('translation', translation);

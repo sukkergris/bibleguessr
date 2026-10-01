@@ -14,6 +14,15 @@
 :root {
   color-scheme: light;
 
+  /* The round report-abuse / report-bug buttons fixed in the bottom
+     corners (see bg-app.ts). Anything pinned to the bottom of the screen
+     keeps --corner-controls-inline-clearance free at both ends of its
+     bottom line, so the buttons never cover it (see guess-form.ts's guess
+     bar). Theme-independent, so only defined here. */
+  --corner-button-size: 2.75rem;
+  --corner-button-inset: 0.75rem;
+  --corner-controls-inline-clearance: calc(var(--corner-button-inset) + var(--corner-button-size) + 0.5rem);
+
   --bg: #ffffff;
   --surface: #f4f4f6;
   --surface-raised: #ffffff;
@@ -33,11 +42,11 @@
   /* Guess-form book grid (see docs/web/book-picker). Three shades tell the
      book categories apart at a glance; each category also has a text
      heading, so the shade is never the only cue. All three carry
-     --book-tile-text at well over 4.5:1. */
-  --book-tile-1: #6d6487;
-  --book-tile-2: #564e70;
-  --book-tile-3: #3d3651;
-  --book-tile-text: #ffffff;
+     --tile-text at well over 4.5:1. */
+  --tile-1: #6d6487;
+  --tile-2: #564e70;
+  --tile-3: #3d3651;
+  --tile-text: #ffffff;
 }
 
 :root[data-theme='dark'] {
@@ -59,10 +68,10 @@
   --disabled-text: #7c7c88;
   --overlay: rgba(0, 0, 0, 0.65);
 
-  --book-tile-1: #6d6487;
-  --book-tile-2: #5a5276;
-  --book-tile-3: #463e5e;
-  --book-tile-text: #ffffff;
+  --tile-1: #6d6487;
+  --tile-2: #5a5276;
+  --tile-3: #463e5e;
+  --tile-text: #ffffff;
 }
 
 /* Only applies while no explicit choice has been made — theme.ts always
@@ -88,10 +97,10 @@
     --disabled-text: #7c7c88;
     --overlay: rgba(0, 0, 0, 0.65);
 
-    --book-tile-1: #6d6487;
-    --book-tile-2: #5a5276;
-    --book-tile-3: #463e5e;
-    --book-tile-text: #ffffff;
+    --tile-1: #6d6487;
+    --tile-2: #5a5276;
+    --tile-3: #463e5e;
+    --tile-text: #ffffff;
   }
 }
 

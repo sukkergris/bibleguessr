@@ -1,5 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
+import { styleMap } from 'lit/directives/style-map.js'
 import type { Verse } from '../types'
 
 /**
@@ -14,9 +15,24 @@ export class VerseCard extends LitElement {
   @property({ type: Boolean })
   revealed = false
 
+  // The card's height the last time it showed a verse. While the next
+  // verse loads the card keeps (at least) that height instead of
+  // collapsing to one line of "Loading verse…", so the guess form below
+  // doesn't jump up and back down between verses.
+  private lastVerseHeight?: number
+
+  updated() {
+    if (this.verse) this.lastVerseHeight = this.getBoundingClientRect().height
+  }
+
   render() {
     if (!this.verse) {
-      return html`<p class="loading">Loading verse…</p>`
+      const keepSize = this.lastVerseHeight ? { minHeight: `${this.lastVerseHeight}px` } : {}
+      return html`
+        <blockquote class="loading" style=${styleMap(keepSize)}>
+          <p class="loading-text">Loading verse…</p>
+        </blockquote>
+      `
     }
 
     return html`
@@ -40,6 +56,7 @@ export class VerseCard extends LitElement {
 
 
     blockquote {
+      box-sizing: border-box;
       margin: 0;
       padding: 2rem;
       border-radius: 12px;
@@ -48,7 +65,10 @@ export class VerseCard extends LitElement {
       color: var(--card-text);
     }
 
-    .text {
+    /* The loading text takes the verse's own type size, so the card is the
+       same shape either way. */
+    .text,
+    .loading-text {
       font-size: 1.35rem;
       line-height: 1.5;
       margin: 0;
@@ -60,7 +80,7 @@ export class VerseCard extends LitElement {
       color: var(--card-muted);
     }
 
-    .loading {
+    .loading-text {
       color: var(--card-muted);
     }
   `

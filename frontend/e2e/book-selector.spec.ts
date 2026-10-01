@@ -78,6 +78,8 @@ test('"Books" mode book grid lists only the selected books', async ({ page }) =>
   // every book in the translation.
   const tiles = page.locator('bg-guess-form').getByRole('radio')
   await expect(tiles).toHaveCount(2)
+  // The book slider offers the same two books (after "no book").
+  await expect(page.locator('bg-guess-form').getByRole('slider', { name: 'Book' })).toHaveAttribute('max', '2')
   expect(await page.locator('bg-guess-form .book-tile-name').allTextContents()).toEqual(['1.Mosebog', 'Daniel'])
 
   // A guess submits successfully by picking a tile.
@@ -144,11 +146,12 @@ test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text
   // from, nothing to click into.
   const guessForm = page.locator('bg-guess-form')
   await expect(guessForm.getByText('Daniel', { exact: true })).toBeVisible()
-  await expect(guessForm.getByRole('radio')).toHaveCount(0)
+  await expect(guessForm.locator('.book-tile')).toHaveCount(0)
+  await expect(guessForm.getByRole('slider', { name: 'Book' })).toHaveCount(0)
 
-  // With the book fixed, focus lands on the Chapter field — the first
+  // With the book fixed, focus lands on the chapter slider — the first
   // thing there is to answer.
-  await expect(guessForm.getByLabel('Chapter (optional)')).toBeFocused()
+  await expect(guessForm.getByRole('slider', { name: 'Chapter (optional)' })).toBeFocused()
 
   // A guess still submits successfully with the locked book, scored
   // correctly, without the player ever choosing a book themselves.
@@ -156,7 +159,7 @@ test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text
   await expect(page.locator('.feedback')).toContainText('Daniel')
 })
 
-test('"Chapters" mode guess form is a dropdown listing only the selected chapters', async ({ page }) => {
+test('"Chapters" mode guess form offers only the selected chapters', async ({ page }) => {
   await openMode(page, 'Chapters')
 
   await page.getByLabel('Book').selectOption('Daniel')
@@ -168,20 +171,18 @@ test('"Chapters" mode guess form is a dropdown listing only the selected chapter
   await page.getByRole('button', { name: 'Start game' }).click()
   await expect(page.locator('.round')).toContainText('Verse 1')
 
-  // The Chapter field is a real <select>, not a free-text input.
-  const chapterField = page.getByLabel('Chapter (optional)')
-  await expect(chapterField).toHaveJSProperty('tagName', 'SELECT')
-
-  // It only offers exactly the two selected chapters, plus "Any chapter"
-  // — not every chapter of the book.
-  const optionTexts = await chapterField.locator('option').allTextContents()
-  expect(optionTexts.sort()).toEqual(['Any chapter', '1', '2'].sort())
-
-  // A guess submits successfully by picking a chapter from the dropdown —
-  // the actual round's verse could be in either selected chapter, so this
-  // only checks that submitting produced feedback, not which chapter won.
-  await chapterField.selectOption('2')
-  await chapterField.press('Enter')
+  // The chapter slider offers exactly the two selected chapters, after
+  // "Any chapter" — not every chapter of the book. The actual round's
+  // verse could be in either selected chapter, so this only checks that
+  // submitting produced feedback, not which chapter won.
+  const chapterSlider = page.locator('bg-guess-form').getByRole('slider', { name: 'Chapter (optional)' })
+  await expect(chapterSlider).toHaveAttribute('max', '2')
+  await expect(chapterSlider).toHaveAttribute('aria-valuetext', 'Any chapter')
+  await chapterSlider.fill('1')
+  await expect(chapterSlider).toHaveAttribute('aria-valuetext', 'Chapter 1')
+  await chapterSlider.fill('2')
+  await expect(chapterSlider).toHaveAttribute('aria-valuetext', 'Chapter 2')
+  await chapterSlider.press('Enter')
   await expect(page.locator('.feedback')).toBeVisible()
 })
 

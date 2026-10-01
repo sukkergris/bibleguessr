@@ -3,17 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Book grid — BibleGuessr Docs</title>
+    <title>Guess tiles — BibleGuessr Docs</title>
     <link rel="stylesheet" href="../shared/styles.css" />
   </head>
   <body>
     <main class="page">
       <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
       <span class="eyebrow">Feature</span>
-      <h1>Book grid</h1>
+      <h1>Guess tiles</h1>
       <p class="subtitle">
-        Players pick the book for a guess from a grid of tiles, grouped by testament and category, instead of typing
-        its name.
+        Players pick the book for a guess from a grid of tiles grouped by testament and category, or with a slider,
+        and the chapter and verse with sliders. The sliders sit in a bar pinned to the bottom of the screen, under a
+        summary of the guess so far. Nothing is typed.
       </p>
 
       <h2>What the player sees</h2>
@@ -32,6 +33,53 @@
         <li>
           In a <strong>Books</strong> game only the books chosen at setup are shown. In a <strong>Chapters</strong>
           game the book is fixed, so the grid is not shown at all.
+        </li>
+      </ul>
+
+      <h2>The guess bar</h2>
+      <p>
+        Below the book grid is the <strong>guess bar</strong>. It is pinned to the bottom of the screen while the form
+        is in view, so it never scrolls out of reach below the book grid, and always holds, stacked in this order
+        whatever the screen width:
+      </p>
+      <ol>
+        <li>a summary of the guess so far ("Your guess: Rut 3:16"),</li>
+        <li>
+          a <strong>book</strong> slider — an alternative to the tiles over the same books in the same order, kept in
+          sync both ways (moving it also scrolls the grid to that book's tile; in a Chapters game the fixed book is
+          shown here instead),
+        </li>
+        <li>a <strong>chapter</strong> slider,</li>
+        <li>a <strong>verse</strong> slider,</li>
+        <li>the Guess button.</li>
+      </ol>
+      <ul>
+        <li>
+          The chapter slider runs over the chosen book's chapters (in a <strong>Chapters</strong> game, only the
+          chapters chosen at setup); the verse slider over the chosen chapter's verses. The current value is shown
+          next to each label.
+        </li>
+        <li>
+          Chapter and verse are optional: the leftmost position is <em>Any</em>, which leaves that part out of the
+          guess, and is where each slider starts. The book slider's leftmost position is "no book".
+        </li>
+        <li>
+          A slider is disabled, with a short reason under it ("Pick a book first.", "Loading chapters…"), until there
+          is something to pick. Picking another book resets the chapter and verse; picking another chapter resets the
+          verse.
+        </li>
+        <li>
+          The slider moves over <em>positions</em>, not the numbers themselves (position 0 is Any, position k the k-th
+          option), so it also works when a Chapters game allows only, say, chapters 3 and 7.
+        </li>
+        <li>
+          The Guess button shares the bottom line with the report buttons fixed in the screen's corners: it is inset
+          by <code>--corner-controls-inline-clearance</code> (see <span class="file-ref">frontend/src/index.css</span>)
+          so they never cover it.
+        </li>
+        <li>
+          The bar sticks within the form, so on a short screen with a long verse it comes into view as soon as the
+          form does, not before.
         </li>
       </ul>
 
@@ -58,39 +106,73 @@
         showing wrong headings.
       </p>
 
+      <h2>No jumping between verses</h2>
+      <ul>
+        <li>
+          While the next verse loads, the verse card keeps the height it had (see
+          <span class="file-ref">frontend/src/components/verse-card.ts</span>) instead of collapsing to one line, and
+          the previous verse is no longer shown — or guessable — meanwhile.
+        </li>
+        <li>
+          A new guess form is created for every verse. The book list is cached per source and translation, so the
+          new form shows its full grid straight away instead of starting empty and growing once the list has loaded.
+        </li>
+        <li>
+          A slider's "why disabled" hint is laid over the slider instead of taking a line of its own, so it appearing
+          and disappearing (e.g. "Loading chapters…") never changes the bar's height.
+        </li>
+        <li>
+          Covered by <span class="file-ref">frontend/e2e/next-verse-stability.spec.ts</span>, which adds latency to the
+          API and measures both heights on every frame.
+        </li>
+      </ul>
+
       <h2>Accessibility</h2>
       <ul>
         <li>
           Tiles are native radio buttons inside nested <code>&lt;fieldset&gt;</code>s, so the testament and
-          category names are announced as group names, Tab enters the group once, and the arrow keys move and select.
-          Enter on a tile submits the guess.
+          category names are announced as group names; Tab enters the group once and the arrow keys move and select.
+          Tab then moves on to the book slider, the chapter slider, the verse slider and the Guess button — the same
+          order as on screen. Enter on any tile or slider submits the guess. In a Chapters game focus starts on the
+          chapter slider.
+        </li>
+        <li>
+          The sliders are native <code>&lt;input type="range"&gt;</code> with a visible label. Because they move over
+          positions, each sets <code>aria-valuetext</code> ("Any chapter", "Chapter 12") so a screen reader announces
+          the real book, chapter or verse; the reason a slider is disabled is linked with
+          <code>aria-describedby</code>. On narrow screens each label moves above its slider so the slider keeps a
+          usable width.
+        </li>
+        <li>
+          The summary is deliberately not a live region: each tile and slider already announces its own new value, so
+          announcing the summary too would say everything twice.
         </li>
         <li>
           The selected tile has an accent fill, a bold name <em>and</em> a ✓ mark. The category shades are backed by
           visible text headings. Neither state nor category is conveyed by colour alone.
         </li>
         <li>
-          A polite status line reports the selection ("Selected: Daniel").
-        </li>
         <li>
-          The shades are theme tokens (<code>--book-tile-1..3</code>, <code>--book-tile-text</code> in
+          The shades are theme tokens (<code>--tile-1..3</code>, <code>--tile-text</code> in
           <span class="file-ref">frontend/src/index.css</span>), all above 4.5:1 against the tile text in both
           themes. Focus uses the shared <code>--focus</code> outline.
         </li>
         <li>
-          The grid scrolls inside a capped-height box so the Guess button stays on screen.
+          The book grid scrolls inside a capped-height box, and every tile is at least 2.75rem tall as a comfortable
+          touch target.
         </li>
       </ul>
 
       <h2>Implementation and tests</h2>
       <p>
         The grid lives in <span class="file-ref">frontend/src/components/guess-form.ts</span>
-        (<code>_renderBookPicker</code>). It replaced both the free-text book combobox and the Books-mode
-        <code>&lt;select&gt;</code>. A guess can now only name a book that exists in the player's own Bible.
+        (<code>_renderBookPicker</code> and <code>_renderSlider</code>). They replaced the free-text
+        comboboxes and the Books/Chapters-mode <code>&lt;select&gt;</code>s. A guess can now only name a book,
+        chapter and verse that exist in the player's own Bible.
       </p>
       <p>
         Grouping is unit tested in <span class="file-ref">frontend/src/book-picker.test.ts</span>.
-        The grid's behaviour (grouping, click to select, keyboard operation) is covered
+        The grids' behaviour (grouping, tiles and book slider in sync, chapter/verse scoping and resets, stacking order, the pinned bar, keyboard operation) is covered
         by <span class="file-ref">frontend/e2e/book-picker.spec.ts</span>.
       </p>
     </main>

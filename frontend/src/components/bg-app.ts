@@ -171,6 +171,11 @@ export class BgApp extends LitElement {
   private async _loadNextVerse() {
     this.error = undefined
     this.feedback = undefined
+    // Cleared rather than left showing until the next one arrives: the
+    // previous verse must not be on screen — or guessable, scored against
+    // the wrong verse — while the next one loads. The card keeps its size
+    // meanwhile (see verse-card.ts), so this doesn't make the screen jump.
+    this.verse = undefined
     try {
       this.verse = await this.verseSource.getRandomVerse(this.translation, verseRestrictionOf(this.choice))
     } catch (err) {
@@ -455,7 +460,7 @@ export class BgApp extends LitElement {
           `
         : html`<bg-guess-form
             .disabled=${!this.verse}
-            .translation=${this.verse?.translation}
+            .translation=${this.translation}
             .verseSource=${this.verseSource}
             .constraint=${this.guessConstraint}
             @guess-submitted=${this._onGuessSubmitted}
@@ -487,16 +492,17 @@ export class BgApp extends LitElement {
        docs/SCRUM/Feature.ReportAbuse.md. Bottom-LEFT deliberately: the
        nerd panel and the game's own controls live to the right, so this
        corner is the one place it won't cover the countdown, chat or form
-       fields on any screen. env(safe-area-inset-*) keeps it clear of the
+       fields on any screen — the guess form's bottom-pinned bar keeps
+       --corner-controls-inline-clearance free for it (see index.css). env(safe-area-inset-*) keeps it clear of the
        home indicator and rounded corners on mobile. A real <button> with
        an aria-label, not a bare icon, so it has an accessible name. */
     .report-abuse {
       position: fixed;
-      left: calc(0.75rem + env(safe-area-inset-left, 0px));
-      bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+      left: calc(var(--corner-button-inset) + env(safe-area-inset-left, 0px));
+      bottom: calc(var(--corner-button-inset) + env(safe-area-inset-bottom, 0px));
       z-index: 100;
-      width: 2.75rem;
-      height: 2.75rem;
+      width: var(--corner-button-size);
+      height: var(--corner-button-size);
       border-radius: 50%;
       border: 1px solid rgba(128, 128, 128, 0.5);
       background: rgba(20, 20, 24, 0.85);
@@ -518,11 +524,11 @@ export class BgApp extends LitElement {
        report control and of the nerd panel's own toggle. */
     .report-bug {
       position: fixed;
-      right: calc(0.75rem + env(safe-area-inset-right, 0px));
-      bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+      right: calc(var(--corner-button-inset) + env(safe-area-inset-right, 0px));
+      bottom: calc(var(--corner-button-inset) + env(safe-area-inset-bottom, 0px));
       z-index: 100;
-      width: 2.75rem;
-      height: 2.75rem;
+      width: var(--corner-button-size);
+      height: var(--corner-button-size);
       border-radius: 50%;
       border: 1px solid rgba(128, 128, 128, 0.5);
       background: rgba(20, 20, 24, 0.85);
