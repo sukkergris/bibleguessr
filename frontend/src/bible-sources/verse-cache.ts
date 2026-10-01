@@ -11,7 +11,7 @@
 // non-blocking design, aimed at the same "runs on an old phone" goal). So a
 // returning visit can only skip the parse step (this cache), not the file
 // picker itself.
-import type { Verse } from './types'
+import type { Verse } from '../shared-kernel/bible'
 
 // Bump whenever epub-parser.ts's or rtf-parser.ts's parsing logic changes,
 // so entries parsed with older, possibly-different logic are detected and

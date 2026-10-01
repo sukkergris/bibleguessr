@@ -30,7 +30,7 @@
 // Bump PARSER_VERSION in verse-cache.ts if these regexes change, so any
 // cached parse gets invalidated.
 import { unzip } from 'fflate'
-import type { Verse } from './types'
+import type { Verse } from '../shared-kernel/bible'
 
 const navHeaderRegex =
   /<p class="w_navigation w_biblebookname"><a href="biblebooknav\.xhtml">(?<book>[^<]*)<\/a>\s*(?:<a href="biblechapternav\d+\.xhtml">(?<chapter>\d+)<\/a>\s*:\s*)?<a href="bibleversenav/

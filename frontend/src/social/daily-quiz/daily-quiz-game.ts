@@ -1,24 +1,32 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, query, state } from 'lit/decorators.js'
-import type { Guess, VerseSource } from '../../shared-kernel/bible'
+import type { SubmitBibleFileReport } from '../../bible-sources/server-access'
+import '../../bible-sources/translation-source-select'
+import type { TranslationChoice } from '../../bible-sources/translation-source-select'
+import type { Guess, VerseReference, VerseSource } from '../../shared-kernel/bible'
 import { ANY_BOOK } from '../../shared-kernel/guess-constraint'
 import '../../shared-ui/guess-form'
 import '../../shared-ui/verse-card'
 import { fetchDailyQuiz } from './daily-quiz-client'
 import './next-quiz-countdown'
 import {
+  CHOOSING_BIBLE,
   LOADING,
   advanced,
   failed,
   guessed,
+  skipped,
   started,
   totalPoints,
   verseResolved,
+  verseUnavailable,
   type DailyQuizRound,
   type DailyQuizSession,
 } from './daily-quiz-session'
 
-const LOOKUP_FAILED_MESSAGE = "This verse couldn't be loaded."
+function formatReference(reference: VerseReference): string {
+  return `${reference.book} ${reference.chapter}:${reference.verseNumber}`
+}
 
 function formatGuess(guess: Guess): string {
   if (guess.chapter === undefined) return guess.book
@@ -28,32 +36,41 @@ function formatGuess(guess: Guess): string {
 
 /**
  * Today's quiz — see docs/web/daily-quiz. Five verses from the whole
- * Bible, the same for every player, new at 00:00 UTC. The flow lives in
- * daily-quiz-session.ts; this component fetches, looks verses up in
- * `verseSource` and renders whichever state the session is in.
+ * Bible, the same for every player, new at 00:00 UTC. The player first
+ * chooses the Bible to play from — a server translation or their own
+ * file — with the same picker as multiplayer. The flow lives in
+ * daily-quiz-session.ts; this component fetches, looks verses up in the
+ * chosen Bible and renders whichever state the session is in.
  *
  * Fires `daily-quiz-closed` when the player goes back to Social.
  */
 @customElement('bg-daily-quiz')
 export class DailyQuizGame extends LitElement {
-  /** Where each verse's text is looked up — given by the host. */
+  /** The server's translations — handed in by the host (see
+   * bible-sources/server-access.ts). */
   @property({ attribute: false })
-  verseSource?: VerseSource
+  serverSource?: VerseSource
+
+  /** Where a problem report about an unusable Bible file is sent. */
+  @property({ attribute: false })
+  submitBibleFileReport?: SubmitBibleFileReport
 
   @state()
-  private session: DailyQuizSession = LOADING
+  private session: DailyQuizSession = CHOOSING_BIBLE
 
-  // The translation the guess form was last given. Kept between verses so
-  // the form doesn't briefly switch book lists (and so jump) while the next
-  // verse's text is looked up.
-  private translation?: string
+  /** The Bible picked in the picker — undefined until it has a valid one. */
+  @state()
+  private choice?: TranslationChoice
 
   @query('.next')
   private nextButton?: HTMLButtonElement
 
-  connectedCallback() {
-    super.connectedCallback()
-    this._loadQuiz()
+  private _onBibleChosen = (event: CustomEvent<TranslationChoice | undefined>) => {
+    this.choice = event.detail
+  }
+
+  private _onStart = () => {
+    if (this.choice) this._loadQuiz()
   }
 
   private _loadQuiz() {
@@ -79,18 +96,22 @@ export class DailyQuizGame extends LitElement {
 
   private _lookUpCurrentVerse() {
     const session = this.session
-    if (session.kind !== 'playing' || !this.verseSource) return
+    const choice = this.choice
+    if (session.kind !== 'playing' || !choice) return
     const { roundIndex } = session
-    this.verseSource
-      .lookupVerse(session.quiz.verses[roundIndex])
-      .then((verse) => {
-        this.translation = verse.translation
-        this.session = verseResolved(this.session, roundIndex, verse)
-      })
+    choice.verseSource
+      .lookupVerse(session.quiz.verses[roundIndex], choice.translation)
+      .then((verse) => (this.session = verseResolved(this.session, roundIndex, verse)))
+      // The chosen Bible doesn't have this verse — e.g. a player's own
+      // file with a different verse numbering. The verse can be skipped.
       .catch((error: unknown) => {
-        console.error('[daily-quiz] failed to look up verse', error)
-        this.session = failed(LOOKUP_FAILED_MESSAGE)
+        console.warn('[daily-quiz] verse not in the chosen Bible', error)
+        this.session = verseUnavailable(this.session, roundIndex)
       })
+  }
+
+  private _onSkip = () => {
+    this.session = skipped(this.session)
   }
 
   private _onGuess = (event: CustomEvent<Guess>) => {
@@ -119,6 +140,19 @@ export class DailyQuizGame extends LitElement {
   private _renderSession() {
     const session = this.session
     switch (session.kind) {
+      case 'choosing-bible':
+        return html`
+          <h1>Daily quiz</h1>
+          <p class="intro">Choose the Bible to play today's quiz from.</p>
+          <bg-translation-source-select
+            .serverSource=${this.serverSource}
+            .submitBibleFileReport=${this.submitBibleFileReport}
+            @translation-changed=${this._onBibleChosen}
+          ></bg-translation-source-select>
+          <button type="button" class="start" ?disabled=${!this.choice} @click=${this._onStart}>
+            Start today's quiz
+          </button>
+        `
       case 'loading':
         return html`
           <h1>Daily quiz</h1>
@@ -138,7 +172,14 @@ export class DailyQuizGame extends LitElement {
             ${session.quiz.date} ·
             <span role="status">Verse ${session.roundIndex + 1} of ${session.quiz.verses.length}</span>
           </p>
-          <bg-verse-card .verse=${session.verse} .revealed=${!!session.feedback}></bg-verse-card>
+          ${session.current.kind === 'unavailable'
+            ? html`<p class="unavailable">This verse isn't in your Bible.</p>`
+            : html`
+                <bg-verse-card
+                  .verse=${session.current.kind === 'shown' ? session.current.verse : undefined}
+                  .revealed=${!!session.feedback}
+                ></bg-verse-card>
+              `}
           ${session.feedback
             ? html`
                 ${this._renderFeedback(session.feedback)}
@@ -146,15 +187,17 @@ export class DailyQuizGame extends LitElement {
                   ${isLast ? 'See results' : 'Next verse'}
                 </button>
               `
-            : html`
-                <bg-guess-form
-                  .disabled=${!session.verse}
-                  .translation=${this.translation}
-                  .verseSource=${this.verseSource}
-                  .constraint=${ANY_BOOK}
-                  @guess-submitted=${this._onGuess}
-                ></bg-guess-form>
-              `}
+            : session.current.kind === 'unavailable'
+              ? html`<button type="button" class="secondary" @click=${this._onSkip}>Skip this verse</button>`
+              : html`
+                  <bg-guess-form
+                    .disabled=${session.current.kind !== 'shown'}
+                    .translation=${this.choice?.translation}
+                    .verseSource=${this.choice?.verseSource}
+                    .constraint=${ANY_BOOK}
+                    @guess-submitted=${this._onGuess}
+                  ></bg-guess-form>
+                `}
         `
       }
       case 'finished':
@@ -166,8 +209,15 @@ export class DailyQuizGame extends LitElement {
             ${session.rounds.map(
               (round) => html`
                 <li>
-                  <span>${round.verse.reference}</span>
-                  <span class="round-guess">you guessed ${formatGuess(round.guess)}</span>
+                  ${round.kind === 'answered'
+                    ? html`
+                        <span>${round.verse.reference}</span>
+                        <span class="round-guess">you guessed ${formatGuess(round.guess)}</span>
+                      `
+                    : html`
+                        <span>${formatReference(round.reference)}</span>
+                        <span class="round-guess">not in your Bible</span>
+                      `}
                   <span class="round-points">${round.points}</span>
                 </li>
               `,
@@ -179,6 +229,13 @@ export class DailyQuizGame extends LitElement {
   }
 
   private _renderFeedback(round: DailyQuizRound) {
+    if (round.kind === 'unavailable') {
+      return html`
+        <div class="feedback incorrect">
+          Skipped — ${formatReference(round.reference)} isn't in your Bible. No points.
+        </div>
+      `
+    }
     return html`
       <div class="feedback ${round.points > 0 ? 'correct' : 'incorrect'}">
         ${round.points > 0 ? `+${round.points} points` : 'No points'} — you guessed ${formatGuess(round.guess)}, it
@@ -211,6 +268,24 @@ export class DailyQuizGame extends LitElement {
       margin: 0;
       text-align: center;
       color: var(--text-muted);
+    }
+
+    .intro,
+    .unavailable {
+      margin: 0;
+      text-align: center;
+    }
+
+    .unavailable {
+      padding: 2rem 1rem;
+      border-radius: 12px;
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .feedback {

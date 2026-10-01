@@ -1,9 +1,9 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, state } from 'lit/decorators.js'
-import { api } from '../api'
-import { createLocalVerseSource } from '../local-verses'
-import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from '../verse-cache'
-import type { VerseSource } from '../types'
+import { customElement, property, state } from 'lit/decorators.js'
+import { createLocalVerseSource } from './local-verses'
+import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from './verse-cache'
+import type { VerseSource } from '../shared-kernel/bible'
+import type { SubmitBibleFileReport } from './server-access'
 import './report-error'
 
 /** What the player has picked: a server translation name, or a
@@ -43,6 +43,15 @@ type FileState =
  */
 @customElement('bg-translation-source-select')
 export class TranslationSourceSelect extends LitElement {
+  /** The server's translations — handed in by the host, so this layer
+   * never imports the app's API client (see server-access.ts). */
+  @property({ attribute: false })
+  serverSource?: VerseSource
+
+  /** Where a problem report about an unusable file is sent. */
+  @property({ attribute: false })
+  submitBibleFileReport?: SubmitBibleFileReport
+
   @state()
   private mode: Mode = 'server'
 
@@ -66,13 +75,20 @@ export class TranslationSourceSelect extends LitElement {
 
   connectedCallback() {
     super.connectedCallback()
-    void this._loadTranslations()
     this._refreshCache()
   }
 
+  // Loads the server's translations as soon as the host hands in
+  // serverSource — which can be after this element is connected, so
+  // connectedCallback is too early to rely on it.
+  willUpdate(changed: Map<string, unknown>) {
+    if (changed.has('serverSource') && this.serverSource) void this._loadTranslations()
+  }
+
   private async _loadTranslations() {
+    if (!this.serverSource) return
     try {
-      this.translations = await api.getTranslations()
+      this.translations = await this.serverSource.getTranslations()
       this.error = undefined
       if (this.translations.length > 0) {
         this.selectedTranslation = this.translations[0]
@@ -190,7 +206,11 @@ export class TranslationSourceSelect extends LitElement {
       ${this.fileState.status === 'error'
         ? html`
             <p class="error">${this.fileState.message}</p>
-            <bg-report-error .errorMessage=${this.fileState.message} .fileName=${this.fileState.fileName}>
+            <bg-report-error
+              .errorMessage=${this.fileState.message}
+              .fileName=${this.fileState.fileName}
+              .submitReport=${this.submitBibleFileReport}
+            >
             </bg-report-error>
           `
         : null}
@@ -293,7 +313,7 @@ export class TranslationSourceSelect extends LitElement {
     }
 
     const fallbackName = file.name.replace(/\.(epub|zip)$/i, '')
-    const epubParser = isEpub ? await import('../epub-parser') : undefined
+    const epubParser = isEpub ? await import('./epub-parser') : undefined
     const translation = (await epubParser?.detectEpubTranslationName(file).catch(() => undefined)) ?? fallbackName
 
     this.fileState = { status: 'parsing', fileName: file.name, processed: 0, total: 1 }
@@ -304,7 +324,7 @@ export class TranslationSourceSelect extends LitElement {
             this.fileState = { status: 'parsing', fileName: file.name, ...progress }
           })
         : await (
-            await import('../rtf-parser')
+            await import('./rtf-parser')
           ).parseRtfZip(file, translation, (progress) => {
             this.fileState = { status: 'parsing', fileName: file.name, ...progress }
           })
@@ -336,7 +356,7 @@ export class TranslationSourceSelect extends LitElement {
     const choice: TranslationChoice | undefined =
       this.mode === 'server'
         ? this.selectedTranslation
-          ? { translation: this.selectedTranslation, verseSource: api }
+          ? { translation: this.selectedTranslation, verseSource: this.serverSource! }
           : undefined
         : this.fileState.status === 'ready'
           ? { translation: this.fileState.translation, verseSource: this.fileState.verseSource }
@@ -404,11 +424,17 @@ export class TranslationSourceSelect extends LitElement {
       text-align: left;
     }
 
+    /* Full width but never wider: a long translation name would otherwise
+       size the select to the name and push the page past a phone screen. */
     select {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       padding: 0.5rem 0.65rem;
       border-radius: 8px;
       border: 1px solid #ccc;
       font-size: 1rem;
+      text-overflow: ellipsis;
     }
 
     button {

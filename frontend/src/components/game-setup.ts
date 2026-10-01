@@ -1,12 +1,12 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { createLocalVerseSource } from '../local-verses'
-import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible, fileNameFromFingerprint } from '../verse-cache'
+import { createLocalVerseSource } from '../bible-sources/local-verses'
+import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible, fileNameFromFingerprint } from '../bible-sources/verse-cache'
 import type { VerseSource } from '../types'
 import { loadRoundCount, saveRoundCount } from '../game-preferences'
 import { freshChoice, isReady, nameOf, renderSelector, type GameTypeChoice } from '../game-types/registry'
-import './report-error'
+import '../bible-sources/report-error'
 
 export interface GameOptions {
   translation: string
@@ -351,7 +351,11 @@ export class GameSetup extends LitElement {
       ${this.fileState.status === 'error'
         ? html`
             <p class="error">${this.fileState.message}</p>
-            <bg-report-error .errorMessage=${this.fileState.message} .fileName=${this.fileState.fileName}>
+            <bg-report-error
+              .errorMessage=${this.fileState.message}
+              .fileName=${this.fileState.fileName}
+              .submitReport=${api.submitBibleFileUploadReport}
+            >
             </bg-report-error>
           `
         : null}
@@ -458,7 +462,7 @@ export class GameSetup extends LitElement {
     // that when available and fall back to the filename otherwise (RTF
     // exports have no equivalent metadata file to read).
     const fallbackName = file.name.replace(/\.(epub|zip)$/i, '')
-    const epubParser = isEpub ? await import('../epub-parser') : undefined
+    const epubParser = isEpub ? await import('../bible-sources/epub-parser') : undefined
     const translation = (await epubParser?.detectEpubTranslationName(file).catch(() => undefined)) ?? fallbackName
 
     this.fileState = { status: 'parsing', fileName: file.name, processed: 0, total: 1 }
@@ -469,7 +473,7 @@ export class GameSetup extends LitElement {
             this.fileState = { status: 'parsing', fileName: file.name, ...progress }
           })
         : await (
-            await import('../rtf-parser')
+            await import('../bible-sources/rtf-parser')
           ).parseRtfZip(file, translation, (progress) => {
             this.fileState = { status: 'parsing', fileName: file.name, ...progress }
           })
@@ -623,11 +627,18 @@ export class GameSetup extends LitElement {
       font-weight: 500;
     }
 
+    /* Full width but never wider: a long translation name would otherwise
+       size the select to the name and push the page past a phone screen.
+       Same fix as bible-sources/translation-source-select.ts's copy. */
     select {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       padding: 0.5rem 0.65rem;
       border-radius: 8px;
       border: 1px solid #ccc;
       font-size: 1rem;
+      text-overflow: ellipsis;
     }
 
     .round-count {

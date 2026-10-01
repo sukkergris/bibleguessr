@@ -561,13 +561,23 @@ test('a player whose uploaded file spells a book differently than the server can
 
     // The book is locked (Chapters-scope games commit to one book — see
     // guess-form.ts) to each player's OWN resolved spelling — Alice sees
-    // "1.Mosebog", Bob sees "Genesis" — so there's no book field to type
-    // into; just submit. A correct guess must still score as correct
-    // server-side, proving the fix reaches scoring too (see
-    // Scoring.isCorrectGuess), not just verse display — both players'
-    // scores should be above zero once the round resolves.
+    // "1.Mosebog", Bob sees "Genesis" — and so is the lone chapter. A
+    // correct guess must still score as correct server-side, proving the
+    // fix reaches scoring too (see Scoring.isCorrectGuess), not just verse
+    // display — both players' scores should be above zero once the round
+    // resolves. With book and chapter both given, a Chapters guess is only
+    // correct with the right verse (see backend/Domain/GameTypes/
+    // Chapters.fs), so each player guesses the round's actual verse, read
+    // from their own game.
     await expect(pageA.locator('.locked-book')).toHaveText('1.Mosebog')
     await expect(pageB.locator('.locked-book')).toHaveText('Genesis')
+    for (const page of [pageA, pageB]) {
+      const verseNumber = await page
+        .locator('bg-multiplayer-game')
+        .evaluate((game) => (game as unknown as { resolvedVerse: { verseNumber: number } }).resolvedVerse.verseNumber)
+      // Genesis 1 is complete in both sources, so slider position = verse number.
+      await page.locator('bg-guess-form').getByRole('slider', { name: 'Verse (optional)' }).fill(String(verseNumber))
+    }
     await pageA.getByRole('button', { name: 'Guess' }).click()
     await pageB.getByRole('button', { name: 'Guess' }).click()
 

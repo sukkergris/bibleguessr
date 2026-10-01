@@ -39,10 +39,10 @@ import './play-requests'
 import './challenge-settings'
 import './multiplayer-game'
 import './multiplayer-results'
-import './translation-source-select'
+import '../bible-sources/translation-source-select'
 import type { ChallengeSettings } from './challenge-settings'
 import type { MultiplayerGameOverDetail } from './multiplayer-results'
-import type { TranslationChoice } from './translation-source-select'
+import type { TranslationChoice } from '../bible-sources/translation-source-select'
 
 type Screen =
   | { step: 'choose' }
@@ -271,7 +271,11 @@ export class RoomSetup extends LitElement {
           <p class="translation-hint">
             Pick your own translation or upload your own file — other players don't need to match you.
           </p>
-          <bg-translation-source-select @translation-changed=${this._onTranslationChanged}></bg-translation-source-select>
+          <bg-translation-source-select
+            .serverSource=${api}
+            .submitBibleFileReport=${api.submitBibleFileUploadReport}
+            @translation-changed=${this._onTranslationChanged}
+          ></bg-translation-source-select>
         </div>
 
         <label>

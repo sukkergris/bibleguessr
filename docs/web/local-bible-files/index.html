@@ -27,7 +27,7 @@
       <h2>Two supported export formats</h2>
 
       <div class="card">
-        <h3>EPUB — <span class="file-ref">frontend/src/epub-parser.ts</span></h3>
+        <h3>EPUB — <span class="file-ref">frontend/src/bible-sources/epub-parser.ts</span></h3>
         <p>Targets "JW Library" family EPUB exports (a zip archive; <code>fflate</code>'s <code>unzip</code> pulls out the <code>.xhtml</code> chapter entries, skipping images).</p>
         <ul>
           <li>A chapter page is recognized by a nav header regex matching book name and (optional) chapter number.</li>
@@ -52,7 +52,7 @@
       </div>
 
       <div class="card">
-        <h3>RTF — <span class="file-ref">frontend/src/rtf-parser.ts</span></h3>
+        <h3>RTF — <span class="file-ref">frontend/src/bible-sources/rtf-parser.ts</span></h3>
         <p>Targets "Bible Online Download" RTF exports: a zip with one <code>.rtf</code> file per book.</p>
         <ul>
           <li>Book name and chapter headings extracted via regex on specific RTF font/style groups.</li>
@@ -77,7 +77,7 @@
 
       <p>Both parsers share a comment convention: bump <code>PARSER_VERSION</code> in <span class="file-ref">verse-cache.ts</span> if their regexes ever change, so stale cached parses get invalidated automatically.</p>
 
-      <h2>Caching — <span class="file-ref">frontend/src/verse-cache.ts</span></h2>
+      <h2>Caching — <span class="file-ref">frontend/src/bible-sources/verse-cache.ts</span></h2>
       <p>
         Caches the <em>parsed</em> <code>Verse[]</code> result in IndexedDB (database <code>bibleguessr</code>,
         store <code>local-bible-cache</code>) — not the raw file. Browsers don't allow silently re-reading a
@@ -113,10 +113,21 @@
         </li>
       </ol>
 
+      <h2>Where it lives — <span class="file-ref">frontend/src/bible-sources/</span></h2>
+      <p>
+        Everything about where verses come from — the parsers, the cache, <code>createLocalVerseSource</code>, the
+        <code>&lt;bg-translation-source-select&gt;</code> picker and its <code>&lt;bg-report-error&gt;</code> form — is
+        one shared layer, used by singleplayer, multiplayer and Social's <a href="../daily-quiz/index.html">daily
+        quiz</a>. It imports only itself and the shared kernel, never the app's <code>api.ts</code>: whoever hosts the
+        picker hands in the server's translations (<code>serverSource</code>) and the file-problem report
+        (<code>submitBibleFileReport</code>) — see <span class="file-ref">frontend/src/bible-sources/server-access.ts</span>.
+        <span class="file-ref">frontend/src/architecture.test.ts</span> enforces this.
+      </p>
+
       <h2>Verify it</h2>
       <ul>
         <li>
-          <span class="file-ref">frontend/src/local-verses.test.ts</span> covers
+          <span class="file-ref">frontend/src/bible-sources/local-verses.test.ts</span> covers
           <code>createLocalVerseSource</code>'s filtering/sorting/dedup behavior.
         </li>
         <li>
@@ -129,10 +140,10 @@
       </ul>
 
       <footer class="page-footer">
-        Key files: <span class="file-ref">frontend/src/epub-parser.ts</span> ·
-        <span class="file-ref">frontend/src/rtf-parser.ts</span> ·
-        <span class="file-ref">frontend/src/verse-cache.ts</span> ·
-        <span class="file-ref">frontend/src/local-verses.ts</span> ·
+        Key files: <span class="file-ref">frontend/src/bible-sources/epub-parser.ts</span> ·
+        <span class="file-ref">frontend/src/bible-sources/rtf-parser.ts</span> ·
+        <span class="file-ref">frontend/src/bible-sources/verse-cache.ts</span> ·
+        <span class="file-ref">frontend/src/bible-sources/local-verses.ts</span> ·
         <span class="file-ref">frontend/src/components/game-setup.ts</span>
       </footer>
     </main>

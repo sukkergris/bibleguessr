@@ -1,5 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import type { SubmitBibleFileReport } from '../bible-sources/server-access'
 import type { VerseSource } from '../shared-kernel/bible'
 import './daily-quiz/daily-quiz-game'
 
@@ -8,16 +9,21 @@ type SocialView = { kind: 'home' } | { kind: 'daily-quiz' }
 
 /**
  * The Social area — see docs/web/social. Social is its own standalone
- * part of the app: it imports only from its own folder, the shared kernel
- * and shared UI, never from the game or the multiplayer code (enforced by
+ * part of the app: it imports only from its own folder, the shared kernel,
+ * shared UI and bible sources, never from the game or the multiplayer code (enforced by
  * src/architecture.test.ts). Its first content is the daily quiz — see
  * docs/web/daily-quiz.
  */
 @customElement('bg-social-home')
 export class SocialHome extends LitElement {
-  /** Where verse text is looked up — given by the app shell. */
+  /** The server's translations — given by the app shell (see
+   * bible-sources/server-access.ts). */
   @property({ attribute: false })
-  verseSource?: VerseSource
+  serverSource?: VerseSource
+
+  /** Where a problem report about an unusable Bible file is sent. */
+  @property({ attribute: false })
+  submitBibleFileReport?: SubmitBibleFileReport
 
   @state()
   private view: SocialView = { kind: 'home' }
@@ -27,7 +33,8 @@ export class SocialHome extends LitElement {
       case 'daily-quiz':
         return html`
           <bg-daily-quiz
-            .verseSource=${this.verseSource}
+            .serverSource=${this.serverSource}
+            .submitBibleFileReport=${this.submitBibleFileReport}
             @daily-quiz-closed=${() => (this.view = { kind: 'home' })}
           ></bg-daily-quiz>
         `

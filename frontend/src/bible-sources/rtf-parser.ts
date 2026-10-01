@@ -38,7 +38,7 @@
 // Bump PARSER_VERSION in verse-cache.ts if these regexes change, so any
 // cached parse gets invalidated.
 import { unzip } from 'fflate'
-import type { Verse } from './types'
+import type { Verse } from '../shared-kernel/bible'
 
 // A book-name/heading "token": either a plain character (not a backslash or
 // brace, which would end the RTF group) or a `\uNNNN?` Unicode escape —

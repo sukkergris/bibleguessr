@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createLocalVerseSource } from './local-verses'
-import type { Verse, VerseRestriction } from './types'
+import type { Verse, VerseRestriction } from '../shared-kernel/bible'
 
 function makeVerse(book: string, chapter: number, verseNumber: number, translation = 'NWT'): Verse {
   return {

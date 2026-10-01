@@ -16,8 +16,6 @@ const NONE_POSITION = 0
 interface SliderSpec<T> {
   label: string
   name: string
-  /** What NONE_POSITION shows next to the slider, e.g. "Any". */
-  noneDisplay: string
   /** What NONE_POSITION reads as to a screen reader, e.g. "Any chapter". */
   noneValueText: string
   /** What a value reads as to a screen reader, e.g. "Chapter 12". */
@@ -243,7 +241,6 @@ export class GuessForm extends LitElement {
             : this._renderSlider<string>({
                 label: 'Book',
                 name: `${BOOK_FIELD}-slider`,
-                noneDisplay: '—',
                 noneValueText: 'No book picked',
                 valueText: (book) => book,
                 waitingFor: this.booksInBibleOrder.length === 0 ? 'Loading books…' : undefined,
@@ -257,7 +254,6 @@ export class GuessForm extends LitElement {
           ${this._renderSlider<number>({
             label: 'Chapter (optional)',
             name: CHAPTER_FIELD,
-            noneDisplay: 'Any',
             noneValueText: 'Any chapter',
             valueText: (chapter) => `Chapter ${chapter}`,
             waitingFor: !this.book ? 'Pick a book first.' : chapterOptions.length === 0 ? 'Loading chapters…' : undefined,
@@ -268,7 +264,6 @@ export class GuessForm extends LitElement {
           ${this._renderSlider<number>({
             label: 'Verse (optional)',
             name: VERSE_FIELD,
-            noneDisplay: 'Any',
             noneValueText: 'Any verse',
             valueText: (verseNumber) => `Verse ${verseNumber}`,
             waitingFor:
@@ -418,9 +413,6 @@ export class GuessForm extends LitElement {
         />
         ${spec.waitingFor ? html`<p id=${hintId} class="picker-hint">${spec.waitingFor}</p>` : null}
         </div>
-        <span class="slider-value" aria-hidden="true">
-          ${spec.selected === undefined ? spec.noneDisplay : String(spec.selected)}
-        </span>
       </div>
     `
   }
@@ -557,26 +549,18 @@ export class GuessForm extends LitElement {
       overflow-wrap: anywhere;
     }
 
-    /* label | slider | current value, with any "why disabled" hint under
-       the slider. */
+    /* label | slider. The current values aren't repeated next to the
+       sliders: the summary at the top of the bar shows the whole guess. */
     .slider-row {
       display: grid;
-      grid-template-columns: var(--slider-label-width) minmax(0, 1fr) var(--slider-value-width);
+      grid-template-columns: var(--slider-label-width) minmax(0, 1fr);
       align-items: center;
       column-gap: 0.75rem;
       --slider-label-width: 8.5rem;
-      --slider-value-width: 6.5rem;
     }
 
     .slider-label {
       font-size: 0.9rem;
-    }
-
-    .slider-value {
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-      text-align: right;
-      overflow-wrap: anywhere;
     }
 
     .slider-row input[type='range'] {
@@ -630,8 +614,7 @@ export class GuessForm extends LitElement {
        it, so the slider keeps a usable width (also at 200% zoom). */
     @media (max-width: 30rem) {
       .slider-row {
-        grid-template-columns: minmax(0, 1fr) var(--slider-value-width);
-        --slider-value-width: 5.5rem;
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .slider-label {

@@ -382,7 +382,7 @@ export class BgApp extends LitElement {
                 : this.phase === 'gameOver'
                   ? html`<bg-game-results .rounds=${this.rounds} @play-again=${this._onPlayAgain}></bg-game-results>`
                   : this.phase === 'social'
-                    ? html`<bg-social-home .verseSource=${api}></bg-social-home>`
+                    ? html`<bg-social-home .serverSource=${api} .submitBibleFileReport=${api.submitBibleFileUploadReport}></bg-social-home>`
                     : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
     `
   }

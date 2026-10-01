@@ -131,7 +131,7 @@ type RoundState =
         <code>BookNumber</code>, never <code>Book</code>.
       </p>
 
-      <h3>Frontend resolution — <span class="file-ref">frontend/src/local-verses.ts</span> / <span class="file-ref">frontend/src/api.ts</span></h3>
+      <h3>Frontend resolution — <span class="file-ref">frontend/src/bible-sources/local-verses.ts</span> / <span class="file-ref">frontend/src/api.ts</span></h3>
       <p>
         <code>VerseSource.lookupVerse(reference, translation)</code> is the one call every client makes to turn a
         bare reference into something displayable, always against the viewer's <strong>own</strong> chosen
@@ -139,7 +139,7 @@ type RoundState =
         (<span class="file-ref">frontend/src/api.ts</span>), this hits <code>GET /api/verses/lookup</code>, which
         prefers <code>bookNumber</code> over the reference's <code>book</code> name for exactly the reason above —
         matching by name would reintroduce the cross-translation spelling mismatch <code>bookNumber</code> exists to
-        fix. For an uploaded file (<span class="file-ref">frontend/src/local-verses.ts</span>'s
+        fix. For an uploaded file (<span class="file-ref">frontend/src/bible-sources/local-verses.ts</span>'s
         <code>createLocalVerseSource</code>), the same resolution happens entirely client-side against the parsed
         <code>Verse[]</code> in memory — no network call at all, so an uploaded file's text never leaves the
         browser it was parsed in.
@@ -551,7 +551,7 @@ type RoundState =
         <span class="file-ref">frontend/src/signalr-client.ts</span> ·
         <span class="file-ref">frontend/src/game-types/registry.ts</span> ·
         <span class="file-ref">frontend/src/shared-kernel/book-numbers.ts</span> ·
-        <span class="file-ref">frontend/src/local-verses.ts</span> ·
+        <span class="file-ref">frontend/src/bible-sources/local-verses.ts</span> ·
         <span class="file-ref">frontend/src/api.ts</span> ·
         <span class="file-ref">frontend/src/timer.ts</span> ·
         <span class="file-ref">frontend/src/components/challenge-settings.ts</span> ·

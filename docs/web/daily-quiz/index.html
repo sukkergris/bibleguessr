@@ -18,7 +18,17 @@
 
       <h2>What the player sees</h2>
       <ul>
-        <li>Social → <em>Play today's quiz</em> opens the quiz: the day's date and "Verse 1 of 5".</li>
+        <li>
+          Social → <em>Play today's quiz</em> first asks which Bible to play from — a server translation (the
+          default) or the player's own file — with the same picker as multiplayer. <em>Start today's quiz</em> is
+          enabled once the choice is valid (e.g. an uploaded file has finished parsing). Then the quiz shows the day's
+          date and "Verse 1 of 5".
+        </li>
+        <li>
+          Every verse's text, and the guess form's book names, come from the chosen Bible. If it doesn't have one of
+          the day's verses (a different verse numbering, a book left out), the quiz says "This verse isn't in your
+          Bible." and offers <em>Skip this verse</em>, for no points — instead of the whole quiz failing.
+        </li>
         <li>
           At the top, a countdown to the next quiz ("Next quiz in 05:12:47"), counted to the next 00:00 UTC in the
           browser — midnight UTC is the same moment everywhere, so the server needn't send it. Once the day has moved
@@ -129,8 +139,10 @@
       <p>
         The quiz lives in Social (<span class="file-ref">frontend/src/social/daily-quiz/</span>):
         <code>daily-quiz-client.ts</code> fetches the day's quiz, <code>daily-quiz-session.ts</code> is the flow as an
-        explicit state model (loading → playing → finished, or failed), <code>daily-quiz-game.ts</code> renders it
-        with the shared verse card and guess form (<span class="file-ref">frontend/src/shared-ui/</span>), and
+        explicit state model (choosing a Bible → loading → playing → finished, or failed; while playing, the current
+        verse is being looked up, shown, or not in the chosen Bible), <code>daily-quiz-game.ts</code> renders it
+        with the shared verse card and guess form (<span class="file-ref">frontend/src/shared-ui/</span>) and the
+        shared Bible picker (<span class="file-ref">frontend/src/bible-sources/</span>), and
         <code>next-quiz-countdown.ts</code> is the countdown.
       </p>
 
@@ -147,8 +159,9 @@
           and its format, in UTC.
         </li>
         <li>
-          <span class="file-ref">frontend/e2e/daily-quiz.spec.ts</span> — playing a whole quiz, scoring, keyboard, a
-          quiz that can't be loaded, and the countdown (with Playwright's clock frozen at set moments). It serves a fixed quiz instead of the server's random one, so the answers are
+          <span class="file-ref">frontend/e2e/daily-quiz.spec.ts</span> — choosing a Bible, playing a whole quiz
+          (also from an uploaded file, with a verse it lacks), scoring, keyboard, a quiz that can't be loaded, the
+          countdown (with Playwright's clock frozen at set moments), and the pickers fitting a phone screen. It serves a fixed quiz instead of the server's random one, so the answers are
           known.
         </li>
       </ul>

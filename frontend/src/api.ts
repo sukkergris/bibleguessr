@@ -146,7 +146,7 @@ export const api = {
   createRoom: () => postJson<Room>('/api/rooms'),
   // Sends a Bible-file upload error report — see
   // docs/SCRUM/Feature.ErrorMessageBibleLoader.md and
-  // components/report-error.ts. Rate-limited server-side (5/IP/day, 100
+  // bible-sources/report-error.ts. Rate-limited server-side (5/IP/day, 100
   // total/day); a 429 there surfaces here as a thrown Error whose message
   // is the backend's rate-limit detail text (see request()'s
   // problem-details handling above).

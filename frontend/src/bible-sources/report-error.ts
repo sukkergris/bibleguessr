@@ -1,6 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import { api } from '../api'
+import type { SubmitBibleFileReport } from './server-access'
 
 type Status = 'collapsed' | 'expanded' | 'sending' | 'sent' | 'failed'
 
@@ -21,6 +21,10 @@ export class ReportError extends LitElement {
 
   @property({ type: String })
   fileName?: string
+
+  /** Sends the report — handed in by the host (see server-access.ts). */
+  @property({ attribute: false })
+  submitReport?: SubmitBibleFileReport
 
   @state()
   private _status: Status = 'collapsed'
@@ -79,7 +83,8 @@ export class ReportError extends LitElement {
     this._failureMessage = undefined
 
     try {
-      await api.submitBibleFileUploadReport({ description, fileName: this.fileName, errorMessage: this.errorMessage })
+      if (!this.submitReport) throw new Error('Reporting is not available here.')
+      await this.submitReport({ description, fileName: this.fileName, errorMessage: this.errorMessage })
       this._status = 'sent'
     } catch (err) {
       this._failureMessage = err instanceof Error ? err.message : 'Failed to send the report.'

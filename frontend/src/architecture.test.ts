@@ -5,11 +5,15 @@
 //                   imports only itself.
 //   shared-ui/      UI components any area may use (verse card, guess
 //                   form): imports only itself and the shared kernel.
+//   bible-sources/  where verses come from — the server or the player's
+//                   own file (parsing, caching, the picker): imports only
+//                   itself and the shared kernel. Server access is handed
+//                   in (see bible-sources/server-access.ts).
 //   game-types/X/   one game type: imports only itself, the shared kernel
 //                   and the GameTypeDefinition contract. The rest of the
 //                   app reaches game types only through registry.ts.
 //   social/         a standalone area: imports only itself, the shared
-//                   kernel and shared UI.
+//                   kernel, shared UI and bible sources.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
@@ -19,6 +23,7 @@ import { describe, expect, it } from 'vitest'
 const SRC_DIR = dirname(fileURLToPath(import.meta.url))
 const SHARED_KERNEL_DIR = join(SRC_DIR, 'shared-kernel')
 const SHARED_UI_DIR = join(SRC_DIR, 'shared-ui')
+const BIBLE_SOURCES_DIR = join(SRC_DIR, 'bible-sources')
 const GAME_TYPES_DIR = join(SRC_DIR, 'game-types')
 const SOCIAL_DIR = join(SRC_DIR, 'social')
 const CONTRACT_FILE = join(GAME_TYPES_DIR, 'game-type-definition')
@@ -64,6 +69,7 @@ describe('layer boundaries', () => {
     // Guards against every rule below passing vacuously.
     expect(sourceFilesUnder(SHARED_KERNEL_DIR).length).toBeGreaterThan(0)
     expect(sourceFilesUnder(SHARED_UI_DIR).length).toBeGreaterThan(0)
+    expect(sourceFilesUnder(BIBLE_SOURCES_DIR).length).toBeGreaterThan(0)
     expect(sourceFilesUnder(SOCIAL_DIR).length).toBeGreaterThan(0)
     expect(gameTypeFolders.map((folder) => relative(GAME_TYPES_DIR, folder)).sort()).toEqual(
       expect.arrayContaining(['books', 'chapters', 'the-bible']),
@@ -77,6 +83,11 @@ describe('layer boundaries', () => {
   it('shared UI imports only itself and the shared kernel', () => {
     const allowed: Rule = (t) => isInside(t, SHARED_UI_DIR) || isInside(t, SHARED_KERNEL_DIR)
     expect(violations(sourceFilesUnder(SHARED_UI_DIR), allowed)).toEqual([])
+  })
+
+  it('bible sources import only themselves and the shared kernel', () => {
+    const allowed: Rule = (t) => isInside(t, BIBLE_SOURCES_DIR) || isInside(t, SHARED_KERNEL_DIR)
+    expect(violations(sourceFilesUnder(BIBLE_SOURCES_DIR), allowed)).toEqual([])
   })
 
   it.each(gameTypeFolders.map((folder) => [relative(GAME_TYPES_DIR, folder), folder]))(
@@ -93,8 +104,12 @@ describe('layer boundaries', () => {
     expect(violations(appFiles, allowed)).toEqual([])
   })
 
-  it('Social imports only itself, the shared kernel and shared UI', () => {
-    const allowed: Rule = (t) => isInside(t, SOCIAL_DIR) || isInside(t, SHARED_KERNEL_DIR) || isInside(t, SHARED_UI_DIR)
+  it('Social imports only itself, the shared kernel, shared UI and bible sources', () => {
+    const allowed: Rule = (t) =>
+      isInside(t, SOCIAL_DIR) ||
+      isInside(t, SHARED_KERNEL_DIR) ||
+      isInside(t, SHARED_UI_DIR) ||
+      isInside(t, BIBLE_SOURCES_DIR)
     expect(violations(sourceFilesUnder(SOCIAL_DIR), allowed)).toEqual([])
   })
 })

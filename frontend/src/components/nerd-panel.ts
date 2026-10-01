@@ -3,6 +3,17 @@ import { customElement, state } from 'lit/decorators.js'
 import './theme-select'
 import { api } from '../api';
 
+/** How often the "Is alive" row pings the server while the panel is open. */
+const PING_INTERVAL_MS = 5_000;
+/** How long one ping may take before it counts as no answer. */
+const PING_TIMEOUT_MS = 5_000;
+
+/** The latest /api/healthz ping, as the "Is alive" row shows it. */
+type PingState =
+  | { kind: 'checking' }
+  | { kind: 'alive'; ms: number }
+  | { kind: 'down'; reason: string };
+
 /**
  * A debug drawer along the right edge, toggled with Ctrl+Shift+N — the
  * shell for whatever "nerd stuff" ends up living here (connection
@@ -32,6 +43,12 @@ export class NerdPanel extends LitElement {
   @state()
   private revisionError?: string;
 
+  /** The latest /api/healthz ping — see _ping. */
+  @state()
+  private ping: PingState = { kind: 'checking' };
+
+  private _pingTimer?: ReturnType<typeof setInterval>;
+
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener('keydown', this._onKeydown);
@@ -46,6 +63,7 @@ export class NerdPanel extends LitElement {
 
   disconnectedCallback() {
     window.removeEventListener('keydown', this._onKeydown);
+    this._stopPinging();
     super.disconnectedCallback();
   }
 
@@ -94,6 +112,54 @@ export class NerdPanel extends LitElement {
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('open')) {
       this.toggleAttribute('data-open', this.open);
+      if (this.open) this._startPinging();
+      else this._stopPinging();
+    }
+  }
+
+  // Only while the panel is open: nobody sees the result otherwise.
+  private _startPinging() {
+    this._stopPinging();
+    this.ping = { kind: 'checking' };
+    void this._ping();
+    this._pingTimer = setInterval(() => void this._ping(), PING_INTERVAL_MS);
+  }
+
+  private _stopPinging() {
+    clearInterval(this._pingTimer);
+    this._pingTimer = undefined;
+  }
+
+  /** Times one round trip to /api/healthz — the same check the connection
+   * dot uses (see connection-status.ts), shown here with its number. */
+  private async _ping() {
+    const start = performance.now();
+    try {
+      const response = await fetch(`${api.baseUrl}/api/healthz`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+      });
+      const ms = Math.round(performance.now() - start);
+      this.ping = response.ok
+        ? { kind: 'alive', ms }
+        : { kind: 'down', reason: `server answered ${response.status}` };
+    } catch (err) {
+      const reason =
+        err instanceof DOMException && err.name === 'TimeoutError'
+          ? `no answer within ${PING_TIMEOUT_MS / 1000}s`
+          : 'could not reach the server';
+      this.ping = { kind: 'down', reason };
+    }
+  }
+
+  private _pingText(): string {
+    switch (this.ping.kind) {
+      case 'checking':
+        return 'Checking…';
+      case 'alive':
+        return `Yes · ${this.ping.ms} ms`;
+      case 'down':
+        return `No — ${this.ping.reason}`;
     }
   }
 
@@ -136,6 +202,18 @@ export class NerdPanel extends LitElement {
               Shortcuts are ignored while you are typing in a text field, so they cannot interrupt a message or a
               name you are entering.
             </p>
+          </section>
+
+          <!-- Not a live region: it changes every few seconds, and
+               announcing each ping would drown everything else out. -->
+          <section class="server" aria-labelledby="server-heading">
+            <h3 id="server-heading">Server</h3>
+            <dl>
+              <div>
+                <dt>Is alive</dt>
+                <dd>${this._pingText()}</dd>
+              </div>
+            </dl>
           </section>
 
           <section class="revisions" aria-labelledby="revisions-heading">
@@ -239,10 +317,15 @@ export class NerdPanel extends LitElement {
       padding: 1rem;
     }
 
+    .server,
     .revisions {
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 0.8rem;
+    }
+
+    .server {
+      margin-bottom: 0.75rem;
     }
 
     h3 {
