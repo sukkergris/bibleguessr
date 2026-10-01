@@ -29,6 +29,15 @@
   --error: #b42318;
   --disabled-text: #8a8a94;
   --overlay: rgba(0, 0, 0, 0.45);
+
+  /* Guess-form book grid (see docs/web/book-picker). Three shades tell the
+     book categories apart at a glance; each category also has a text
+     heading, so the shade is never the only cue. All three carry
+     --book-tile-text at well over 4.5:1. */
+  --book-tile-1: #6d6487;
+  --book-tile-2: #564e70;
+  --book-tile-3: #3d3651;
+  --book-tile-text: #ffffff;
 }
 
 :root[data-theme='dark'] {
@@ -49,6 +58,11 @@
   --error: #ff8a80;
   --disabled-text: #7c7c88;
   --overlay: rgba(0, 0, 0, 0.65);
+
+  --book-tile-1: #6d6487;
+  --book-tile-2: #5a5276;
+  --book-tile-3: #463e5e;
+  --book-tile-text: #ffffff;
 }
 
 /* Only applies while no explicit choice has been made — theme.ts always
@@ -73,6 +87,11 @@
     --error: #ff8a80;
     --disabled-text: #7c7c88;
     --overlay: rgba(0, 0, 0, 0.65);
+
+    --book-tile-1: #6d6487;
+    --book-tile-2: #5a5276;
+    --book-tile-3: #463e5e;
+    --book-tile-text: #ffffff;
   }
 }
 

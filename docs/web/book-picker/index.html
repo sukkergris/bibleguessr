@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Book grid — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Book grid</h1>
+      <p class="subtitle">
+        Players pick the book for a guess from a grid of tiles, grouped by testament and category, instead of typing
+        its name.
+      </p>
+
+      <h2>What the player sees</h2>
+      <p>
+        Every guess form (singleplayer and multiplayer) shows the selected Bible's books as tiles, in Bible order,
+        under an <em>Old Testament</em> and a <em>New Testament</em> heading. Within each testament the books are
+        split into categories (Law, History, Poetry &amp; wisdom, Major prophets, Minor prophets, Gospels, Acts,
+        Paul's letters, General letters, Prophecy), each with its own small heading and one of three tile shades.
+      </p>
+      <ul>
+        <li><strong>Click a tile</strong> to select the book, then guess.</li>
+        <li>
+          <strong>Keyboard:</strong> focus lands on the first tile for each new verse; the arrow keys move and
+          select, and Enter guesses.
+        </li>
+        <li>
+          In a <strong>Books</strong> game only the books chosen at setup are shown. In a <strong>Chapters</strong>
+          game the book is fixed, so the grid is not shown at all.
+        </li>
+      </ul>
+
+      <div class="callout">
+        <span class="callout-title">Names come from the selected Bible</span>
+        <p>
+          Tile labels are never hardcoded. They are the selected translation's (or the player's own file's) names
+          from <span class="pill">VerseSource.getBooksInBibleOrder</span>. Grouping is by book
+          <em>number</em> (position in that list), so it works for any spelling. Only the testament and category
+          headings are app text.
+        </p>
+      </div>
+
+      <h2>Grouping rules</h2>
+      <p>
+        <span class="file-ref">frontend/src/book-picker.ts</span> holds the category table
+        (<code>BOOK_CATEGORIES</code>, book-number ranges) and the pure function <code>layoutBooks</code>. Ranges, not exact positions, are used so a source that orders books slightly
+        differently within a category still groups correctly. The bundled bibelen-dk, for example, places Jakob
+        after 3. Johannes, and both still fall in General letters (59–65).
+      </p>
+      <p>
+        If a source does not have exactly <code>STANDARD_CANON_BOOK_COUNT</code> (66) books, for example one that
+        includes deuterocanonical books, the grid falls back to a single ungrouped list in Bible order rather than
+        showing wrong headings.
+      </p>
+
+      <h2>Accessibility</h2>
+      <ul>
+        <li>
+          Tiles are native radio buttons inside nested <code>&lt;fieldset&gt;</code>s, so the testament and
+          category names are announced as group names, Tab enters the group once, and the arrow keys move and select.
+          Enter on a tile submits the guess.
+        </li>
+        <li>
+          The selected tile has an accent fill, a bold name <em>and</em> a ✓ mark. The category shades are backed by
+          visible text headings. Neither state nor category is conveyed by colour alone.
+        </li>
+        <li>
+          A polite status line reports the selection ("Selected: Daniel").
+        </li>
+        <li>
+          The shades are theme tokens (<code>--book-tile-1..3</code>, <code>--book-tile-text</code> in
+          <span class="file-ref">frontend/src/index.css</span>), all above 4.5:1 against the tile text in both
+          themes. Focus uses the shared <code>--focus</code> outline.
+        </li>
+        <li>
+          The grid scrolls inside a capped-height box so the Guess button stays on screen.
+        </li>
+      </ul>
+
+      <h2>Implementation and tests</h2>
+      <p>
+        The grid lives in <span class="file-ref">frontend/src/components/guess-form.ts</span>
+        (<code>_renderBookPicker</code>). It replaced both the free-text book combobox and the Books-mode
+        <code>&lt;select&gt;</code>. A guess can now only name a book that exists in the player's own Bible.
+      </p>
+      <p>
+        Grouping is unit tested in <span class="file-ref">frontend/src/book-picker.test.ts</span>.
+        The grid's behaviour (grouping, click to select, keyboard operation) is covered
+        by <span class="file-ref">frontend/e2e/book-picker.spec.ts</span>.
+      </p>
+    </main>
+  </body>
+</html>

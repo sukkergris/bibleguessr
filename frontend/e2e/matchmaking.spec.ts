@@ -194,14 +194,14 @@ test('the waiting player’s time limit and verse restriction reach the game', a
     await expect(pageA.getByText(/Round 1 \//)).toBeVisible({ timeout: 10_000 })
 
     // The countdown proves the time limit survived. For the restriction,
-    // a Books-scoped game gives the guess form a dropdown of exactly the
+    // a Books-scoped game gives the guess form a book grid of exactly the
     // allowed books (a locked book is Chapters mode, not this), so Bob
     // seeing only Alice's chosen book proves her restriction applied.
     await expect(pageB.locator('bg-multiplayer-game')).toContainText(/\d+s/)
 
-    const options = await pageB.locator('bg-guess-form select option').allInnerTexts()
-    const books = options.map((o) => o.trim()).filter((o) => o !== '' && !/choose/i.test(o))
-    expect(books).toEqual([chosenBook])
+    const tiles = pageB.locator('bg-guess-form .book-tile-name')
+    await expect(tiles).toHaveCount(1)
+    expect((await tiles.allInnerTexts()).map((t) => t.trim())).toEqual([chosenBook])
   } finally {
     await ctxA.close()
     await ctxB.close()

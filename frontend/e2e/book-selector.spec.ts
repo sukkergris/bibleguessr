@@ -55,15 +55,15 @@ test('"Books" restricts to only the checked books', async ({ page }) => {
   // confirms the restriction actually reached the backend and constrained
   // getRandomVerse, not just the UI state at setup time.
   for (let round = 1; round <= 3; round++) {
-    const bookField = page.getByLabel('Book')
-    await bookField.selectOption('Daniel')
-    await bookField.press('Enter')
+    const daniel = page.locator('bg-guess-form').getByRole('radio', { name: 'Daniel' })
+    await daniel.check()
+    await daniel.press('Enter')
     await expect(page.locator('.feedback')).toContainText('Daniel')
     await page.getByRole('button', { name: /Next verse|See results/ }).click()
   }
 })
 
-test('"Books" mode guess form is a dropdown listing only the selected books', async ({ page }) => {
+test('"Books" mode book grid lists only the selected books', async ({ page }) => {
   await openMode(page, 'Books')
 
   // Pick two books at setup.
@@ -74,18 +74,16 @@ test('"Books" mode guess form is a dropdown listing only the selected books', as
   await page.getByRole('button', { name: 'Start game' }).click()
   await expect(page.locator('.round')).toContainText('Verse 1')
 
-  // The Book field is a real <select>, not a free-text input.
-  const bookField = page.getByLabel('Book')
-  await expect(bookField).toHaveJSProperty('tagName', 'SELECT')
+  // The grid offers exactly the two selected books, in Bible order — not
+  // every book in the translation.
+  const tiles = page.locator('bg-guess-form').getByRole('radio')
+  await expect(tiles).toHaveCount(2)
+  expect(await page.locator('bg-guess-form .book-tile-name').allTextContents()).toEqual(['1.Mosebog', 'Daniel'])
 
-  // It only offers exactly the two selected books (plus the disabled
-  // placeholder) — not every book in the translation.
-  const optionTexts = await bookField.locator('option').allTextContents()
-  expect(optionTexts.sort()).toEqual(['1.Mosebog', 'Choose a book…', 'Daniel'].sort())
-
-  // A guess submits successfully by picking from the dropdown.
-  await bookField.selectOption('1.Mosebog')
-  await bookField.press('Enter')
+  // A guess submits successfully by picking a tile.
+  const genesis = page.locator('bg-guess-form').getByRole('radio', { name: '1.Mosebog' })
+  await genesis.check()
+  await genesis.press('Enter')
   await expect(page.locator('.feedback')).toBeVisible()
 })
 
@@ -142,13 +140,11 @@ test('"Chapters" mode guess form shows the chosen book as fixed, uneditable text
   await page.getByRole('button', { name: 'Start game' }).click()
   await expect(page.locator('.round')).toContainText('Verse 1')
 
-  // The Book field shows the book, but isn't an <input> or <select> at
-  // all — there's nothing to click into or type over. (The Chapter field
-  // is a <select> in this mode too — see the dedicated dropdown test — so
-  // this only checks for a free-text book input specifically.)
+  // The Book field shows the book as fixed text — no book grid to pick
+  // from, nothing to click into.
   const guessForm = page.locator('bg-guess-form')
   await expect(guessForm.getByText('Daniel', { exact: true })).toBeVisible()
-  await expect(guessForm.locator('input[name="bg-book-guess-no-autofill"]')).toHaveCount(0)
+  await expect(guessForm.getByRole('radio')).toHaveCount(0)
 
   // A guess still submits successfully with the locked book, scored
   // correctly, without the player ever choosing a book themselves.

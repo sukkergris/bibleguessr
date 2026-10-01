@@ -152,9 +152,14 @@ async function setRoundCount(page: Page, rounds: number) {
   await expect(page.locator('bg-challenge-settings .slider-value').first()).toHaveText(String(rounds))
 }
 
+// Any book the bundled server translation actually has — the guess form
+// only accepts books from the player's own Bible (picked from its book
+// grid, see docs/web/book-picker), so a name absent from it, like the
+// English "Genesis", would select nothing and submit nothing.
+const ANY_SERVER_BOOK = '1.Mosebog'
+
 async function submitGuess(page: Page, book: string) {
-  const bookField = page.getByLabel('Book')
-  await bookField.fill(book)
+  await page.locator('bg-guess-form').getByRole('radio', { name: book }).check()
   await page.getByRole('button', { name: 'Guess' }).click()
 }
 
@@ -306,10 +311,10 @@ test('both players guessing auto-advances the round without either clicking anyt
     await expect(pageA.getByText('Round 1 / 3')).toBeVisible()
     await expect(pageB.getByText('Round 1 / 3')).toBeVisible()
 
-    await submitGuess(pageA, 'Genesis')
+    await submitGuess(pageA, ANY_SERVER_BOOK)
     await expect(pageA.getByText(`Guess locked in`)).toBeVisible()
 
-    await submitGuess(pageB, 'Genesis')
+    await submitGuess(pageB, ANY_SERVER_BOOK)
 
     // Once both have guessed, the server resolves the round and advances
     // — both pages move on to round 2 without any "Next" click.
@@ -347,8 +352,8 @@ test('a full short game reaches the multiplayer results screen with matching fin
       // before the next round is allowed to replace it — so rounds 2 and
       // 3 arrive a beat after both guesses land, not immediately.
       await expect(pageA.getByText(`Round ${round} / 3`)).toBeVisible({ timeout: 10_000 })
-      await submitGuess(pageA, 'Genesis')
-      await submitGuess(pageB, 'Genesis')
+      await submitGuess(pageA, ANY_SERVER_BOOK)
+      await submitGuess(pageB, ANY_SERVER_BOOK)
     }
 
     // Same REVEAL_HOLD_MS beat as inside the loop above — the FINAL
@@ -618,7 +623,7 @@ test('a player who never guesses sees "Choked!" for themself, and their opponent
     // Alice guesses; Bob deliberately never does — only the
     // RoundTimeoutService sweep (1s default interval) will ever resolve
     // this round once the 2s limit elapses.
-    await submitGuess(pageA, 'Genesis')
+    await submitGuess(pageA, ANY_SERVER_BOOK)
 
     const revealSeenAt = Date.now()
     await expect(pageA.getByText('Choked!')).toBeVisible({ timeout: 10_000 })
@@ -992,8 +997,8 @@ test('the opponent still reaches results when a forfeit lands during a reveal ho
 
     // Both guess, which scores the round and starts the 1.5s hold on
     // both screens. Alice forfeits immediately, inside that window.
-    await submitGuess(pageA, 'Genesis')
-    await submitGuess(pageB, 'Genesis')
+    await submitGuess(pageA, ANY_SERVER_BOOK)
+    await submitGuess(pageB, ANY_SERVER_BOOK)
 
     // The custom in-app dialog replaced the native confirm() (see
     // docs/SCRUM/Feature.Forfeit.md) — click through it rather than
