@@ -97,10 +97,10 @@ let sendBibleFileUploadReport (settings: SmtpSettings) (logger: ILogger) (report
 
     try
         smtpClient.Send(message)
-        logger.LogInformation("Bug report email sent to {Recipient}", settings.To)
+        logger.LogInformation("Bible file upload report email sent to {Recipient}", settings.To)
         true
     with ex ->
-        logger.LogError(ex, "Failed to send bug report email to {Recipient}", settings.To)
+        logger.LogError(ex, "Failed to send Bible file upload report email to {Recipient}", settings.To)
         false
 
 /// Builds the abuse-report email's HTML body. Same field/value table shape

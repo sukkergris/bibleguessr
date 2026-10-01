@@ -20,3 +20,17 @@ let bibelenDkArchive =
         | d -> search d.Parent
 
     search (DirectoryInfo(System.AppContext.BaseDirectory))
+
+let private apiProjectRelativePath = Path.Combine("backend", "Api")
+
+/// The API project folder, where the tracked appsettings*.json files live.
+/// Found the same way as bibelenDkArchive, for the same reason.
+let apiProjectDirectory =
+    let rec search (directory: DirectoryInfo) =
+        match directory with
+        | null -> failwith $"Could not find {apiProjectRelativePath} above {System.AppContext.BaseDirectory}"
+        | d when File.Exists(Path.Combine(d.FullName, apiProjectRelativePath, "appsettings.json")) ->
+            Path.Combine(d.FullName, apiProjectRelativePath)
+        | d -> search d.Parent
+
+    search (DirectoryInfo(System.AppContext.BaseDirectory))
