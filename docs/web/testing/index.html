@@ -37,7 +37,7 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
         <tbody>
           <tr>
             <td><code>ScoringTests.fs</code></td>
-            <td><code>Scoring.pointsForVerseGuess</code> — every gated tier, case-insensitivity.</td>
+            <td>The scoring building blocks (<code>Scoring.correctParts</code>, <code>Scoring.tieredPoints</code>) — every gated tier, case and whitespace. Each game type's own rule is checked against <code>scoring-scenarios/</code> by <code>GameTypeScoringTests.fs</code>.</td>
           </tr>
           <tr>
             <td><code>RoomTests.fs</code></td>

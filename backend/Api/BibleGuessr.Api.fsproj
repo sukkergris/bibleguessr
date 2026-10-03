@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Json.fs" />
     <Compile Include="BibelenDkLoader.fs" />
     <Compile Include="VerseHealth.fs" />
     <Compile Include="RequestLogging.fs" />

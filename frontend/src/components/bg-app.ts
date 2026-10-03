@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { freshChoice, guessConstraintOf, nameOf, scoreGuessOf, sharedColumnsOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
+import { freshChoice, guessConstraintOf, maxPointsOf, nameOf, scoreGuessOf, sharedColumnsOf, verseRestrictionOf, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import '../shared-ui/verse-card'
@@ -389,6 +389,7 @@ export class BgApp extends LitElement {
                       .rounds=${this.rounds}
                       .gameTypeName=${nameOf(this.choice.gameType)}
                       .columns=${sharedColumnsOf(this.choice)}
+                      .maxPointsPerVerse=${maxPointsOf(this.choice)}
                       .finishedAt=${this.finishedAt}
                       @play-again=${this._onPlayAgain}
                     ></bg-game-results>`

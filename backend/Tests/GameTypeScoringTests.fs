@@ -1,102 +1,127 @@
 module BibleGuessr.Tests.GameTypeScoringTests
 
 // Each game type owns its multiplayer scoring rule (see
-// Domain/GameTypes/<Name>.fs's scoreGuess and docs/web/game-types).
-// The Bible and Books use Scoring.standardMultiplayer; Chapters has its
-// own rule, since its book is a given. These tests pin each type's rule
-// down, so changing one is a deliberate, visible change here — and the
-// other types' tests prove they are unaffected.
+// Domain/GameTypes/<Name>.fs's scoreGuess and docs/web/scoring), and
+// multiplayer scores a guess exactly like singleplayer does. Both are
+// spelled out once, per game type, in scoring-scenarios/<game type>.json
+// at the repo root: these tests check the multiplayer points through
+// GameType.scoreGuess, the server's composition point, and
+// frontend/src/game-types/scoring-scenarios.test.ts checks the
+// singleplayer points against the same files. Changing one game type's
+// rule means changing its own module and its own scenario file only.
 
 open System
+open System.IO
+open System.Text.Json
+open Microsoft.FSharp.Reflection
 open Xunit
 open BibleGuessr.Domain
 
-let private verse: VerseReference =
-    { Book = "Rut"
-      BookNumber = 8
-      Chapter = 1
-      VerseNumber = 16 }
+/// Reads a wire value the way the hub does (see Api/Json.fs).
+let private wireOptions =
+    let options = JsonSerializerOptions(JsonSerializerDefaults.Web)
+    options.Converters.Add(BibleGuessr.Api.Json.converter ())
+    options
 
-let private guessOf bookNumber chapter : Guess =
-    { PlayerId = PlayerId(Guid.NewGuid())
-      Book = "Rut"
-      BookNumber = Some bookNumber
-      Chapter = chapter
-      VerseNumber = None
-      SubmittedAt = DateTimeOffset.UtcNow }
+let private scenarioFiles () =
+    Directory.GetFiles(TestPaths.scoringScenariosDirectory, "*.json") |> Array.sort
 
-let private roundLength = TimeSpan.FromSeconds 60.0
-let private halfway = TimeSpan.FromSeconds 30.0
+let private optionalInt (element: JsonElement) (name: string) =
+    match element.TryGetProperty name with
+    | true, value -> Some(value.GetInt32())
+    | _ -> None
 
-/// The game types that use the standard rule.
-let standardGameTypes: obj array seq = [ [| box AllVerses |]; [| box (Books [ 8 ]) |] ]
+/// The wire value of every selection in every scenario file, keyed by
+/// file and selection name.
+let private wires () =
+    [ for path in scenarioFiles () do
+          use document = JsonDocument.Parse(File.ReadAllText path)
 
-let private chapters = Chapters(Map.ofList [ 8, [ 1; 2 ] ])
+          for selection in document.RootElement.GetProperty("selections").EnumerateObject() do
+              let wire =
+                  JsonSerializer.Deserialize<GameType>(selection.Value.GetProperty("wire").GetRawText(), wireOptions)
 
-/// A Chapters game with a single chapter picked: the chapter is a given too.
-let private oneChapter = Chapters(Map.ofList [ 8, [ 1 ] ])
+              (Path.GetFileName path, selection.Name), wire ]
+    |> Map.ofList
 
-let private guessWithVerse bookNumber chapter verseNumber =
-    { guessOf bookNumber (Some chapter) with VerseNumber = Some verseNumber }
+/// One row per scenario case: a readable name, then everything needed to
+/// score it. The guess carries the book number the guessing player's own
+/// Bible gives the book (its position in the file's booksInBibleOrder),
+/// as a real client sets it.
+let scenarioCases () : obj array seq =
+    let wires = wires ()
+
+    seq {
+        for path in scenarioFiles () do
+            use document = JsonDocument.Parse(File.ReadAllText path)
+            let root = document.RootElement
+            let file = Path.GetFileName path
+
+            let booksInBibleOrder =
+                root.GetProperty("booksInBibleOrder").EnumerateArray()
+                |> Seq.map (fun book -> book.GetString())
+                |> List.ofSeq
+
+            let verseJson = root.GetProperty "verse"
+
+            let verse: VerseReference =
+                { Book = verseJson.GetProperty("book").GetString()
+                  BookNumber = verseJson.GetProperty("bookNumber").GetInt32()
+                  Chapter = verseJson.GetProperty("chapter").GetInt32()
+                  VerseNumber = verseJson.GetProperty("verseNumber").GetInt32() }
+
+            for case in root.GetProperty("cases").EnumerateArray() do
+                let selection = case.GetProperty("selection").GetString()
+                let guessJson = case.GetProperty "guess"
+                let book = guessJson.GetProperty("book").GetString()
+
+                let guess: Guess =
+                    { PlayerId = PlayerId(Guid.NewGuid())
+                      Book = book
+                      BookNumber =
+                        booksInBibleOrder
+                        |> List.tryFindIndex (fun candidate -> candidate = book)
+                        |> Option.map ((+) 1)
+                      Chapter = optionalInt guessJson "chapter"
+                      VerseNumber = optionalInt guessJson "verseNumber"
+                      SubmittedAt = DateTimeOffset.UtcNow }
+
+                let expected = case.GetProperty("points").GetProperty("multiplayer").GetInt32()
+                let name = $"""{file} / {selection}: {case.GetProperty("why").GetString()} ({guessJson.GetRawText()})"""
+                yield [| box name; box wires[(file, selection)]; box verse; box guess; box expected |]
+    }
 
 [<Theory>]
-[<MemberData(nameof standardGameTypes)>]
-let ``a correct guess in an untimed round earns the flat points`` (gameType: GameType) =
-    let score = GameType.scoreGuess gameType Unlimited halfway verse (guessOf 8 (Some 1))
-    Assert.Equal({ Correct = true; Points = Scoring.unlimitedCorrectPoints }, score)
-
-[<Theory>]
-[<MemberData(nameof standardGameTypes)>]
-let ``a correct guess in a timed round earns points that decay with time`` (gameType: GameType) =
-    let score = GameType.scoreGuess gameType (LimitedTo roundLength) halfway verse (guessOf 8 None)
-    Assert.Equal({ Correct = true; Points = Scoring.pointsForGuess roundLength halfway true }, score)
-
-[<Theory>]
-[<MemberData(nameof standardGameTypes)>]
-let ``a wrong guess earns nothing`` (gameType: GameType) =
-    let score = GameType.scoreGuess gameType (LimitedTo roundLength) halfway verse (guessOf 9 None)
-    Assert.Equal({ Correct = false; Points = 0 }, score)
+[<MemberData(nameof scenarioCases)>]
+let ``a multiplayer guess scores what its game type's scenario file says``
+    (_case: string)
+    (gameType: GameType)
+    (verse: VerseReference)
+    (guess: Guess)
+    (expected: int)
+    =
+    Assert.Equal(expected, GameType.scoreGuess gameType verse guess)
 
 [<Fact>]
-let ``Chapters: the right chapter is correct and earns the points`` () =
-    Assert.Equal(
-        { Correct = true; Points = Scoring.unlimitedCorrectPoints },
-        GameType.scoreGuess chapters Unlimited halfway verse (guessOf 8 (Some 1))
-    )
+let ``every game type has scenarios, and every scenario is a known game type`` () =
+    let caseNames = FSharpType.GetUnionCases(typeof<GameType>) |> Array.map _.Name |> Set.ofArray
 
-    Assert.Equal(
-        { Correct = true; Points = Scoring.pointsForGuess roundLength halfway true },
-        GameType.scoreGuess chapters (LimitedTo roundLength) halfway verse (guessOf 8 (Some 1))
-    )
+    let scenarioCaseNames =
+        wires () |> Map.values |> Seq.map (fun wire -> (FSharpValue.GetUnionFields(wire, typeof<GameType>) |> fst).Name) |> Set.ofSeq
 
-// In the standard rule a book-only guess counts as correct. In Chapters
-// the book is fixed at setup, so that would be points for nothing.
+    Assert.Equal<Set<string>>(caseNames, scenarioCaseNames)
+    Assert.True(Seq.length (scenarioCases ()) > 0)
+
+// The rule that spans game types, which only GameType.fs may know: a game
+// type that selects nothing plays as The Bible — the verses it draws and
+// the points it gives. The frontend's registry applies the same rule.
 [<Fact>]
-let ``Chapters: the given book alone earns nothing`` () =
-    Assert.Equal({ Correct = false; Points = 0 }, GameType.scoreGuess chapters Unlimited halfway verse (guessOf 8 None))
-
-    Assert.Equal(
-        { Correct = false; Points = 0 },
-        GameType.scoreGuess chapters (LimitedTo roundLength) halfway verse (guessOf 8 None)
-    )
+let ``a game type that selects nothing plays as The Bible`` () =
+    for nothing in [ Books []; Chapters Map.empty ] do
+        Assert.Equal(AllVerses, GameType.playedAs nothing)
+        Assert.Equal(GameType.restrictionOf AllVerses, GameType.restrictionOf nothing)
 
 [<Fact>]
-let ``Chapters: the wrong chapter earns nothing`` () =
-    Assert.Equal({ Correct = false; Points = 0 }, GameType.scoreGuess chapters Unlimited halfway verse (guessOf 8 (Some 2)))
-
-// With one chapter picked, the chapter is as much a given as the book, so
-// only the verse number is left to get right.
-[<Fact>]
-let ``Chapters with one chapter: the given chapter alone earns nothing`` () =
-    Assert.Equal({ Correct = false; Points = 0 }, GameType.scoreGuess oneChapter Unlimited halfway verse (guessOf 8 (Some 1)))
-
-[<Fact>]
-let ``Chapters with one chapter: the wrong verse earns nothing`` () =
-    Assert.Equal({ Correct = false; Points = 0 }, GameType.scoreGuess oneChapter Unlimited halfway verse (guessWithVerse 8 1 15))
-
-[<Fact>]
-let ``Chapters with one chapter: the right verse is correct and earns the points`` () =
-    Assert.Equal(
-        { Correct = true; Points = Scoring.pointsForGuess roundLength halfway true },
-        GameType.scoreGuess oneChapter (LimitedTo roundLength) halfway verse (guessWithVerse 8 1 16)
-    )
+let ``a game type that selects something plays as itself`` () =
+    for something in [ AllVerses; Books [ 8 ]; Chapters(Map.ofList [ 8, [ 1 ] ]) ] do
+        Assert.Equal(something, GameType.playedAs something)

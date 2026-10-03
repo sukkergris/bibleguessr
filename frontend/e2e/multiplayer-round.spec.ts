@@ -563,7 +563,7 @@ test('a player whose uploaded file spells a book differently than the server can
     // guess-form.ts) to each player's OWN resolved spelling — Alice sees
     // "1.Mosebog", Bob sees "Genesis" — and so is the lone chapter. A
     // correct guess must still score as correct server-side, proving the
-    // fix reaches scoring too (see Scoring.isCorrectGuess), not just verse
+    // fix reaches scoring too (see Scoring.correctParts), not just verse
     // display — both players' scores should be above zero once the round
     // resolves. With book and chapter both given, a Chapters guess is only
     // correct with the right verse (see backend/Domain/GameTypes/

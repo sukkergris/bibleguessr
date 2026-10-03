@@ -8,7 +8,6 @@ open Serilog
 open System.Threading.RateLimiting
 open BibleGuessr.Domain
 open BibleGuessr.Api
-open System.Text.Json.Serialization
 open Serilog.Events
 
 /// POST /api/reports's request body — see docs/SCRUM/Feature.ErrorMessageBibleLoader.md.
@@ -45,7 +44,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 7
+let BackendRevision = 8
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"
@@ -60,22 +59,9 @@ let HealthzPath = "/api/healthz"
 let main args =
     let builder = WebApplication.CreateBuilder(args)
 
-    // MapFormat.Object (rather than the library's default, an array of
-    // [key, value] pairs) makes every F# Map serialize as a plain JSON
-    // object — {"1":[1,2]}, not [[1,[1,2]]] — matching what the frontend
-    // has always assumed for every Map-backed field that crosses this
-    // boundary (GameSession.Scores/GuessesThisRound, GameType.Chapters —
-    // see types.ts's Record<string,...>/Record<number,...> mirrors).
-    // Using the array-of-pairs default silently broke all of these: a
-    // multiplayer round's displayed score was always 0 (Map.scores[id]
-    // read against an array returns undefined, masked by a "?? 0"
-    // fallback) and sending a Chapters-scoped challenge threw a server
-    // error outright, since the client sent an object where the default
-    // format expected pairs.
-    let jsonOptions = JsonFSharpOptions.Default().WithMapFormat(MapFormat.Object)
-
+    // One JSON format for HTTP and the hub alike — see Json.fs.
     builder.Services.ConfigureHttpJsonOptions(fun options ->
-        options.SerializerOptions.Converters.Add(JsonFSharpConverter(jsonOptions)))
+        options.SerializerOptions.Converters.Add(Json.converter ()))
     |> ignore
 
     builder.Services.AddSerilog(fun services configuration ->
@@ -102,7 +88,7 @@ let main args =
             // messages (never raw exception/stack-trace detail), so it's
             // safe and necessary to let them through.
             options.EnableDetailedErrors <- true)
-        .AddJsonProtocol(fun options -> options.PayloadSerializerOptions.Converters.Add(JsonFSharpConverter(jsonOptions)))
+        .AddJsonProtocol(fun options -> options.PayloadSerializerOptions.Converters.Add(Json.converter ()))
     |> ignore
     builder.Services.AddSingleton<GameHub.RoomStore>() |> ignore
 

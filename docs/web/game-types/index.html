@@ -24,20 +24,24 @@
     book-numbers.ts         book name ⇄ book number
     game-type-wire.ts       the GameType JSON shared with the backend
     guess-constraint.ts     what the guess form may offer
-    scoring.ts              the standard singleplayer scoring rule
+    scoring.ts              the scoring building blocks every game type builds its rule from
   game-types/
     game-type-definition.ts the contract every game type implements
     the-bible/              one folder per game type: definition, setup UI, tests
     books/
     chapters/
     registry.ts             the ONLY module that knows every game type
+    scoring-scenarios.test.ts  each game type's points, from scoring-scenarios/
   architecture.test.ts      enforces the rules below (and those of shared-ui/, bible-sources/ and social/)
 
 backend/Domain/
-  Scoring.fs                           shared kernel: Guess, TimeLimit, the standard scoring rules
+  Scoring.fs                           shared kernel: Guess and the scoring building blocks
   GameTypes/
     TheBible.fs  Books.fs  Chapters.fs one module per game type: verse restriction, scoring rule
-    GameType.fs                        the wire DU + dispatch, the only place that knows all three</code></pre>
+    GameType.fs                        the wire DU + dispatch, the only place that knows all three
+
+scoring-scenarios/
+  the-bible.json  books.json  chapters.json   each game type's points, for both modes</code></pre>
 
       <h2>Rules</h2>
       <ul>
@@ -79,7 +83,9 @@ backend/Domain/
           <tr><td><code>renderSelector</code></td><td>Setup screen and challenge settings (each type owns its selector)</td></tr>
           <tr><td><code>verseRestriction</code></td><td>Singleplayer: which verses to draw</td></tr>
           <tr><td><code>guessConstraint</code></td><td>Singleplayer: what the guess form offers</td></tr>
-          <tr><td><code>scoreGuess</code></td><td>Singleplayer: how many points a guess earns (multiplayer: the backend module's <code>scoreGuess</code>)</td></tr>
+          <tr><td><code>scoreGuess</code></td><td>Singleplayer: how many points a guess earns (multiplayer: the backend module's <code>scoreGuess</code>, held to the same points)</td></tr>
+          <tr><td><code>maxPoints</code></td><td>Singleplayer: the most one verse can earn — what the results screen counts out of</td></tr>
+          <tr><td><code>sharedColumns</code></td><td>Singleplayer: which parts a shared result shows (what's given is left out)</td></tr>
           <tr><td><code>toWire</code></td><td>Multiplayer: the play request / matchmaking entry sent to the server</td></tr>
           <tr><td><code>describeWire</code></td><td>Multiplayer: the challenged player's description, in their own spelling</td></tr>
           <tr><td><code>guessConstraintForWire</code></td><td>Multiplayer: what the guess form offers, in the viewer's own spelling</td></tr>
@@ -102,15 +108,17 @@ backend/Domain/
         <li>
           <strong>Scoring</strong> — singleplayer <code>scoreGuess</code> in the frontend definition (the server never
           scores a singleplayer round), multiplayer <code>scoreGuess</code> in the backend module (the client never
-          scores a multiplayer round).
+          scores a multiplayer round). Both give a guess the same points, held together by the game type's own
+          <span class="file-ref">scoring-scenarios/&lt;game type&gt;.json</span>.
         </li>
       </ul>
       <p>
         The standard rules are building blocks in the shared kernel (<span class="file-ref">frontend/src/shared-kernel/scoring.ts</span>,
         <span class="file-ref">backend/Domain/Scoring.fs</span>). Each game type <em>chooses</em> one explicitly —
-        The Bible and Books choose the standard ones, while Chapters has its own (what is given — the book, and a lone chapter — earns
-        nothing — see <a href="../scoring/index.html">Scoring</a>). Replacing a rule means editing that game type's
-        own file and its own test. Round count and time limit are still shared settings, not per-type rules.
+        The Bible chooses the standard tiers; Books and Chapters choose their own, since what is given at setup — a
+        lone picked book, Chapters' fixed book, a lone chapter — earns nothing (see
+        <a href="../scoring/index.html">Scoring</a>). Replacing a rule means editing that game type's own frontend
+        file, its own backend module and its own scenario file — nothing else. Round count and time limit are still shared settings, not per-type rules.
       </p>
 
       <div class="callout">
@@ -118,7 +126,10 @@ backend/Domain/
         <p>
           A game type with nothing picked yet plays as <em>The Bible</em>. For example, a challenge sent from the
           Books tab before any book is ticked is sent as <code>AllVerses</code>, and an empty <code>Books</code>
-          is described as "The Bible". The registry owns that rule; no game type knows about another.
+          is described as "The Bible", offers every book in the guess form, and is scored as The Bible. The registry
+          owns that rule on the frontend and <code>GameType.playedAs</code> in
+          <span class="file-ref">backend/Domain/GameTypes/GameType.fs</span> on the server (verses and points alike);
+          no game type knows about another.
         </p>
       </div>
 
@@ -141,8 +152,11 @@ backend/Domain/
         <li>
           Add <code>backend/Domain/GameTypes/&lt;Name&gt;.fs</code> with its <code>restriction</code> and
           <code>scoreGuess</code>, list it in <code>BibleGuessr.Domain.fsproj</code> before <code>GameType.fs</code>,
-          dispatch to it from <code>GameType.restrictionOf</code> and <code>GameType.scoreGuess</code>, and add it to
-          <code>GameTypeScoringTests.fs</code>.
+          dispatch to it from <code>GameType.restrictionOf</code> and <code>GameType.scoreGuess</code>.
+        </li>
+        <li>
+          Add <span class="file-ref">scoring-scenarios/&lt;name&gt;.json</span>: its selections and the points each
+          guess earns in each mode. The frontend and backend scenario tests pick it up — and fail until it exists.
         </li>
       </ol>
       <p>The start screen, setup screen and multiplayer tabs then show the new game type without any changes.</p>

@@ -152,6 +152,63 @@ let ``a waiting player who starts a game is no longer matchable`` () =
 
     Assert.True((Room.findMatchFor carol.Id room).IsNone)
 
+// A queue entry must not outlive the game either: once a waiting player's
+// game has ENDED, the old entry would otherwise match them into a game —
+// with that entry's old game type — they no longer asked for.
+[<Fact>]
+let ``a player who accepts a challenge while waiting is not matched after that game`` () =
+    let alice = makePlayer "Alice"
+    let bob = makePlayer "Bob"
+    let carol = makePlayer "Carol"
+
+    let request: PlayRequest =
+        { FromPlayerId = bob.Id
+          FromPlayerName = bob.Name
+          ToPlayerId = alice.Id
+          GameType = AllVerses
+          RoundCount = 5
+          RoundTimeLimit = Unlimited
+          SentAt = DateTimeOffset.UtcNow }
+
+    let verse = { Book = "John"; BookNumber = 43; Chapter = 3; VerseNumber = 16 }
+
+    let room, _ =
+        roomWith [ alice; bob; carol ]
+        |> Room.joinMatchmaking { entryFor alice 0 with GameType = Chapters(Map.ofList [ 8, [ 1 ] ]) }
+        |> Room.joinMatchmaking (entryFor bob 1)
+        |> Room.sendPlayRequest request
+        |> Room.acceptPlayRequest (GameId(Guid.NewGuid())) bob.Id alice.Id verse DateTimeOffset.UtcNow
+
+    let afterTheGame = Room.endGame room
+
+    Assert.False(Room.isWaitingForMatch alice.Id afterTheGame)
+    Assert.False(Room.isWaitingForMatch bob.Id afterTheGame)
+    Assert.True((Room.findMatchFor carol.Id afterTheGame).IsNone)
+
+[<Fact>]
+let ``both players leave the queue when their game starts`` () =
+    let alice = makePlayer "Alice"
+    let bob = makePlayer "Bob"
+
+    let session =
+        GameSession.start
+            (GameId(Guid.NewGuid()))
+            alice.Id
+            bob.Id
+            AllVerses
+            5
+            Unlimited
+            { Book = "John"; BookNumber = 43; Chapter = 3; VerseNumber = 16 }
+            DateTimeOffset.UtcNow
+
+    let room =
+        roomWith [ alice; bob ]
+        |> Room.joinMatchmaking (entryFor alice 0)
+        |> Room.joinMatchmaking (entryFor bob 1)
+        |> Room.startGame session
+
+    Assert.Empty(room.WaitingForMatch)
+
 // A queue entry must never outlive its player: leaving the room has to
 // take the entry with it, or the next joiner is matched against nobody.
 [<Fact>]

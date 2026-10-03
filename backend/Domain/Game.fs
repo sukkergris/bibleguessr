@@ -18,7 +18,20 @@ type Player =
       Name: string
       Score: int }
 
+/// A round's time limit, chosen by the challenger via a slider from
+/// "infinite" to 1 minute (see docs/SCRUM/Feature.Time.md). It only ends
+/// the round — it doesn't change what a guess is worth (see
+/// docs/web/scoring). An explicit DU rather than TimeSpan option so "no
+/// limit" is a named case every consumer (the round-timeout sweep) must
+/// handle explicitly, rather than an ambiguous None that could be misread
+/// as "not set yet".
+type TimeLimit =
+    | Unlimited
+    | LimitedTo of TimeSpan
+
 /// Result of scoring one player's guess against the round's actual verse.
+/// Correct means the guess earned points — the same "correct" the
+/// singleplayer feedback shows.
 type GuessResult =
     { PlayerId: PlayerId
       Correct: bool
@@ -85,8 +98,7 @@ type GameSession =
       RoundIndex: int
       Round: RoundState
       /// When the current round's verse was picked/broadcast — the anchor
-      /// GameSession.scoreRound's `elapsed` and the timeout sweep's
-      /// deadline check are both computed from.
+      /// the timeout sweep's deadline check is computed from.
       RoundStartedAt: DateTimeOffset option
       /// Guesses submitted for the CURRENT round only — cleared on every
       /// GameSession.advanceRound.
@@ -161,25 +173,23 @@ module GameSession =
     /// Scores the current round using every guess submitted so far (a
     /// player who never guessed this round — timeout — gets no GuessResult
     /// entry at all, an implicit 0 distinguishable from "guessed wrong"),
-    /// by the game type's own rule (see GameType.scoreGuess). Moves Round
-    /// to Scored and folds the points into the running Scores. `scoredAt`
-    /// is passed in (rather than read from DateTimeOffset.UtcNow) so this
-    /// stays pure/testable.
-    let scoreRound (scoredAt: DateTimeOffset) (session: GameSession) : GameSession =
-        match session.Round, session.RoundStartedAt with
-        | InProgress verse, Some startedAt ->
-            let elapsed = scoredAt - startedAt
-
+    /// by the game type's own rule (see GameType.scoreGuess) — the same
+    /// points singleplayer gives; when a guess came in doesn't change them.
+    /// Moves Round to Scored and folds the points into the running Scores.
+    let scoreRound (session: GameSession) : GameSession =
+        match session.Round with
+        | InProgress verse ->
             let results =
                 [ session.PlayerA; session.PlayerB ]
                 |> List.choose (fun pid ->
                     session.GuessesThisRound
                     |> Map.tryFind pid
                     |> Option.map (fun guess ->
-                        let score = GameType.scoreGuess session.GameType session.RoundTimeLimit elapsed verse guess
+                        let points = GameType.scoreGuess session.GameType verse guess
+
                         { PlayerId = pid
-                          Correct = score.Correct
-                          PointsAwarded = score.Points }))
+                          Correct = points > 0
+                          PointsAwarded = points }))
 
             let updatedScores =
                 results
@@ -313,6 +323,12 @@ module Room =
                 room.PendingRequests
                 |> List.filter (fun r -> not (r.FromPlayerId = fromPlayerId && r.ToPlayerId = toPlayerId)) }
 
+    /// Takes both players of a game that is starting out of the matchmaking
+    /// queue — see startGame.
+    let private leaveMatchmakingBoth (playerA: PlayerId) (playerB: PlayerId) (room: Room) =
+        { room with
+            WaitingForMatch = room.WaitingForMatch |> List.filter (fun e -> e.PlayerId <> playerA && e.PlayerId <> playerB) }
+
     /// The challenged player accepts `fromPlayerId`'s request to them:
     /// removes the request AND starts the game it described, using the
     /// already-picked `firstVerse` (impure pick happens in the hub — see
@@ -344,7 +360,7 @@ module Room =
                     firstVerse
                     startedAt
 
-            { withoutRequest with ActiveGame = Some session }, Some request
+            { withoutRequest with ActiveGame = Some session } |> leaveMatchmakingBoth fromPlayerId toPlayerId, Some request
 
     /// The challenged player denies `fromPlayerId`'s request to them —
     /// resolves (removes) the request without starting anything.
@@ -403,7 +419,12 @@ module Room =
     /// checked isInActiveGame for both players via the guard above) —
     /// overwrites unconditionally otherwise, since a pure function has no
     /// way to signal "refused".
-    let startGame (session: GameSession) (room: Room) = { room with ActiveGame = Some session }
+    ///
+    /// Either way a game starts, both players leave the matchmaking queue:
+    /// an entry left behind would match them later into a game they no
+    /// longer asked for (see acceptPlayRequest).
+    let startGame (session: GameSession) (room: Room) =
+        { room with ActiveGame = Some session } |> leaveMatchmakingBoth session.PlayerA session.PlayerB
 
     /// Replaces the room's ActiveGame with an updated session — the
     /// plumbing every guess-submit/round-advance/score/timeout hub action

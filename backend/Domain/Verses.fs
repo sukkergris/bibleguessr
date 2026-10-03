@@ -25,7 +25,7 @@ type Verse =
 /// the spelling from whichever pool picked the verse, typically the
 /// server's own) — matching/scoring must always go through `BookNumber`,
 /// never `Book`, since a guessing player's own source may spell the same
-/// book differently (see Scoring.isCorrectGuess). Each client resolves
+/// book differently (see Scoring.correctParts). Each client resolves
 /// this reference to displayable text from its OWN locally-chosen
 /// VerseSource (see frontend/src/types.ts's VerseSource), using
 /// `BookNumber` to find its own spelling for that book (see

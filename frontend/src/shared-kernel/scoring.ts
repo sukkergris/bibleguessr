@@ -1,11 +1,13 @@
 import type { Guess, Verse } from './bible'
 
-// The shared kernel's standard singleplayer scoring rule. Each game type
-// chooses its own rule (see ../game-types/game-type-definition.ts's
-// scoreGuess); today they all choose this one.
+// The shared kernel's scoring building blocks. Each game type builds its
+// own rule from these (see ../game-types/game-type-definition.ts's
+// scoreGuess) — typically by choosing its own tiers, e.g. 0 for a part that
+// is given at setup. Nothing here may know about a particular game type.
 //
 // Points awarded per level of a guess, gated on every level before it being
-// correct — mirrors backend/Domain/Scoring.fs's Scoring.pointsForVerseGuess.
+// correct — mirrored by backend/Domain/Scoring.fs, since multiplayer scores
+// a guess exactly like singleplayer does (see docs/web/scoring).
 /** What each level of a correct guess is worth. */
 export interface ScoringTiers {
   book: number
@@ -45,9 +47,8 @@ export function correctParts(verse: Verse, guess: Guess): Record<keyof ScoringTi
   return { book, chapter, verseNumber }
 }
 
-/** The standard rule: tieredPoints with STANDARD_TIERS. Kept as a sibling
- * to the backend's Scoring.pointsForVerseGuess for cross-language
- * consistency. */
-export function standardSingleplayerPoints(verse: Verse, guess: Guess): number {
-  return tieredPoints(verse, guess, STANDARD_TIERS)
+/** The most a guess can earn with `tiers`: every part right. What a
+ * game type built on tieredPoints counts as its maximum. */
+export function maxTieredPoints(tiers: Readonly<ScoringTiers>): number {
+  return tiers.book + tiers.chapter + tiers.verseNumber
 }

@@ -8,7 +8,7 @@ import { bookAtNumber, bookNumberOf } from '../../shared-kernel/book-numbers'
 import type { GameType } from '../../shared-kernel/game-type-wire'
 import { ANY_BOOK } from '../../shared-kernel/guess-constraint'
 import type { ResultColumn } from '../../shared-kernel/result-sharing'
-import { STANDARD_TIERS, tieredPoints } from '../../shared-kernel/scoring'
+import { STANDARD_TIERS, maxTieredPoints, tieredPoints, type ScoringTiers } from '../../shared-kernel/scoring'
 import type { GameTypeDefinition } from '../game-type-definition'
 import './chapter-selector'
 
@@ -26,14 +26,25 @@ const NAME = 'Chapters'
 
 const ascending = (a: number, b: number) => a - b
 
+/** Each chapter once, so a lone chapter listed twice is still offered —
+ * and preselected — as the one chapter it is. */
+const distinct = (chapters: number[]) => [...new Set(chapters)]
+
 /** What's given at setup is no achievement, so it earns nothing: the
  * book always is (it's fixed). Chapter and verse keep the standard
  * points... */
-const CHAPTERS_TIERS = { ...STANDARD_TIERS, book: 0 }
+const CHAPTERS_TIERS: Readonly<ScoringTiers> = { ...STANDARD_TIERS, book: 0 }
 
 /** ...unless only one chapter was picked: then the chapter is a given
  * too, and only the verse is left to earn points for. */
-const LONE_CHAPTER_TIERS = { ...CHAPTERS_TIERS, chapter: 0 }
+const LONE_CHAPTER_TIERS: Readonly<ScoringTiers> = { ...CHAPTERS_TIERS, chapter: 0 }
+
+/** Whether only one chapter was picked. A chapter listed twice is still
+ * one chapter — the same count the server uses. */
+const chapterIsGiven = (chapters: number[]) => new Set(chapters).size === 1
+
+const tiersFor = (selection: ChaptersSelection) =>
+  chapterIsGiven(selection.chapters) ? LONE_CHAPTER_TIERS : CHAPTERS_TIERS
 
 /** The same given parts left out of a shared result, where they'd always
  * show ✅. */
@@ -66,12 +77,12 @@ export const chapters: GameTypeDefinition<ChaptersSelection, ChaptersWire> = {
     books: [selection.book],
     chaptersByBook: { [selection.book]: selection.chapters },
   }),
-  guessConstraint: (selection) => ({ kind: 'fixed-book', book: selection.book, chapters: selection.chapters }),
+  guessConstraint: (selection) => ({ kind: 'fixed-book', book: selection.book, chapters: distinct(selection.chapters) }),
   // This game type's own rule — see CHAPTERS_TIERS. The multiplayer
   // equivalent is backend/Domain/GameTypes/Chapters.fs's scoreGuess.
-  scoreGuess: (selection, verse, guess) =>
-    tieredPoints(verse, guess, selection.chapters.length === 1 ? LONE_CHAPTER_TIERS : CHAPTERS_TIERS),
-  sharedColumns: (selection) => (selection.chapters.length === 1 ? LONE_CHAPTER_COLUMNS : CHAPTERS_COLUMNS),
+  scoreGuess: (selection, verse, guess) => tieredPoints(verse, guess, tiersFor(selection)),
+  maxPoints: (selection) => maxTieredPoints(tiersFor(selection)),
+  sharedColumns: (selection) => (chapterIsGiven(selection.chapters) ? LONE_CHAPTER_COLUMNS : CHAPTERS_COLUMNS),
 
   toWire: (selection, booksInBibleOrder) => {
     const number = bookNumberOf(booksInBibleOrder, selection.book)
@@ -91,6 +102,6 @@ export const chapters: GameTypeDefinition<ChaptersSelection, ChaptersWire> = {
   guessConstraintForWire: (wire, booksInBibleOrder) => {
     const entry = firstEntry(wire)
     const book = entry && bookAtNumber(booksInBibleOrder, entry[0])
-    return entry && book ? { kind: 'fixed-book', book, chapters: entry[1] } : ANY_BOOK
+    return entry && book ? { kind: 'fixed-book', book, chapters: distinct(entry[1]) } : ANY_BOOK
   },
 }

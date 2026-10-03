@@ -31,6 +31,12 @@ export interface ChallengeSettings {
   timeLimitSeconds?: number
 }
 
+/** What a fresh room starts with: The Bible, and the round count and time
+ * limit this player chose last time (see game-preferences.ts). */
+export function defaultChallengeSettings(): ChallengeSettings {
+  return { choice: freshChoice('the-bible'), roundCount: loadRoundCount(), timeLimitSeconds: loadTimeLimitSeconds() }
+}
+
 /**
  * Everything a challenger picks before sending a play request — wraps the
  * existing <bg-game-type-select> (one tab per game type) with two more
@@ -38,8 +44,12 @@ export interface ChallengeSettings {
  * docs/SCRUM/Feature.Time.md). Sits above the players list in the room
  * screen — see bg-room-setup.ts.
  *
- * Fires `challenge-settings-changed` CustomEvent<ChallengeSettings>
- * whenever any part of the selection changes.
+ * Shows `settings`, which the room owns (see bg-room-setup.ts): this
+ * element is created anew whenever the room screen comes back (after a
+ * game, say), so it must show what the room will actually send rather than
+ * a fresh state of its own. Fires `challenge-settings-changed`
+ * CustomEvent<ChallengeSettings> whenever any part of the selection
+ * changes.
  */
 @customElement('bg-challenge-settings')
 export class ChallengeSettingsSelect extends LitElement {
@@ -49,14 +59,8 @@ export class ChallengeSettingsSelect extends LitElement {
   @property({ attribute: false })
   translation?: string;
 
-  @state()
-  private choice: GameTypeChoice = freshChoice('the-bible');
-
-  @state()
-  private roundCount = loadRoundCount();
-
-  @state()
-  private timeLimitSeconds: number | undefined = loadTimeLimitSeconds();
+  @property({ attribute: false })
+  settings: ChallengeSettings = defaultChallengeSettings();
 
   // Local-only, per-device/per-player preference — deliberately NOT part
   // of ChallengeSettings/_emitChange below, since it's never sent to the
@@ -74,6 +78,7 @@ export class ChallengeSettingsSelect extends LitElement {
     return html`
       <div class="panel">
         <bg-game-type-select
+          .choice=${this.settings.choice}
           .verseSource=${this.verseSource}
           .translation=${this.translation}
           @game-type-changed=${this._onGameTypeChanged}
@@ -86,10 +91,10 @@ export class ChallengeSettingsSelect extends LitElement {
               type="range"
               min=${MIN_ROUNDS}
               max=${MAX_ROUNDS}
-              .value=${String(this.roundCount)}
+              .value=${String(this.settings.roundCount)}
               @input=${this._onRoundCountInput}
             />
-            <span class="slider-value">${this.roundCount}</span>
+            <span class="slider-value">${this.settings.roundCount}</span>
           </div>
         </label>
 
@@ -100,13 +105,13 @@ export class ChallengeSettingsSelect extends LitElement {
               type="range"
               min=${MIN_TIME_LIMIT_SECONDS}
               max=${MAX_TIME_LIMIT_SECONDS}
-              .value=${String(this.timeLimitSeconds ?? 0)}
+              .value=${String(this.settings.timeLimitSeconds ?? 0)}
               @input=${this._onTimeLimitInput}
             />
             <span class="slider-value">
-              ${this.timeLimitSeconds === undefined
+              ${this.settings.timeLimitSeconds === undefined
                 ? 'No limit'
-                : `${this.timeLimitSeconds}s`}
+                : `${this.settings.timeLimitSeconds}s`}
             </span>
           </div>
         </label>
@@ -129,14 +134,13 @@ export class ChallengeSettingsSelect extends LitElement {
   }
 
   private _onGameTypeChanged(event: CustomEvent<GameTypeChoice>) {
-    this.choice = event.detail;
-    this._emitChange();
+    this._change({ choice: event.detail });
   }
 
   private _onRoundCountInput(e: Event) {
-    this.roundCount = Number((e.target as HTMLInputElement).value);
-    saveRoundCount(this.roundCount);
-    this._emitChange();
+    const roundCount = Number((e.target as HTMLInputElement).value);
+    saveRoundCount(roundCount);
+    this._change({ roundCount });
   }
 
   private _onTimeLimitInput(e: Event) {
@@ -149,16 +153,16 @@ export class ChallengeSettingsSelect extends LitElement {
     // floor moves. The slider itself still visually has a notch at 1
     // (a plain range input can't skip a single step), but this handler
     // means it's never actually reachable as a value — and since
-    // .value=${String(this.timeLimitSeconds ?? 0)} binds the slider's
+    // .value=${String(this.settings.timeLimitSeconds ?? 0)} binds the slider's
     // position back to this field, the thumb visually snaps to 2 too.
-    this.timeLimitSeconds = value === 0 ? undefined : value === 1 ? 2 : value;
+    const timeLimitSeconds = value === 0 ? undefined : value === 1 ? 2 : value;
     // Saved AFTER the clamp, so the unusable one-second position is never
     // persisted — see game-preferences.ts.
-    saveTimeLimitSeconds(this.timeLimitSeconds);
-    this._emitChange();
+    saveTimeLimitSeconds(timeLimitSeconds);
+    this._change({ timeLimitSeconds });
   }
 
-  // No _emitChange() call here — deliberately, unlike every other handler
+  // No _change() call here — deliberately, unlike every other handler
   // above. This is a local-only preference (see the field's own doc
   // comment and flash-intensity-storage.ts); it must never reach
   // ChallengeSettings/the server/the opponent, so it's persisted directly
@@ -168,14 +172,13 @@ export class ChallengeSettingsSelect extends LitElement {
     saveEpilepsyStressModeEnabled(this.epilepsyStressModeEnabled);
   }
 
-  private _emitChange() {
+  // Shown at once, and handed to the room, which hands it back as
+  // `settings`.
+  private _change(change: Partial<ChallengeSettings>) {
+    this.settings = { ...this.settings, ...change };
     this.dispatchEvent(
       new CustomEvent<ChallengeSettings>('challenge-settings-changed', {
-        detail: {
-          choice: this.choice,
-          roundCount: this.roundCount,
-          timeLimitSeconds: this.timeLimitSeconds,
-        },
+        detail: this.settings,
         bubbles: true,
         composed: true,
       })

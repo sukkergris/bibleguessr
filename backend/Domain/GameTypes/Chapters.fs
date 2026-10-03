@@ -3,7 +3,6 @@
 /// other game types (see GameType.fs and docs/web/game-types).
 module BibleGuessr.Domain.GameTypes.Chapters
 
-open System
 open BibleGuessr.Domain
 
 /// Picked chapters keyed by book NUMBER — see Verses.fs's
@@ -18,33 +17,24 @@ let restriction (selection: Selection) : Set<int> * Map<int, Set<int>> =
     books, chaptersByBook
 
 /// Whether only one chapter was picked — then the chapter is as much a
-/// given as the book.
+/// given as the book. A chapter listed twice is still one chapter.
 let private chapterIsGiven (selection: Selection) =
     selection
     |> Map.toSeq
     |> Seq.sumBy (fun (_, chapters) -> chapters |> List.distinct |> List.length)
     |> (=) 1
 
-/// How a multiplayer guess scores in this game type — its own rule. What's
-/// given at setup is no achievement: the book always is (it's fixed), and
-/// so is the chapter when only one was picked. The standard rule would
-/// count a book-only guess as correct, which here would be points for
-/// nothing. So a guess must also get the chapter right — and, when the
-/// chapter is a given, the verse number too; then it scores like the
-/// standard rule. The singleplayer equivalent is
-/// frontend/src/game-types/chapters/chapters.ts's scoreGuess.
-let scoreGuess
-    (selection: Selection)
-    (timeLimit: TimeLimit)
-    (elapsed: TimeSpan)
-    (verse: VerseReference)
-    (guess: Guess)
-    : GuessScore =
-    let guessedWhatIsNotGiven =
-        guess.Chapter.IsSome
-        && (not (chapterIsGiven selection) || guess.VerseNumber = Some verse.VerseNumber)
+/// What's given at setup is no achievement, so it earns nothing: the book
+/// always is (it's fixed)...
+let private chaptersTiers = { Scoring.standardTiers with BookPoints = 0 }
 
-    if guessedWhatIsNotGiven then
-        Scoring.standardMultiplayer timeLimit elapsed verse guess
-    else
-        { Correct = false; Points = 0 }
+/// ...and so is the chapter when only one was picked.
+let private loneChapterTiers = { chaptersTiers with ChapterPoints = 0 }
+
+/// How a multiplayer guess scores in this game type — its own rule: what's
+/// given at setup earns nothing (see chaptersTiers/loneChapterTiers). The
+/// singleplayer equivalent is frontend/src/game-types/chapters/chapters.ts's
+/// scoreGuess; scoring-scenarios/chapters.json holds both to the same points.
+let scoreGuess (selection: Selection) (verse: VerseReference) (guess: Guess) : int =
+    let tiers = if chapterIsGiven selection then loneChapterTiers else chaptersTiers
+    Scoring.tieredPoints tiers verse guess

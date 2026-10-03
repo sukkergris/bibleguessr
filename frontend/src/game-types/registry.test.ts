@@ -10,6 +10,7 @@ import {
   guessConstraintForWire,
   guessConstraintOf,
   isReady,
+  maxPointsOf,
   nameOf,
   scoreGuessOf,
   sharedColumnsOf,
@@ -57,7 +58,7 @@ describe('singleplayer dispatch', () => {
   it('asks the choice’s own game type', () => {
     const choice: GameTypeChoice = { gameType: 'books', selection: { books: ['Exodus'] } }
     expect(verseRestrictionOf(choice)).toEqual({ books: ['Exodus'], chaptersByBook: {} })
-    expect(guessConstraintOf(choice)).toEqual({ kind: 'one-of-books', books: ['Exodus'] })
+    expect(guessConstraintOf(choice)).toEqual({ kind: 'one-of-books', books: ['Exodus'], givenBook: 'Exodus' })
   })
 
   it('treats a choice with nothing picked as the whole Bible', () => {
@@ -92,6 +93,14 @@ describe('describeWire', () => {
 })
 
 describe('guessConstraintForWire', () => {
+  // A wire that selects nothing plays as The Bible — described as it, and
+  // the guess form must match: an empty Books offering no book at all
+  // would leave nothing to guess with.
+  it('offers every book for a wire that selects nothing', async () => {
+    expect(await guessConstraintForWire({ Case: 'Books', Fields: [[]] }, source, undefined)).toEqual({ kind: 'any-book' })
+    expect(await guessConstraintForWire({ Case: 'Chapters', Fields: [{}] }, source, undefined)).toEqual({ kind: 'any-book' })
+  })
+
   it('asks the wire case’s own game type', async () => {
     expect(await guessConstraintForWire({ Case: 'AllVerses' }, source, undefined)).toEqual({ kind: 'any-book' })
     expect(await guessConstraintForWire({ Case: 'Chapters', Fields: [{ 1: [3] }] }, source, undefined)).toEqual({
@@ -128,6 +137,20 @@ describe('scoreGuessOf', () => {
     const theBibleRule = vi.spyOn(theBible, 'scoreGuess').mockReturnValue(1)
     expect(scoreGuessOf(freshChoice('chapters'), verse, guess)).toBe(1)
     expect(theBibleRule).toHaveBeenCalled()
+  })
+})
+
+describe('maxPointsOf', () => {
+  // The results screen counts the score out of this, so it must come from
+  // the choice's own game type — not from the standard rule.
+  it('asks the choice’s own game type', () => {
+    expect(maxPointsOf({ gameType: 'chapters', selection: { book: 'Exodus', chapters: [3] } })).toBe(1000)
+    expect(maxPointsOf({ gameType: 'books', selection: { books: ['Exodus'] } })).toBe(1100)
+    expect(maxPointsOf(freshChoice('the-bible'))).toBe(1110)
+  })
+
+  it('counts a choice with nothing picked as The Bible', () => {
+    expect(maxPointsOf(freshChoice('chapters'))).toBe(1110)
   })
 })
 

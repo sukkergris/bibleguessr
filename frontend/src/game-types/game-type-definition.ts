@@ -48,9 +48,13 @@ export interface GameTypeDefinition<Selection, Wire extends GameType> {
   guessConstraint(selection: Selection): GuessConstraint
   /** This game type's own singleplayer scoring rule: the points `guess`
    * earns against the round's `verse`. Multiplayer rounds are scored by
-   * the server, by the same game type's rule there (see
-   * backend/Domain/GameTypes/). */
+   * the server, by the same game type's own rule there (see
+   * backend/Domain/GameTypes/) — scoring-scenarios/<type>.json at the repo
+   * root holds both to the same points. */
   scoreGuess(selection: Selection, verse: Verse, guess: Guess): number
+  /** The most one verse can earn under scoreGuess — a perfect guess. What
+   * the results screen counts the score out of. */
+  maxPoints(selection: Selection): number
   /** Which parts of each verse a shared result shows marks for — a part
    * that is given (and so would always be ✅) can be left out. */
   sharedColumns(selection: Selection): readonly ResultColumn[]

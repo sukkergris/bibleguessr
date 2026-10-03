@@ -12,7 +12,7 @@ let private makeVerse book chapter verseNumber : VerseReference =
 // BookNumber = None — these tests exercise scoreRound/GameSession
 // mechanics generically, not the number-vs-name matching fix itself (see
 // MultiplayerScoringByNumberTests.fs for that), so they rely on
-// isCorrectGuess's name-matching fallback, same as before BookNumber
+// Scoring.correctParts's name-matching fallback, same as before BookNumber
 // existed.
 let private makeGuess playerId book chapter verseNumber : Guess =
     { PlayerId = playerId
@@ -111,48 +111,85 @@ let ``submitGuess after the round is already Scored is a no-op`` () =
     let playerA = makePlayerId ()
     let playerB = makePlayerId ()
     let session = startSession playerA playerB 5 Unlimited (makeVerse "John" 3 16)
-    let scored = GameSession.scoreRound (startedAt.AddSeconds 1.0) session
+    let scored = GameSession.scoreRound session
 
     let updated = GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16)) scored
 
     Assert.Empty(updated.GuessesThisRound)
 
-[<Fact>]
-let ``scoreRound with LimitedTo awards decaying points via Scoring.pointsForGuess`` () =
-    let playerA = makePlayerId ()
-    let playerB = makePlayerId ()
-    let verse = makeVerse "John" 3 16
-
-    let session =
-        GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 60.0)) verse startedAt
-        |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
-
-    let scored = GameSession.scoreRound (startedAt.AddSeconds 30.0) session
-
-    match scored.Round with
-    | Scored(_, results) ->
-        let result = results |> List.find (fun r -> r.PlayerId = playerA)
-        let expected = Scoring.pointsForGuess (TimeSpan.FromSeconds 60.0) (TimeSpan.FromSeconds 30.0) true
-        Assert.Equal(expected, result.PointsAwarded)
+/// The result `playerId` got in a just-scored round.
+let private resultOf playerId (session: GameSession) =
+    match session.Round with
+    | Scored(_, results) -> results |> List.find (fun r -> r.PlayerId = playerId)
     | _ -> failwith "expected Scored"
 
 [<Fact>]
-let ``scoreRound with Unlimited awards full points for a correct guess`` () =
+let ``scoreRound gives a correct guess the same points as singleplayer`` () =
     let playerA = makePlayerId ()
     let playerB = makePlayerId ()
     let verse = makeVerse "John" 3 16
 
-    let session =
+    let scored =
         startSession playerA playerB 5 Unlimited verse
         |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
+        |> GameSession.submitGuess playerB (makeGuess playerB "John" (Some 3) None)
+        |> GameSession.scoreRound
 
-    let scored = GameSession.scoreRound (startedAt.AddSeconds 5.0) session
+    Assert.Equal({ PlayerId = playerA; Correct = true; PointsAwarded = 1110 }, resultOf playerA scored)
+    Assert.Equal({ PlayerId = playerB; Correct = true; PointsAwarded = 110 }, resultOf playerB scored)
 
-    match scored.Round with
-    | Scored(_, results) ->
-        let result = results |> List.find (fun r -> r.PlayerId = playerA)
-        Assert.Equal(100, result.PointsAwarded)
-    | _ -> failwith "expected Scored"
+// The time limit only ends the round: a guess is worth the same whenever
+// it came in, as in singleplayer, which has no timer.
+[<Fact>]
+let ``scoreRound in a timed round gives the same points as an untimed one`` () =
+    let playerA = makePlayerId ()
+    let playerB = makePlayerId ()
+    let verse = makeVerse "John" 3 16
+
+    let scored =
+        GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 60.0)) verse startedAt
+        |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
+        |> GameSession.scoreRound
+
+    Assert.Equal(1110, (resultOf playerA scored).PointsAwarded)
+
+[<Fact>]
+let ``scoreRound counts a guess that earned nothing as not correct`` () =
+    let playerA = makePlayerId ()
+    let playerB = makePlayerId ()
+
+    let scored =
+        startSession playerA playerB 5 Unlimited (makeVerse "John" 3 16)
+        |> GameSession.submitGuess playerA (makeGuess playerA "Mark" (Some 3) (Some 16))
+        |> GameSession.scoreRound
+
+    Assert.Equal({ PlayerId = playerA; Correct = false; PointsAwarded = 0 }, resultOf playerA scored)
+
+// scoreRound must score by the session's OWN game type — a guess the
+// standard rule would pay for earns nothing where it's a given.
+[<Fact>]
+let ``scoreRound scores by the session's own game type`` () =
+    let playerA = makePlayerId ()
+    let playerB = makePlayerId ()
+    let verse: VerseReference = { Book = "Rut"; BookNumber = 8; Chapter = 1; VerseNumber = 16 }
+
+    let guessOf playerId chapter verseNumber : Guess =
+        { makeGuess playerId "Rut" chapter verseNumber with BookNumber = Some 8 }
+
+    let scoreIn gameType chapter verseNumber =
+        GameSession.start (GameId(Guid.NewGuid())) playerA playerB gameType 5 Unlimited verse startedAt
+        |> GameSession.submitGuess playerA (guessOf playerA chapter verseNumber)
+        |> GameSession.scoreRound
+        |> resultOf playerA
+
+    // The book alone: 10 where it isn't given, nothing where it is.
+    Assert.Equal(10, (scoreIn AllVerses None None).PointsAwarded)
+    Assert.Equal(10, (scoreIn (Books [ 7; 8 ]) None None).PointsAwarded)
+    Assert.Equal({ PlayerId = playerA; Correct = false; PointsAwarded = 0 }, scoreIn (Books [ 8 ]) None None)
+    Assert.Equal({ PlayerId = playerA; Correct = false; PointsAwarded = 0 }, scoreIn (Chapters(Map.ofList [ 8, [ 1; 2 ] ])) None None)
+    // The lone picked chapter is a given too: only the verse earns.
+    Assert.Equal(0, (scoreIn (Chapters(Map.ofList [ 8, [ 1 ] ])) (Some 1) None).PointsAwarded)
+    Assert.Equal(1000, (scoreIn (Chapters(Map.ofList [ 8, [ 1 ] ])) (Some 1) (Some 16)).PointsAwarded)
 
 [<Fact>]
 let ``scoreRound omits a GuessResult for a player who never guessed`` () =
@@ -164,7 +201,7 @@ let ``scoreRound omits a GuessResult for a player who never guessed`` () =
         startSession playerA playerB 5 Unlimited verse
         |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
 
-    let scored = GameSession.scoreRound (startedAt.AddSeconds 1.0) session
+    let scored = GameSession.scoreRound session
 
     match scored.Round with
     | Scored(_, results) -> Assert.Equal(1, results.Length)
@@ -180,9 +217,9 @@ let ``scoreRound adds points into the running Scores total, not replacing it`` (
         { startSession playerA playerB 5 Unlimited verse with Scores = Map.ofList [ playerA, 50; playerB, 0 ] }
         |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
 
-    let scored = GameSession.scoreRound (startedAt.AddSeconds 1.0) session
+    let scored = GameSession.scoreRound session
 
-    Assert.Equal(150, scored.Scores[playerA])
+    Assert.Equal(1160, scored.Scores[playerA])
 
 [<Fact>]
 let ``scoreRound moves Round from InProgress to Scored`` () =
@@ -191,7 +228,7 @@ let ``scoreRound moves Round from InProgress to Scored`` () =
     let verse = makeVerse "John" 3 16
     let session = startSession playerA playerB 5 Unlimited verse
 
-    let scored = GameSession.scoreRound (startedAt.AddSeconds 1.0) session
+    let scored = GameSession.scoreRound session
 
     match scored.Round with
     | Scored(scoredVerse, _) -> Assert.Equal(verse, scoredVerse)
@@ -206,7 +243,7 @@ let ``advanceRound increments RoundIndex and resets GuessesThisRound`` () =
     let session =
         startSession playerA playerB 5 Unlimited verse
         |> GameSession.submitGuess playerA (makeGuess playerA "John" (Some 3) (Some 16))
-        |> GameSession.scoreRound (startedAt.AddSeconds 1.0)
+        |> GameSession.scoreRound
 
     let advanced = GameSession.advanceRound (makeVerse "Genesis" 1 1) (startedAt.AddSeconds 2.0) session
 
@@ -217,7 +254,7 @@ let ``advanceRound increments RoundIndex and resets GuessesThisRound`` () =
 let ``advanceRound moves Round to InProgress with the new verse`` () =
     let playerA = makePlayerId ()
     let playerB = makePlayerId ()
-    let session = startSession playerA playerB 5 Unlimited (makeVerse "John" 3 16) |> GameSession.scoreRound (startedAt.AddSeconds 1.0)
+    let session = startSession playerA playerB 5 Unlimited (makeVerse "John" 3 16) |> GameSession.scoreRound
     let nextVerse = makeVerse "Genesis" 1 1
 
     let advanced = GameSession.advanceRound nextVerse (startedAt.AddSeconds 2.0) session
@@ -265,7 +302,7 @@ let ``isRoundExpired is false when the round is already Scored`` () =
 
     let session =
         GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 (LimitedTo(TimeSpan.FromSeconds 30.0)) (makeVerse "John" 3 16) startedAt
-        |> GameSession.scoreRound (startedAt.AddSeconds 30.0)
+        |> GameSession.scoreRound
 
     Assert.False(GameSession.isRoundExpired (startedAt.AddSeconds 60.0) session)
 

@@ -2,9 +2,11 @@
 
 A Bible-verse guessing game: you're shown a verse and guess its book,
 chapter, and verse number. Points are awarded per level, each gated on the
-level before it also being correct — book alone is worth 10, +100 more for
-also getting the chapter right, +1000 more for also getting the verse
-number right.
+level before it also being correct — by the standard rule the book is worth
+10, +100 more for the chapter, +1000 more for the verse number. Each game
+type has its own rule (what's given at setup earns nothing), the same in
+singleplayer and multiplayer — see `docs/web/scoring` and
+`scoring-scenarios/`.
 
 ## Project structure
 

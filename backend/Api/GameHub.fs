@@ -295,7 +295,7 @@ let private resolveRound (group: IClientProxy) (verses: Verse list) (rooms: Room
                     | Scored _
                     | WaitingForPlayers -> room // already resolved by a winning racer — leave as-is
                     | InProgress _ ->
-                        let scored = GameSession.scoreRound DateTimeOffset.UtcNow session
+                        let scored = GameSession.scoreRound session
 
                         let endCompleted () =
                             resolution <- GameCompleted scored
@@ -633,7 +633,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
     /// CALLER'S OWN VerseSource's Bible order (see
     /// frontend/src/shared-kernel/book-numbers.ts) — None if their own source couldn't
     /// resolve one for what they typed, in which case scoring falls back
-    /// to name matching (see Scoring.isCorrectGuess). Errors (caller-only,
+    /// to name matching (see Scoring.correctParts). Errors (caller-only,
     /// no broadcast) if the caller isn't in a room, isn't in an active
     /// game, or the game's current round isn't InProgress (e.g. a late
     /// resubmit racing the round already resolving). On success: records

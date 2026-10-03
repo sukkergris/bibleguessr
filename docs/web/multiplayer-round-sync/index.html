@@ -74,9 +74,11 @@ type GameOverReason =
     | Forfeited of remainingPlayer: PlayerId option</code></pre>
       <p>
         <code>TimeLimit</code> is a named DU rather than a bare <code>TimeSpan option</code> so "no limit" is a case
-        every consumer (scoring, the timeout sweep) has to handle explicitly, instead of an ambiguous
+        every consumer (the timeout sweep) has to handle explicitly, instead of an ambiguous
         <code>None</code> that could be misread as "not set yet." The time-per-verse slider in
-        <code>&lt;bg-challenge-settings&gt;</code> runs 0–60 seconds, where 0 means <code>Unlimited</code>.
+        <code>&lt;bg-challenge-settings&gt;</code> runs 0–60 seconds, where 0 means <code>Unlimited</code>. The time
+        limit only ends a round; it doesn't change what a guess is worth — a guess scores exactly as in
+        singleplayer, by the game type's own rule (see <a href="../scoring/index.html">Scoring</a>).
       </p>
       <p>
         A <code>GameSession</code> lives at <code>Room.ActiveGame: GameSession option</code> — at most one per room
@@ -95,7 +97,7 @@ type GameOverReason =
       <p>
         The <code>GameSession</code> module (<code>start</code>, <code>submitGuess</code>, <code>bothGuessed</code>,
         <code>scoreRound</code>, <code>advanceRound</code>, <code>isOver</code>, <code>isRoundExpired</code>) is
-        pure — every timestamp it needs (<code>startedAt</code>, <code>scoredAt</code>, <code>now</code>) is passed
+        pure — every timestamp it needs (<code>startedAt</code>, <code>now</code>) is passed
         in rather than read from <code>DateTimeOffset.UtcNow</code> internally, which is what makes all of it
         unit-testable without any SignalR or background-service plumbing (see
         <span class="file-ref">backend/Tests/GameSessionTests.fs</span>).
@@ -194,7 +196,7 @@ type RoundState =
         </li>
       </ul>
       <p>
-        <code>Scoring.isCorrectGuess</code> (backend) matches a guess to the round's verse by
+        <code>Scoring.correctParts</code> (backend) matches a guess's book to the round's verse by
         <code>BookNumber</code> whenever the guess has one, falling back to name matching only if the guessing
         player's own source couldn't resolve a number for what they typed at all (e.g. free-text entry the source
         doesn't recognize). See <span class="file-ref">backend/Tests/MultiplayerScoringByNumberTests.fs</span> and

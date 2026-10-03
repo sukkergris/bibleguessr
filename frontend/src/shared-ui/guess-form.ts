@@ -140,6 +140,7 @@ export class GuessForm extends LitElement {
       this._lockToBook(this.constraint.book, this.constraint.chapters)
     } else {
       this._loadBooks()
+      this._selectLoneBook()
     }
   }
 
@@ -148,6 +149,9 @@ export class GuessForm extends LitElement {
       this._lockToBook(this.constraint.book, this.constraint.chapters)
     } else if (changedProperties.has('translation') || changedProperties.has('verseSource')) {
       this._loadBooks()
+      this._selectLoneBook()
+    } else if (changedProperties.has('constraint')) {
+      this._selectLoneBook()
     }
 
     // A new question is ready as soon as the form goes from disabled (still
@@ -163,8 +167,12 @@ export class GuessForm extends LitElement {
     }
     if (this.focusPending) {
       const target =
-        this.constraint.kind === 'fixed-book' ? this.chapterSlider : (this.checkedBookTile ?? this.firstBookTile)
-      if (target) {
+        this.constraint.kind === 'fixed-book' || this._loneBook() !== undefined
+          ? this.chapterSlider
+          : (this.checkedBookTile ?? this.firstBookTile)
+      // A slider still waiting for its options is disabled and can't take
+      // focus yet; the update that brings them retries.
+      if (target && !target.disabled) {
         this.focusPending = false
         target.focus()
       }
@@ -180,6 +188,23 @@ export class GuessForm extends LitElement {
     if (this.book === book) return
     this._selectBook(book)
     if (chapters.length === 1) this._selectChapter(chapters[0])
+  }
+
+  // The book a Books game gives when only one was picked (the game type
+  // decides — see GuessConstraint): just like a Chapters game's fixed
+  // book, it's selected from the start and the chapter can be picked
+  // straight away.
+  private _loneBook(): string | undefined {
+    return this.constraint.kind === 'one-of-books' ? this.constraint.givenBook : undefined
+  }
+
+  // Also called when the source arrives, since the chapter list can only
+  // load once there's a source to load it from.
+  private _selectLoneBook() {
+    const book = this._loneBook()
+    if (book === undefined) return
+    if (this.book !== book) this._selectBook(book)
+    else if (this.chapters.length === 0) this._loadChapters(book)
   }
 
   private _loadBooks() {

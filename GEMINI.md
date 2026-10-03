@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**BibleGuessr** is an open-source Bible-verse guessing game. Players are presented with a Bible verse and guess its book, chapter, and verse number. Scoring is tiered (Book: 10 pts, Book+Chapter: +100 pts, Book+Chapter+Verse: +1000 pts).
+**BibleGuessr** is an open-source Bible-verse guessing game. Players are presented with a Bible verse and guess its book, chapter, and verse number. Scoring is tiered (standard rule: Book: 10 pts, Book+Chapter: +100 pts, Book+Chapter+Verse: +1000 pts); each game type has its own rule (what's given at setup earns nothing), the same in singleplayer and multiplayer — see `docs/web/scoring` and `scoring-scenarios/`.
 
 - **Domain:** `bibleguessr.uk`
 - **Future Roadmap:** Planned migration to Kubernetes (`k8s` / `k3s`) later this year.

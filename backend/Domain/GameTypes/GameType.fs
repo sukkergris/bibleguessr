@@ -1,7 +1,5 @@
 namespace BibleGuessr.Domain
 
-open System
-
 /// Which verses a challenged game will draw from — chosen by the challenger
 /// before sending the request (see docs/SCRUM/Feature.RequestToStartMPGame.md),
 /// so the challenged player can see what they're being invited to.
@@ -31,20 +29,33 @@ type GameType =
     | Chapters of GameTypes.Chapters.Selection
 
 module GameType =
+    /// The game a game type actually plays as: one that selects nothing (no
+    /// books, or no book in Chapters) plays as The Bible — the verses it
+    /// draws AND the points it gives. A rule that spans game types, so it
+    /// lives here, the only place that knows them all; the frontend's
+    /// registry applies the same rule (see docs/web/game-types). Such a
+    /// value can still arrive, e.g. from a client whose own Bible couldn't
+    /// resolve the picked book (see chapters.ts's toWire).
+    let playedAs (gameType: GameType) : GameType =
+        match gameType with
+        | Books [] -> AllVerses
+        | Chapters selection when Map.isEmpty selection -> AllVerses
+        | _ -> gameType
+
     /// Converts a GameType into Verse.matchesRestrictionByNumber's (books,
     /// chaptersByBook) shape, by asking the game type's own module. Needed
     /// because the server (not the client) picks the verse for a
     /// multiplayer round — see GameHub.fs's AcceptPlayRequest/resolveRound.
     let restrictionOf (gameType: GameType) : Set<int> * Map<int, Set<int>> =
-        match gameType with
+        match playedAs gameType with
         | AllVerses -> GameTypes.TheBible.restriction
         | Books selection -> GameTypes.Books.restriction selection
         | Chapters selection -> GameTypes.Chapters.restriction selection
 
-    /// Scores one multiplayer guess by the game type's own rule — see each
-    /// module's scoreGuess. `elapsed` is the time since the round started.
-    let scoreGuess (gameType: GameType) (timeLimit: TimeLimit) (elapsed: TimeSpan) (verse: VerseReference) (guess: Guess) : GuessScore =
-        match gameType with
-        | AllVerses -> GameTypes.TheBible.scoreGuess timeLimit elapsed verse guess
-        | Books _ -> GameTypes.Books.scoreGuess timeLimit elapsed verse guess
-        | Chapters selection -> GameTypes.Chapters.scoreGuess selection timeLimit elapsed verse guess
+    /// The points one multiplayer guess earns, by the rule of the game the
+    /// game type plays as (see playedAs and each module's scoreGuess).
+    let scoreGuess (gameType: GameType) (verse: VerseReference) (guess: Guess) : int =
+        match playedAs gameType with
+        | AllVerses -> GameTypes.TheBible.scoreGuess verse guess
+        | Books selection -> GameTypes.Books.scoreGuess selection verse guess
+        | Chapters selection -> GameTypes.Chapters.scoreGuess selection verse guess

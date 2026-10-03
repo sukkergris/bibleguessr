@@ -120,6 +120,14 @@ export function scoreGuessOf(choice: GameTypeChoice, verse: Verse, guess: Guess)
   return withDefinition(playable, (definition, selection) => definition.scoreGuess(selection!, verse, guess))
 }
 
+/** The most one verse can earn in a singleplayer game with this choice —
+ * by the choice's own game type; what the results screen counts the score
+ * out of. Nothing picked plays as FALLBACK. */
+export function maxPointsOf(choice: GameTypeChoice): number {
+  const playable: GameTypeChoice = isReady(choice) ? choice : FALLBACK
+  return withDefinition(playable, (definition, selection) => definition.maxPoints(selection!))
+}
+
 /** Which parts of each verse a shared result of this choice shows — by
  * the choice's own game type. Nothing picked plays as FALLBACK. */
 export function sharedColumnsOf(choice: GameTypeChoice): readonly ResultColumn[] {
@@ -138,6 +146,14 @@ export async function toWire(
   const booksInBibleOrder = await verseSource.getBooksInBibleOrder(translation)
   const playable: GameTypeChoice = isReady(choice) ? choice : FALLBACK
   return withDefinition(playable, (definition, selection) => definition.toWire(selection!, booksInBibleOrder))
+}
+
+/** Whether a wire value selects nothing — per the contract, its own
+ * definition then has no description for it (see
+ * GameTypeDefinition.describeWire). Decided without the viewer's book
+ * names, so it doesn't depend on which Bible is looking. */
+function selectsNothing<K extends GameTypeId>(definition: DefinitionFor<K>, wire: WireById[K]): boolean {
+  return definition.describeWire(wire, []) === undefined
 }
 
 /** Dispatches on the wire case — the inverse of each definition's
@@ -172,12 +188,18 @@ export async function describeWire(
 }
 
 /** What the guess form offers in a multiplayer game of this type, in the
- * viewer's own spelling. */
+ * viewer's own spelling. One that selects nothing plays as The Bible —
+ * the same rule as describeWire, and as the server's verses and points
+ * (see backend/Domain/GameTypes/GameType.fs's playedAs). */
 export async function guessConstraintForWire(
   wire: GameType,
   verseSource: VerseSource,
   translation: string | undefined,
 ): Promise<GuessConstraint> {
   const booksInBibleOrder = await verseSource.getBooksInBibleOrder(translation)
-  return definitionForWire(wire, (definition, ownWire) => definition.guessConstraintForWire(ownWire, booksInBibleOrder))
+  return definitionForWire(wire, (definition, ownWire) =>
+    selectsNothing(definition, ownWire)
+      ? theBible.guessConstraintForWire({ Case: 'AllVerses' }, booksInBibleOrder)
+      : definition.guessConstraintForWire(ownWire, booksInBibleOrder),
+  )
 }

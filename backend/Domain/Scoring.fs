@@ -1,9 +1,10 @@
 namespace BibleGuessr.Domain
 
-// The shared kernel's scoring vocabulary and standard rules. Compiled
-// before GameTypes/ so every game type can build its own rules from these
+// The shared kernel's scoring vocabulary and building blocks. Compiled
+// before GameTypes/ so every game type can build its own rule from these
 // — see GameType.scoreGuess. Nothing here may know about a particular
-// game type.
+// game type. Mirrors frontend/src/shared-kernel/scoring.ts: multiplayer
+// scores a guess exactly like singleplayer does (see docs/web/scoring).
 
 open System
 
@@ -16,12 +17,12 @@ type PlayerId = PlayerId of Guid
 /// BookNumber is the guessed book's 1-based position in the GUESSING
 /// PLAYER'S OWN VerseSource's Bible order (see
 /// frontend/src/shared-kernel/book-numbers.ts) — set alongside `Book` (which stays for
-/// display/singleplayer purposes) so multiplayer scoring can match by
-/// number rather than name (see Scoring.isCorrectGuess and
-/// VerseReference's doc comment on why name matching isn't reliable
-/// across two players' different translations/files). None if the
-/// player's own source couldn't resolve a number for what they typed
-/// (falls back to name matching — see isCorrectGuess).
+/// display purposes) so scoring can match by number rather than name (see
+/// Scoring.correctParts and VerseReference's doc comment on why name
+/// matching isn't reliable across two players' different
+/// translations/files). None if the player's own source couldn't resolve
+/// a number for what they typed (falls back to name matching — see
+/// correctParts).
 type Guess =
     { PlayerId: PlayerId
       Book: string
@@ -30,100 +31,62 @@ type Guess =
       VerseNumber: int option
       SubmittedAt: DateTimeOffset }
 
-/// A round's time limit, chosen by the challenger via a slider from
-/// "infinite" to 1 minute (see docs/SCRUM/Feature.Time.md). An explicit DU
-/// rather than TimeSpan option so "no limit" is a named case every
-/// consumer (Scoring, the round-timeout sweep) must handle explicitly,
-/// rather than an ambiguous None that could be misread as "not set yet".
-type TimeLimit =
-    | Unlimited
-    | LimitedTo of TimeSpan
+/// What each part of a guess earns when it is right. A game type builds
+/// its own rule by choosing its tiers — e.g. 0 for a part that is given
+/// at setup. Field names differ from Guess's so F# never mistakes one
+/// record for the other.
+type ScoringTiers =
+    { BookPoints: int
+      ChapterPoints: int
+      VerseNumberPoints: int }
 
-/// How one guess scored under a game type's rule.
-type GuessScore = { Correct: bool; Points: int }
+/// Which parts of a guess count as right — see Scoring.correctParts.
+type CorrectParts =
+    { BookRight: bool
+      ChapterRight: bool
+      VerseNumberRight: bool }
 
 module Scoring =
 
-    /// Points for a correct guess in a round without a time limit — there's
-    /// no "time remaining" fraction to decay against.
-    let unlimitedCorrectPoints = 100
+    /// The standard tiers: the book 10, the chapter 100 more, the verse
+    /// number 1000 more — 1110 for everything.
+    let standardTiers =
+        { BookPoints = 10
+          ChapterPoints = 100
+          VerseNumberPoints = 1000 }
 
-    /// Points for a correct guess, decreasing the longer a player takes to answer.
-    /// `elapsed` is time since the round started; `roundLength` is the total time allowed.
-    let pointsForGuess (roundLength: TimeSpan) (elapsed: TimeSpan) (correct: bool) =
-        if not correct then
-            0
-        else
-            let remainingFraction =
-                1.0 - (elapsed.TotalSeconds / roundLength.TotalSeconds) |> max 0.0
+    let private sameName (a: string) (b: string) =
+        String.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase)
 
-            let basePoints = 100
-            let bonus = int (float basePoints * remainingFraction)
-            basePoints + bonus
-
-    /// Used to score multiplayer rounds (see GameSession.scoreRound) —
-    /// matches the book by NUMBER, not name, whenever the guess has one:
-    /// `guess`/`verse` may come from two different players' own
-    /// translations/uploaded files, which can spell the same book
-    /// differently (see VerseReference's doc comment). Falls back to name
-    /// matching only if the guess has no BookNumber at all (the guessing
-    /// player's own source couldn't resolve one for what they typed).
-    let isCorrectGuess (verse: VerseReference) (guess: Guess) =
-        let bookMatches =
+    /// Which parts of `guess` are right. Each part only counts when every
+    /// part before it is right too — the right numbers in the wrong book
+    /// count for nothing — and a part that wasn't guessed isn't right.
+    ///
+    /// The book matches by NUMBER whenever the guess has one: `guess` and
+    /// `verse` may come from two different players' own translations or
+    /// uploaded files, which can spell the same book differently (see
+    /// VerseReference's doc comment). Names are compared (ignoring case and
+    /// surrounding whitespace) only when the guessing player's own source
+    /// couldn't resolve a number at all.
+    let correctParts (verse: VerseReference) (guess: Guess) : CorrectParts =
+        let bookRight =
             match guess.BookNumber with
             | Some bookNumber -> bookNumber = verse.BookNumber
-            | None -> String.Equals(guess.Book, verse.Book, StringComparison.OrdinalIgnoreCase)
+            | None -> sameName guess.Book verse.Book
 
-        match guess.Chapter with
-        | Some chapter -> bookMatches && chapter = verse.Chapter
-        | None -> bookMatches
+        let chapterRight = bookRight && guess.Chapter = Some verse.Chapter
+        let verseNumberRight = chapterRight && guess.VerseNumber = Some verse.VerseNumber
 
-    /// Points awarded per level of a guess, each gated on every level before
-    /// it being correct: the book alone is worth 10; the chapter only
-    /// counts (100 more) if the book was also right; the verse number only
-    /// counts (1000 more) if both book and chapter were right. An omitted
-    /// Chapter/VerseNumber guess simply can't earn that level's points.
-    let private bookPoints = 10
-    let private chapterPoints = 100
-    let private verseNumberPoints = 1000
+        { BookRight = bookRight
+          ChapterRight = chapterRight
+          VerseNumberRight = verseNumberRight }
 
-    let pointsForVerseGuess (verse: VerseReference) (guess: Guess) =
-        let bookCorrect =
-            String.Equals(guess.Book, verse.Book, StringComparison.OrdinalIgnoreCase)
+    /// The points `guess` earns against `verse` with `tiers`: the tier of
+    /// every part that is right (see correctParts).
+    let tieredPoints (tiers: ScoringTiers) (verse: VerseReference) (guess: Guess) : int =
+        let parts = correctParts verse guess
+        let pointsIf right points = if right then points else 0
 
-        if not bookCorrect then
-            0
-        else
-            let chapterCorrect =
-                match guess.Chapter with
-                | Some chapter -> chapter = verse.Chapter
-                | None -> false
-
-            if not chapterCorrect then
-                bookPoints
-            else
-                let verseNumberCorrect =
-                    match guess.VerseNumber with
-                    | Some verseNumber -> verseNumber = verse.VerseNumber
-                    | None -> false
-
-                if verseNumberCorrect then
-                    bookPoints + chapterPoints + verseNumberPoints
-                else
-                    bookPoints + chapterPoints
-
-    /// The standard multiplayer rule: a guess is correct when its book
-    /// (and chapter, if guessed) match — see isCorrectGuess — and earns
-    /// pointsForGuess's decaying points in a timed round, or
-    /// unlimitedCorrectPoints in an untimed one. A game type uses this
-    /// unless it defines its own rule (see GameTypes/ and
-    /// GameType.scoreGuess).
-    let standardMultiplayer (timeLimit: TimeLimit) (elapsed: TimeSpan) (verse: VerseReference) (guess: Guess) : GuessScore =
-        let correct = isCorrectGuess verse guess
-
-        let points =
-            match timeLimit with
-            | Unlimited -> if correct then unlimitedCorrectPoints else 0
-            | LimitedTo roundLength -> pointsForGuess roundLength elapsed correct
-
-        { Correct = correct; Points = points }
+        pointsIf parts.BookRight tiers.BookPoints
+        + pointsIf parts.ChapterRight tiers.ChapterPoints
+        + pointsIf parts.VerseNumberRight tiers.VerseNumberPoints

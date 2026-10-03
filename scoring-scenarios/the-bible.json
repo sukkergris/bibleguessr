@@ -1,0 +1,109 @@
+{
+  "gameType": "the-bible",
+  "about": "How a guess scores in this game type, for both modes. Each part of a guess (book, chapter, verse number) only counts when every part before it is right too, and what is given at setup earns nothing. 'singleplayer' is the selection as the player's own setup holds it (null: nothing picked); 'wire' is the same game as sent to the server. frontend/src/game-types/scoring-scenarios.test.ts checks the singleplayer points and maxPoints; backend/Tests/GameTypeScoringTests.fs checks the multiplayer points. See docs/web/scoring.",
+  "booksInBibleOrder": [
+    "Genesis",
+    "Exodus",
+    "Leviticus",
+    "Numbers",
+    "Deuteronomy",
+    "Joshua",
+    "Judges",
+    "Ruth",
+    "1 Samuel"
+  ],
+  "verse": {
+    "book": "Ruth",
+    "bookNumber": 8,
+    "chapter": 1,
+    "verseNumber": 16
+  },
+  "selections": {
+    "the whole Bible": {
+      "singleplayer": {
+        "kind": "whole-bible"
+      },
+      "wire": {
+        "Case": "AllVerses"
+      },
+      "maxPoints": 1110
+    }
+  },
+  "cases": [
+    {
+      "selection": "the whole Bible",
+      "guess": {
+        "book": "Exodus",
+        "chapter": 1,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "the right numbers in the wrong book count for nothing"
+    },
+    {
+      "selection": "the whole Bible",
+      "guess": {
+        "book": "Ruth"
+      },
+      "points": {
+        "singleplayer": 10,
+        "multiplayer": 10
+      },
+      "why": "the book"
+    },
+    {
+      "selection": "the whole Bible",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 2,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 10,
+        "multiplayer": 10
+      },
+      "why": "the book; the wrong chapter stops the rest"
+    },
+    {
+      "selection": "the whole Bible",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1
+      },
+      "points": {
+        "singleplayer": 110,
+        "multiplayer": 110
+      },
+      "why": "the book and the chapter"
+    },
+    {
+      "selection": "the whole Bible",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 15
+      },
+      "points": {
+        "singleplayer": 110,
+        "multiplayer": 110
+      },
+      "why": "the book and the chapter; the wrong verse"
+    },
+    {
+      "selection": "the whole Bible",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 1110,
+        "multiplayer": 1110
+      },
+      "why": "everything"
+    }
+  ]
+}

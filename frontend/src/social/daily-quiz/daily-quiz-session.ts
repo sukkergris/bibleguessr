@@ -1,5 +1,5 @@
 import type { Guess, Verse, VerseReference } from '../../shared-kernel/bible'
-import { standardSingleplayerPoints } from '../../shared-kernel/scoring'
+import { STANDARD_TIERS, tieredPoints } from '../../shared-kernel/scoring'
 import type { DailyQuiz } from './daily-quiz-client'
 
 /** One finished verse of the quiz: answered, or skipped because the
@@ -79,7 +79,7 @@ export function verseUnavailable(session: DailyQuizSession, roundIndex: number):
 export function guessed(session: DailyQuizSession, guess: Guess): DailyQuizSession {
   if (session.kind !== 'playing' || session.current.kind !== 'shown' || session.feedback) return session
   const { verse } = session.current
-  const points = standardSingleplayerPoints(verse, guess)
+  const points = tieredPoints(verse, guess, STANDARD_TIERS)
   return { ...session, feedback: { kind: 'answered', verse, guess, points } }
 }
 

@@ -53,6 +53,13 @@
         change, so a keyboard change persists exactly like a pointer one.
       </p>
       <p>
+        In a multiplayer room, <span class="file-ref">frontend/src/components/bg-room-setup.ts</span> owns the
+        challenge settings — game type, round count, time limit — starting from the remembered values, and hands
+        them down to <code>&lt;bg-challenge-settings&gt;</code> and <code>&lt;bg-game-type-select&gt;</code>. Those
+        are created anew whenever the room screen comes back (after a game, say), so they show what the room holds:
+        what the panel shows is always what a challenge or <em>Play someone random</em> sends.
+      </p>
+      <p>
         Validation is unit tested in <span class="file-ref">frontend/src/game-preferences.test.ts</span>; the round
         trip through the real controls, the clamped one-second case, and recovery from corrupt storage are covered by
         <span class="file-ref">frontend/e2e/game-preferences.spec.ts</span>.

@@ -26,7 +26,7 @@ Single-test runs (use these instead of the full suite while iterating):
 
 ```sh
 cd backend && dotnet test --filter "FullyQualifiedName~ScoringTests"
-cd frontend && npx vitest run src/scoring.test.ts -t "test name"
+cd frontend && npx vitest run src/shared-kernel/scoring.test.ts -t "test name"
 cd frontend && npx playwright test e2e/game-preferences.spec.ts -g "test name"
 ```
 
@@ -82,8 +82,13 @@ section) — don't trust a test you haven't watched fail.
   within one loader's output), so multiplayer scoring and game-type
   restrictions match on `bookNumber` (each player's own 1-based position
   in their own `VerseSource`'s Bible order), never on the display name.
-  Singleplayer scoring (`Scoring.pointsForVerseGuess`) still matches by
-  name — see `ScoringTests.fs` vs. `MultiplayerScoringByNumberTests.fs`.
+  Singleplayer scoring (each game type's `scoreGuess` in
+  `frontend/src/game-types/`) matches by name, since verse and guess come
+  from the same Bible — see `MultiplayerScoringByNumberTests.fs`.
+- **Each game type owns its scoring**, and multiplayer scores a guess
+  exactly like singleplayer: per game type, the frontend definition's
+  `scoreGuess` and the backend module's `scoreGuess`, both held to
+  `scoring-scenarios/<game type>.json` — see `docs/web/scoring`.
 - A `GameId` (not the player pair) identifies a game instance — two
   players can immediately start a new game after finishing one, and stale
   messages from the old game must be ignored by id (see

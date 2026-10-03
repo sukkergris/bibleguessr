@@ -48,3 +48,18 @@ let gameTypesDirectory =
         | d -> search d.Parent
 
     search (DirectoryInfo(System.AppContext.BaseDirectory))
+
+let private scoringScenariosRelativePath = "scoring-scenarios"
+
+/// The folder holding one scoring scenario file per game type, shared with
+/// the frontend's tests — see GameTypeScoringTests.fs. Found the same way
+/// as bibelenDkArchive.
+let scoringScenariosDirectory =
+    let rec search (directory: DirectoryInfo) =
+        match directory with
+        | null -> failwith $"Could not find {scoringScenariosRelativePath} above {System.AppContext.BaseDirectory}"
+        | d when File.Exists(Path.Combine(d.FullName, scoringScenariosRelativePath, "the-bible.json")) ->
+            Path.Combine(d.FullName, scoringScenariosRelativePath)
+        | d -> search d.Parent
+
+    search (DirectoryInfo(System.AppContext.BaseDirectory))

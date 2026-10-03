@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { api } from '../api'
-import { freshChoice, toWire } from '../game-types/registry'
+import { toWire } from '../game-types/registry'
 import {
   acceptPlayRequest,
   denyPlayRequest,
@@ -40,7 +40,7 @@ import './challenge-settings'
 import './multiplayer-game'
 import './multiplayer-results'
 import '../bible-sources/translation-source-select'
-import type { ChallengeSettings } from './challenge-settings'
+import { defaultChallengeSettings, type ChallengeSettings } from './challenge-settings'
 import type { MultiplayerGameOverDetail } from './multiplayer-results'
 import type { TranslationChoice } from '../bible-sources/translation-source-select'
 import { buttonStyles } from '../shared-ui/button-styles'
@@ -156,12 +156,14 @@ export class RoomSetup extends LitElement {
   @state()
   private sentRequestToId?: string
 
-  /** The game type/round count/time limit I've currently got selected in
-   * <bg-challenge-settings> — used to build the play request I send when I
-   * click a player's name (see game-types/registry.ts's toWire).
-   * Defaults match the selector's own defaults. */
+  /** The game type/round count/time limit I've currently got selected —
+   * used to build the play request I send when I click a player's name, or
+   * the matchmaking entry (see game-types/registry.ts's toWire). Owned
+   * here and handed down to <bg-challenge-settings>, which is created anew
+   * every time the room screen comes back: it shows these, so what it shows
+   * is always what gets sent. */
   @state()
-  private challengeSettings: ChallengeSettings = { choice: freshChoice('the-bible'), roundCount: 5 }
+  private challengeSettings: ChallengeSettings = defaultChallengeSettings()
 
   /** Set once a play request involving me is accepted — the game screen
    * (<bg-multiplayer-game>) replaces the game-type-select/chat/play-requests
@@ -357,6 +359,7 @@ export class RoomSetup extends LitElement {
               ></bg-multiplayer-game>`
             : html`
                 <bg-challenge-settings
+                  .settings=${this.challengeSettings}
                   .verseSource=${this.myTranslationChoice?.verseSource}
                   .translation=${this.myTranslationChoice?.translation}
                   @challenge-settings-changed=${this._onChallengeSettingsChanged}
@@ -770,7 +773,7 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = ''
     this.playRequests = []
     this.sentRequestToId = undefined
-    this.challengeSettings = { choice: freshChoice('the-bible'), roundCount: 5 }
+    this.challengeSettings = defaultChallengeSettings()
     this.activeGameOpponent = undefined
     this.initialSession = undefined
     this.mpResults = undefined

@@ -26,6 +26,7 @@ export type RoundState =
 
 export interface GuessResult {
   playerId: string
+  /** The guess earned points — see backend/Domain/Game.fs's GuessResult. */
   correct: boolean
   pointsAwarded: number
 }

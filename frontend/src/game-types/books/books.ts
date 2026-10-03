@@ -5,8 +5,8 @@
 import { html } from 'lit'
 import { bookAtNumber, bookNumberOf } from '../../shared-kernel/book-numbers'
 import type { GameType } from '../../shared-kernel/game-type-wire'
-import { ALL_COLUMNS } from '../../shared-kernel/result-sharing'
-import { standardSingleplayerPoints } from '../../shared-kernel/scoring'
+import { ALL_COLUMNS, type ResultColumn } from '../../shared-kernel/result-sharing'
+import { STANDARD_TIERS, maxTieredPoints, tieredPoints, type ScoringTiers } from '../../shared-kernel/scoring'
 import type { GameTypeDefinition } from '../game-type-definition'
 import './book-selector'
 
@@ -19,6 +19,20 @@ export interface BooksSelection {
 }
 
 const NAME = 'Books'
+
+/** Whether only one book was picked — then the guess form offers nothing
+ * else, so the book is a given. */
+const bookIsGiven = (selection: BooksSelection) => new Set(selection.books).size === 1
+
+/** What's given at setup is no achievement, so it earns nothing: with one
+ * book picked, the book. Otherwise the standard tiers. */
+const LONE_BOOK_TIERS: Readonly<ScoringTiers> = { ...STANDARD_TIERS, book: 0 }
+
+const tiersFor = (selection: BooksSelection) => (bookIsGiven(selection) ? LONE_BOOK_TIERS : STANDARD_TIERS)
+
+/** The same given book left out of a shared result, where it'd always
+ * show ✅. */
+const LONE_BOOK_COLUMNS: readonly ResultColumn[] = ['chapter', 'verseNumber']
 
 export const books: GameTypeDefinition<BooksSelection, BooksWire> = {
   name: NAME,
@@ -35,11 +49,16 @@ export const books: GameTypeDefinition<BooksSelection, BooksWire> = {
   `,
 
   verseRestriction: (selection) => ({ books: selection.books, chaptersByBook: {} }),
-  guessConstraint: (selection) => ({ kind: 'one-of-books', books: selection.books }),
-  // The standard rule today; replace it here to give this game type its
-  // own scoring — no other game type is affected.
-  scoreGuess: (_selection, verse, guess) => standardSingleplayerPoints(verse, guess),
-  sharedColumns: () => ALL_COLUMNS,
+  guessConstraint: (selection) => ({
+    kind: 'one-of-books',
+    books: selection.books,
+    givenBook: bookIsGiven(selection) ? selection.books[0] : undefined,
+  }),
+  // This game type's own rule — see LONE_BOOK_TIERS. The multiplayer
+  // equivalent is backend/Domain/GameTypes/Books.fs's scoreGuess.
+  scoreGuess: (selection, verse, guess) => tieredPoints(verse, guess, tiersFor(selection)),
+  maxPoints: (selection) => maxTieredPoints(tiersFor(selection)),
+  sharedColumns: (selection) => (bookIsGiven(selection) ? LONE_BOOK_COLUMNS : ALL_COLUMNS),
 
   // A name the sender's own source can't resolve (shouldn't happen — the
   // selector only offers names that source returned) is dropped rather
@@ -65,10 +84,13 @@ export const books: GameTypeDefinition<BooksSelection, BooksWire> = {
 
   // Here an unresolvable number is dropped instead: there's no sane tile
   // to offer for a book the viewer's own source doesn't have.
-  guessConstraintForWire: ({ Fields: [bookNumbers] }, booksInBibleOrder) => ({
-    kind: 'one-of-books',
-    books: bookNumbers
+  // The book is given when the WIRE names one book — the same fact the
+  // server scores by — whatever the viewer's own Bible could resolve.
+  guessConstraintForWire: ({ Fields: [bookNumbers] }, booksInBibleOrder) => {
+    const books = bookNumbers
       .map((number) => bookAtNumber(booksInBibleOrder, number))
-      .filter((book): book is string => book !== undefined),
-  }),
+      .filter((book): book is string => book !== undefined)
+    const givenBook = new Set(bookNumbers).size === 1 ? books[0] : undefined
+    return { kind: 'one-of-books', books, givenBook }
+  },
 }

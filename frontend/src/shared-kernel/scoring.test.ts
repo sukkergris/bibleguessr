@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Guess, Verse } from './bible'
-import { correctParts, standardSingleplayerPoints as scoreGuess } from './scoring'
+import { STANDARD_TIERS, correctParts, maxTieredPoints, tieredPoints } from './scoring'
 
 const verse: Verse = {
   book: 'John',
@@ -10,6 +10,11 @@ const verse: Verse = {
   translation: 'Test Translation',
   reference: 'John 3:16',
 }
+
+// The building blocks with the standard tiers — what The Bible scores
+// with. Each game type's own rule is in scoring-scenarios/ at the repo
+// root (see ../game-types/scoring-scenarios.test.ts).
+const scoreGuess = (verse: Verse, guess: Guess) => tieredPoints(verse, guess, STANDARD_TIERS)
 
 function makeGuess(book: string, chapter?: number, verseNumber?: number): Guess {
   return { book, chapter, verseNumber }
@@ -65,3 +70,11 @@ describe('correctParts', () => {
   })
 })
 
+
+describe('maxTieredPoints', () => {
+  it('is every tier together — what a perfect guess earns', () => {
+    expect(maxTieredPoints(STANDARD_TIERS)).toBe(1110)
+    expect(maxTieredPoints({ ...STANDARD_TIERS, book: 0 })).toBe(1100)
+    expect(scoreGuess(verse, makeGuess('John', 3, 16))).toBe(maxTieredPoints(STANDARD_TIERS))
+  })
+})

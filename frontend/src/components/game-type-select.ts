@@ -1,5 +1,5 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, property, state } from 'lit/decorators.js'
+import { customElement, property } from 'lit/decorators.js'
 import { GAME_TYPE_IDS, freshChoice, nameOf, renderSelector, type GameTypeChoice, type GameTypeId } from '../game-types/registry'
 import type { VerseSource } from '../types'
 
@@ -24,8 +24,11 @@ export class GameTypeSelect extends LitElement {
   @property({ attribute: false })
   translation?: string
 
-  @state()
-  private choice: GameTypeChoice = freshChoice('the-bible')
+  /** The choice to show — owned by whoever hosts this element (see
+   * challenge-settings.ts), so a newly created one shows the choice that
+   * will actually be sent. */
+  @property({ attribute: false })
+  choice: GameTypeChoice = freshChoice('the-bible')
 
   render() {
     return html`

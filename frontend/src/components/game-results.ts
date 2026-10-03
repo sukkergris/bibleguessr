@@ -1,11 +1,9 @@
-import { LitElement, css, html } from 'lit'
+import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import type { Guess, RoundResult } from '../types'
 import { ALL_COLUMNS, composeShareText, type ResultColumn } from '../shared-kernel/result-sharing'
 import { buttonStyles } from '../shared-ui/button-styles'
 import { SHARE_OUTCOME_MESSAGES, gameUrl, shareOrCopy } from '../shared-ui/share-or-copy'
-
-const MAX_POINTS_PER_ROUND = 1110 // book (10) + chapter (100) + verse (1000)
 
 /**
  * End-of-game summary: total score, a per-round breakdown, and a "Share
@@ -27,6 +25,12 @@ export class GameResults extends LitElement {
   @property({ attribute: false })
   columns: readonly ResultColumn[] = ALL_COLUMNS
 
+  /** The most one verse can earn in the game played — its game type
+   * decides (see GameTypeDefinition.maxPoints). Undefined leaves the "out
+   * of" off rather than guessing it. */
+  @property({ type: Number })
+  maxPointsPerVerse?: number
+
   /** When the game was finished (ISO 8601) — for the shared result. */
   @property({ type: String })
   finishedAt?: string
@@ -39,15 +43,17 @@ export class GameResults extends LitElement {
     return this.rounds.reduce((sum, r) => sum + r.points, 0)
   }
 
-  private get maxScore() {
-    return this.rounds.length * MAX_POINTS_PER_ROUND
+  private get maxScore(): number | undefined {
+    return this.maxPointsPerVerse === undefined ? undefined : this.rounds.length * this.maxPointsPerVerse
   }
 
   render() {
     return html`
       <div class="results">
         <h1>Game over!</h1>
-        <p class="total">${this.totalScore} <span class="max">/ ${this.maxScore}</span></p>
+        <p class="total">
+          ${this.totalScore}${this.maxScore === undefined ? nothing : html` <span class="max">/ ${this.maxScore}</span>`}
+        </p>
 
         <ol class="rounds">
           ${this.rounds.map(

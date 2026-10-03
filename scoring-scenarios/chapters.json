@@ -1,0 +1,256 @@
+{
+  "gameType": "chapters",
+  "about": "How a guess scores in this game type, for both modes. Each part of a guess (book, chapter, verse number) only counts when every part before it is right too, and what is given at setup earns nothing. 'singleplayer' is the selection as the player's own setup holds it (null: nothing picked); 'wire' is the same game as sent to the server. frontend/src/game-types/scoring-scenarios.test.ts checks the singleplayer points and maxPoints; backend/Tests/GameTypeScoringTests.fs checks the multiplayer points. See docs/web/scoring.",
+  "booksInBibleOrder": [
+    "Genesis",
+    "Exodus",
+    "Leviticus",
+    "Numbers",
+    "Deuteronomy",
+    "Joshua",
+    "Judges",
+    "Ruth",
+    "1 Samuel"
+  ],
+  "verse": {
+    "book": "Ruth",
+    "bookNumber": 8,
+    "chapter": 1,
+    "verseNumber": 16
+  },
+  "selections": {
+    "several chapters": {
+      "singleplayer": {
+        "book": "Ruth",
+        "chapters": [
+          1,
+          2
+        ]
+      },
+      "wire": {
+        "Case": "Chapters",
+        "Fields": [
+          {
+            "8": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "maxPoints": 1100
+    },
+    "one chapter": {
+      "singleplayer": {
+        "book": "Ruth",
+        "chapters": [
+          1
+        ]
+      },
+      "wire": {
+        "Case": "Chapters",
+        "Fields": [
+          {
+            "8": [
+              1
+            ]
+          }
+        ]
+      },
+      "maxPoints": 1000
+    },
+    "one chapter, listed twice": {
+      "singleplayer": {
+        "book": "Ruth",
+        "chapters": [
+          1,
+          1
+        ]
+      },
+      "wire": {
+        "Case": "Chapters",
+        "Fields": [
+          {
+            "8": [
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "maxPoints": 1000
+    },
+    "nothing picked": {
+      "singleplayer": null,
+      "wire": {
+        "Case": "Chapters",
+        "Fields": [
+          {}
+        ]
+      },
+      "maxPoints": 1110
+    }
+  },
+  "cases": [
+    {
+      "selection": "several chapters",
+      "guess": {
+        "book": "Ruth"
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "the book is given"
+    },
+    {
+      "selection": "several chapters",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 2,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "the other picked chapter"
+    },
+    {
+      "selection": "several chapters",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1
+      },
+      "points": {
+        "singleplayer": 100,
+        "multiplayer": 100
+      },
+      "why": "the chapter"
+    },
+    {
+      "selection": "several chapters",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 15
+      },
+      "points": {
+        "singleplayer": 100,
+        "multiplayer": 100
+      },
+      "why": "the chapter; the wrong verse"
+    },
+    {
+      "selection": "several chapters",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 1100,
+        "multiplayer": 1100
+      },
+      "why": "the chapter and the verse"
+    },
+    {
+      "selection": "one chapter",
+      "guess": {
+        "book": "Ruth"
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "the book is given"
+    },
+    {
+      "selection": "one chapter",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "the only picked chapter is given too"
+    },
+    {
+      "selection": "one chapter",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 15
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "the wrong verse"
+    },
+    {
+      "selection": "one chapter",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 1000,
+        "multiplayer": 1000
+      },
+      "why": "the verse"
+    },
+    {
+      "selection": "one chapter, listed twice",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1
+      },
+      "points": {
+        "singleplayer": 0,
+        "multiplayer": 0
+      },
+      "why": "one chapter is one chapter, however often it is listed"
+    },
+    {
+      "selection": "one chapter, listed twice",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 1000,
+        "multiplayer": 1000
+      },
+      "why": "the verse"
+    },
+    {
+      "selection": "nothing picked",
+      "guess": {
+        "book": "Ruth"
+      },
+      "points": {
+        "singleplayer": 10,
+        "multiplayer": 10
+      },
+      "why": "a game with nothing picked plays, and scores, as The Bible"
+    },
+    {
+      "selection": "nothing picked",
+      "guess": {
+        "book": "Ruth",
+        "chapter": 1,
+        "verseNumber": 16
+      },
+      "points": {
+        "singleplayer": 1110,
+        "multiplayer": 1110
+      },
+      "why": "a game with nothing picked plays, and scores, as The Bible"
+    }
+  ]
+}

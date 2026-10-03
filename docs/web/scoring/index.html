@@ -13,135 +13,116 @@
       <h1>Scoring</h1>
       <p class="subtitle">
         How many points a guess earns — book, chapter, and verse number each gated on the level before it also being
-        correct.
+        correct, by each game type's own rule, the same in singleplayer and multiplayer.
       </p>
 
       <div class="callout">
-        <span class="callout-title">Each game type owns its scoring</span>
+        <span class="callout-title">Each game type owns its scoring — the same in both modes</span>
         <p>
-          The rules on this page are the <em>standard</em> rules. Every game type (The Bible, Books, Chapters) chooses
-          its own scoring rule — singleplayer in its <code>scoreGuess</code> in
-          <span class="file-ref">frontend/src/game-types/&lt;type&gt;/</span>, multiplayer in its
-          <code>scoreGuess</code> in <span class="file-ref">backend/Domain/GameTypes/&lt;Type&gt;.fs</span>. The Bible
-          and Books use the standard rules below; Chapters has its own (next section). Giving one type its own rule
-          is a change in that type's file only; the other types are unaffected. See
+          Every game type (The Bible, Books, Chapters) has its own scoring rule, and multiplayer scores a guess
+          exactly like singleplayer does. The rule lives in the game type's own module on each side —
+          singleplayer in <code>scoreGuess</code> in <span class="file-ref">frontend/src/game-types/&lt;type&gt;/</span>,
+          multiplayer in <code>scoreGuess</code> in <span class="file-ref">backend/Domain/GameTypes/&lt;Type&gt;.fs</span>
+          — and both are held to one specification per game type:
+          <span class="file-ref">scoring-scenarios/&lt;game type&gt;.json</span>. See
           <a href="../game-types/index.html">Game types</a>.
         </p>
       </div>
 
-      <h2>Chapters: what's given earns nothing</h2>
+      <h2>The rule: tiers, gated, and what's given earns nothing</h2>
       <p>
-        In a Chapters game the book is fixed at setup, so getting it "right" is no achievement and earns nothing. The
-        same goes for the chapter when only one was picked: then it's just as given.
+        A guess has three parts — book, chapter, verse number — and each part only counts when every part before
+        it is right too: the right numbers in the wrong book count for nothing, and a part that wasn't guessed isn't
+        right. The standard tiers are book 10, chapter +100, verse number +1000. A game type chooses its own tiers,
+        and what is given at setup is no achievement, so it earns nothing.
       </p>
       <table>
         <thead>
-          <tr><th>Chapters game</th><th>Book</th><th>+ Chapter</th><th>+ Verse number</th><th>All correct</th></tr>
+          <tr><th>Game</th><th>Book</th><th>+ Chapter</th><th>+ Verse number</th><th>Most a verse can earn</th></tr>
         </thead>
         <tbody>
-          <tr><td>Several chapters picked</td><td>0</td><td>+100</td><td>+1000</td><td>1100</td></tr>
-          <tr><td>One chapter picked</td><td>0</td><td>0</td><td>+1000</td><td>1000</td></tr>
+          <tr><td>The Bible</td><td>10</td><td>+100</td><td>+1000</td><td>1110</td></tr>
+          <tr><td>Books, several books picked</td><td>10</td><td>+100</td><td>+1000</td><td>1110</td></tr>
+          <tr><td>Books, one book picked (it's given)</td><td>0</td><td>+100</td><td>+1000</td><td>1100</td></tr>
+          <tr><td>Chapters, several chapters picked (the book is given)</td><td>0</td><td>+100</td><td>+1000</td><td>1100</td></tr>
+          <tr><td>Chapters, one chapter picked (the chapter is given too)</td><td>0</td><td>0</td><td>+1000</td><td>1000</td></tr>
+          <tr><td>Any game type with nothing picked — plays as The Bible</td><td>10</td><td>+100</td><td>+1000</td><td>1110</td></tr>
         </tbody>
       </table>
       <ul>
         <li>
-          <strong>Singleplayer:</strong> the shared kernel's <code>tieredPoints</code> with
-          <code>CHAPTERS_TIERS</code> / <code>LONE_CHAPTER_TIERS</code> in
-          <span class="file-ref">frontend/src/game-types/chapters/chapters.ts</span>.
+          "One" means one <em>distinct</em> book or chapter: a chapter listed twice is still one chapter, on both
+          sides.
         </li>
         <li>
-          <strong>Multiplayer:</strong> the standard rule counts a book-only guess as correct. In Chapters a guess is
-          only correct if the chapter is guessed and right — and, with one chapter picked, the verse number too — and
-          then scores like the standard rule (<span class="file-ref">backend/Domain/GameTypes/Chapters.fs</span>).
+          What's given is also given in the guess form: the fixed book, a lone chapter and a lone book are selected
+          from the start, so the first part that earns anything can be picked straight away.
         </li>
         <li>
-          With one chapter picked, the guess form selects it from the start (like the fixed book), so the verse can be
-          picked straight away.
+          Book matching ignores case and surrounding whitespace. In multiplayer the book is matched by its
+          <strong>number</strong> whenever the guess has one, since the two players may read different Bibles
+          that spell it differently (see <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a>).
+        </li>
+        <li>
+          The daily quiz draws from the whole Bible, so it scores by the standard tiers (see
+          <a href="../daily-quiz/index.html">Daily quiz</a>).
         </li>
       </ul>
 
-      <h2>The tiers</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Guessed correctly</th>
-            <th>Points</th>
-            <th>Requires</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Book</td>
-            <td>10</td>
-            <td>—</td>
-          </tr>
-          <tr>
-            <td>+ Chapter</td>
-            <td>+100</td>
-            <td>book also correct</td>
-          </tr>
-          <tr>
-            <td>+ Verse number</td>
-            <td>+1000</td>
-            <td>book <em>and</em> chapter also correct</td>
-          </tr>
-        </tbody>
-      </table>
-      <p>All three correct: <strong>1110</strong> total. Book matching is case-insensitive throughout.</p>
-
-      <h2>Mirrored by hand, backend and frontend</h2>
+      <h2>Multiplayer: the same points, and time doesn't change them</h2>
       <p>
-        This exact tiered logic is implemented twice — once in F#, once in TypeScript — and deliberately kept in
-        sync by hand rather than shared via codegen, matching this project's existing convention for small,
-        rarely-changing shapes (see <span class="file-ref">frontend/src/types.ts</span>'s header comment).
+        The server scores each multiplayer guess with <code>GameType.scoreGuess</code>, which dispatches to the
+        game type's own module, from <code>GameSession.scoreRound</code>. A guess is worth the same as in
+        singleplayer whenever it came in: a round's time limit only ends the round, and a player who didn't guess
+        in time gets no result for it ("Choked!", 0). A result's <code>Correct</code> means the guess earned
+        points — the same "correct" the singleplayer feedback shows.
       </p>
+
+      <h2>The results screen counts out of the game type's own maximum</h2>
+      <p>
+        The singleplayer results show <code>total / max</code>, where max is the number of verses times the most
+        one verse can earn in the game played — <code>GameTypeDefinition.maxPoints</code>, reached through
+        <code>registry.ts</code>'s <code>maxPointsOf</code>. A perfect game always shows the two numbers equal.
+        The app shell never assumes the standard tiers.
+      </p>
+
+      <h2>Where it lives</h2>
       <table>
         <thead>
-          <tr>
-            <th></th>
-            <th>Backend</th>
-            <th>Frontend</th>
-          </tr>
+          <tr><th></th><th>Frontend (singleplayer)</th><th>Backend (multiplayer)</th></tr>
         </thead>
         <tbody>
           <tr>
-            <td>Function</td>
-            <td><code>Scoring.pointsForVerseGuess</code></td>
-            <td><code>standardSingleplayerPoints</code></td>
+            <td>Building blocks</td>
+            <td><span class="file-ref">frontend/src/shared-kernel/scoring.ts</span>: <code>STANDARD_TIERS</code>,
+              <code>correctParts</code>, <code>tieredPoints</code>, <code>maxTieredPoints</code></td>
+            <td><span class="file-ref">backend/Domain/Scoring.fs</span>: <code>Scoring.standardTiers</code>,
+              <code>Scoring.correctParts</code>, <code>Scoring.tieredPoints</code></td>
           </tr>
           <tr>
-            <td>File</td>
-            <td><span class="file-ref">backend/Domain/Scoring.fs</span></td>
-            <td><span class="file-ref">frontend/src/shared-kernel/scoring.ts</span></td>
+            <td>Each game type's rule</td>
+            <td><code>scoreGuess</code>, <code>maxPoints</code>, <code>sharedColumns</code> in
+              <span class="file-ref">frontend/src/game-types/&lt;type&gt;/</span></td>
+            <td><code>scoreGuess</code> in <span class="file-ref">backend/Domain/GameTypes/&lt;Type&gt;.fs</span></td>
           </tr>
           <tr>
-            <td>Book comparison</td>
-            <td><code>String.Equals(..., StringComparison.OrdinalIgnoreCase)</code></td>
-            <td><code>.trim().toLowerCase()</code> equality</td>
-          </tr>
-          <tr>
-            <td>Used by</td>
-            <td>domain logic, tested directly</td>
-            <td>each game type's <code>scoreGuess</code>, which <code>bg-app.ts</code>'s <code>_onGuessSubmitted</code> reaches through <code>registry.ts</code>'s <code>scoreGuessOf</code> — this is what actually drives singleplayer scoring</td>
+            <td>Composition point (nothing picked plays as The Bible)</td>
+            <td><span class="file-ref">frontend/src/game-types/registry.ts</span></td>
+            <td><span class="file-ref">backend/Domain/GameTypes/GameType.fs</span> (<code>playedAs</code>)</td>
           </tr>
         </tbody>
       </table>
 
-      <div class="callout">
-        <span class="callout-title">A second scorer, for multiplayer specifically</span>
-        <p>
-          <code>Scoring.pointsForGuess</code> (time-decaying: full points minus a penalty proportional to how much
-          of the round's time elapsed) and <code>Scoring.isCorrectGuess</code> (book-<strong>number</strong>-aware,
-          not name-based — see below) also exist in <span class="file-ref">Scoring.fs</span>, combined into
-          <code>Scoring.standardMultiplayer</code> (untimed rounds: a flat <code>unlimitedCorrectPoints</code>) — this
-          is the standard multiplayer rule each game type's <code>scoreGuess</code> chooses today, applied by
-          <code>GameSession.scoreRound</code> via <code>GameType.scoreGuess</code>. See
-          <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the full multiplayer
-          scoring/timer picture. This page's <code>pointsForVerseGuess</code>/<code>standardSingleplayerPoints</code> pair is the
-          singleplayer scorer — the two are deliberately separate (multiplayer never recomputes points locally, and
-          singleplayer has no timer to decay against), don't confuse one for the other.
-        </p>
-      </div>
+      <h2>Changing a rule</h2>
+      <p>
+        One game type at a time: edit that type's scenario file
+        (<span class="file-ref">scoring-scenarios/&lt;game type&gt;.json</span>), its frontend definition and its
+        backend module — nothing else. Each scenario case names a selection (as the player's own setup holds it,
+        and as the <code>wire</code> value sent to the server), a guess against the file's verse, and the points it
+        earns in each mode (<code>points.singleplayer</code>, <code>points.multiplayer</code>). Today both modes
+        agree; if one mode is to score differently, change only that mode's points and that mode's module. Each
+        selection also states its <code>maxPoints</code>.
+      </p>
 
       <h2>Sharing a result</h2>
       <p>
@@ -164,9 +145,10 @@ https://www.bibleguessr.single/</code></pre>
         </li>
         <li>
           The marks come from <code>correctParts</code>, not from the points. Each game type says which columns its
-          shares show (<code>GameTypeDefinition.sharedColumns</code>): The Bible and Books all three; Chapters leaves
-          out what is given — the book, and the chapter too when only one was picked — since it would always be ✅.
-          So a one-chapter Chapters result is headed just <code>Verse</code>.
+          shares show (<code>GameTypeDefinition.sharedColumns</code>): The Bible all three; Books and Chapters leave
+          out what is given — a lone picked book, Chapters' fixed book, and a lone picked chapter — since it would
+          always be ✅. So a one-book Books result is headed <code>Chapter · Verse</code> and a one-chapter Chapters
+          result just <code>Verse</code>.
         </li>
         <li>
           "Played …" with date and time in UTC, and — always last — a link to the game: the address it is served
@@ -185,27 +167,37 @@ https://www.bibleguessr.single/</code></pre>
       </ul>
 
       <h2>Verify it</h2>
-      <p>
-        Both sides assert the identical scenarios (wrong book → 0; right book, wrong or missing chapter → 10; right
-        book+chapter, wrong or missing verse → 110; all three correct → 1110; case-insensitivity) so a change to one
-        side that isn't mirrored on the other should show up as an obvious asymmetry between the two test files.
-      </p>
       <ul>
-        <li><span class="file-ref">backend/Tests/ScoringTests.fs</span> — run via <code>task dotnet:test</code>.</li>
-        <li><span class="file-ref">frontend/src/shared-kernel/scoring.test.ts</span> — run via <code>task frontend:test</code>.</li>
         <li>
-          Per game type: <span class="file-ref">backend/Tests/GameTypeScoringTests.fs</span> and each
-          <span class="file-ref">frontend/src/game-types/&lt;type&gt;/&lt;type&gt;.test.ts</span> pin down which rule
-          each type uses; <span class="file-ref">frontend/src/game-types/registry.test.ts</span> checks a game is
-          scored by its own type only.
+          <span class="file-ref">frontend/src/game-types/scoring-scenarios.test.ts</span> — every scenario's
+          singleplayer points and maxPoints through the registry, that a perfect guess earns exactly the maximum,
+          and that each selection is sent as its <code>wire</code>. Run via <code>task frontend:test</code>.
+        </li>
+        <li>
+          <span class="file-ref">backend/Tests/GameTypeScoringTests.fs</span> — every scenario's multiplayer
+          points through <code>GameType.scoreGuess</code>, reading the <code>wire</code> exactly as the hub does,
+          and the "nothing picked plays as The Bible" rule. Run via <code>task dotnet:test</code>.
+        </li>
+        <li>
+          The building blocks: <span class="file-ref">frontend/src/shared-kernel/scoring.test.ts</span>,
+          <span class="file-ref">backend/Tests/ScoringTests.fs</span> and, for matching by book number,
+          <span class="file-ref">backend/Tests/MultiplayerScoringByNumberTests.fs</span>.
+          <span class="file-ref">backend/Tests/GameSessionTests.fs</span> checks that a round is scored by the
+          session's own game type, and that time doesn't change the points.
+        </li>
+        <li>
+          End to end: <span class="file-ref">frontend/e2e/game-type-scores.spec.ts</span> — the results screen's
+          maximum per game type, a perfect game, a lone picked book, multiplayer points, and that the room sends
+          the game type it shows.
         </li>
       </ul>
-
-      <footer class="page-footer">
-        Key files: <span class="file-ref">backend/Domain/Scoring.fs</span> ·
+      <p>
+        Key files: <span class="file-ref">scoring-scenarios/</span> ·
         <span class="file-ref">frontend/src/shared-kernel/scoring.ts</span> ·
-        <span class="file-ref">frontend/src/components/bg-app.ts</span>
-      </footer>
+        <span class="file-ref">backend/Domain/Scoring.fs</span> ·
+        <span class="file-ref">frontend/src/game-types/registry.ts</span> ·
+        <span class="file-ref">backend/Domain/GameTypes/GameType.fs</span>
+      </p>
     </main>
   </body>
 </html>
