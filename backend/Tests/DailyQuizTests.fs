@@ -29,6 +29,12 @@ let private pool =
 /// Always takes the first remaining candidate — makes the pick predictable.
 let private firstCandidate (_: int) = 0
 
+/// A draw that never favors the famous verses — the plain shuffle.
+let private noFamousBias = 0
+
+/// A draw that always favors the famous verses.
+let private alwaysFamous = 100
+
 [<Fact>]
 let ``the date is the UTC date, whatever the offset`` () =
     let lateEveningInCopenhagen = DateTimeOffset(2026, 10, 1, 1, 30, 0, TimeSpan.FromHours 2.0)
@@ -51,7 +57,7 @@ let ``at midnight exactly, the next midnight is a day away`` () =
 
 [<Fact>]
 let ``a quiz is the requested number of distinct verses from the pool`` () =
-    let picked = DailyQuiz.pick (fun upper -> Random(42).Next upper) 5 pool
+    let picked = DailyQuiz.pick (fun upper -> Random(42).Next upper) noFamousBias 5 pool
 
     Assert.Equal(5, picked.Length)
     Assert.Equal(5, picked |> List.distinct |> List.length)
@@ -62,18 +68,57 @@ let ``a quiz is the requested number of distinct verses from the pool`` () =
 [<Fact>]
 let ``the same verse in two translations counts once`` () =
     let twoTranslations = pool @ (pool |> List.map (fun v -> { v with Translation = "Other" }))
-    let picked = DailyQuiz.pick firstCandidate twoTranslations.Length twoTranslations
+    let picked = DailyQuiz.pick firstCandidate noFamousBias twoTranslations.Length twoTranslations
     Assert.Equal(pool.Length, picked.Length)
 
 [<Fact>]
 let ``references carry the pool's own book numbers`` () =
-    let picked = DailyQuiz.pick firstCandidate 1 pool
+    let picked = DailyQuiz.pick firstCandidate noFamousBias 1 pool
     Assert.Equal<VerseReference list>([ { Book = "1.Mosebog"; BookNumber = 1; Chapter = 1; VerseNumber = 1 } ], picked)
 
 [<Fact>]
 let ``a pool smaller than the quiz gives every verse it has`` () =
-    Assert.Equal(pool.Length, (DailyQuiz.pick firstCandidate 50 pool).Length)
+    Assert.Equal(pool.Length, (DailyQuiz.pick firstCandidate noFamousBias 50 pool).Length)
 
 [<Fact>]
 let ``an empty pool gives no quiz verses`` () =
-    Assert.Empty(DailyQuiz.pick firstCandidate 5 [])
+    Assert.Empty(DailyQuiz.pick firstCandidate noFamousBias 5 [])
+
+/// Numbered like the server's pool for its first six books, so the famous
+/// list's book numbers (see FamousVerses.all) apply. The famous verses
+/// come last, so taking the first remaining candidate only reaches them
+/// by favoring them.
+let private poolWithFamousVerses =
+    [ verse "1.Mosebog" 1 2
+      verse "2.Mosebog" 1 1
+      verse "3.Mosebog" 1 1
+      verse "4.Mosebog" 1 1
+      verse "5.Mosebog" 30 17
+      verse "Josua" 1 9
+      verse "1.Mosebog" 9 4 // famous
+      verse "5.Mosebog" 30 15 // famous
+      verse "Josua" 1 8 ] // famous
+
+let private famousInPool =
+    set [ (1, 9, 4); (5, 30, 15); (6, 1, 8) ]
+
+let private keyOf (reference: VerseReference) =
+    reference.BookNumber, reference.Chapter, reference.VerseNumber
+
+[<Fact>]
+let ``a draw that favors the famous verses picks them`` () =
+    let picked = DailyQuiz.pick firstCandidate alwaysFamous 3 poolWithFamousVerses
+    Assert.Equal<Set<int * int * int>>(famousInPool, picked |> List.map keyOf |> Set.ofList)
+
+[<Fact>]
+let ``once the famous verses are used up, the rest of the quiz is drawn as usual`` () =
+    let picked = DailyQuiz.pick firstCandidate alwaysFamous 5 poolWithFamousVerses
+
+    Assert.Equal(5, picked |> List.distinct |> List.length)
+    Assert.Equal<Set<int * int * int>>(famousInPool, picked |> List.take 3 |> List.map keyOf |> Set.ofList)
+    Assert.All(picked |> List.skip 3, fun reference -> Assert.False(FamousVerses.isFamousReference reference))
+
+[<Fact>]
+let ``a draw that doesn't favor the famous verses ignores them`` () =
+    let picked = DailyQuiz.pick firstCandidate noFamousBias 3 poolWithFamousVerses
+    Assert.All(picked, fun reference -> Assert.False(FamousVerses.isFamousReference reference))

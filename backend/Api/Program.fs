@@ -44,7 +44,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 8
+let BackendRevision = 9
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"
@@ -160,6 +160,18 @@ let main args =
             |> Option.defaultValue 5 }
 
     builder.Services.AddSingleton<DailyQuizService.Settings>(dailyQuizSettings) |> ignore
+
+    // How often a draw from the whole Bible (the daily quiz, and "The
+    // Bible" game type) picks one of the famous verses — see
+    // docs/web/famous-verses and Domain/FamousVerses.fs. In whole percent.
+    let famousVersesSettings: FamousVerses.Settings =
+        { ChancePercent =
+            builder.Configuration["FamousVerses:ChancePercent"]
+            |> Option.ofObj
+            |> Option.map int
+            |> Option.defaultValue FamousVerses.defaultChancePercent }
+
+    builder.Services.AddSingleton<FamousVerses.Settings>(famousVersesSettings) |> ignore
     builder.Services.AddSingleton<TimeProvider>(TimeProvider.System) |> ignore
     builder.Services.AddHostedService<DailyQuizService.DailyQuizScheduler>() |> ignore
 
@@ -341,9 +353,9 @@ let main args =
     // (DailyQuizService.getOrCreate); 503 only when there are no verses.
     app.MapGet(
         "/api/daily-quiz",
-        Func<Database.Settings, DailyQuizService.Settings, Verse list, TimeProvider, IResult>
-            (fun database settings verses timeProvider ->
-                match DailyQuizService.today (Database.connectionString database) settings verses timeProvider with
+        Func<Database.Settings, DailyQuizService.Settings, FamousVerses.Settings, Verse list, TimeProvider, IResult>
+            (fun database settings famous verses timeProvider ->
+                match DailyQuizService.today (Database.connectionString database) settings famous verses timeProvider with
                 | Some quiz ->
                     Results.Json(
                         {| date = quiz.Date.ToString("yyyy-MM-dd", Globalization.CultureInfo.InvariantCulture)
@@ -365,7 +377,7 @@ let main args =
 
     app.MapGet(
         "/api/verses/random",
-        Func<Verse list, HttpRequest, Verse>(fun verses request ->
+        Func<Verse list, FamousVerses.Settings, HttpRequest, Verse>(fun verses famous request ->
             let translation = request.Query["translation"]
 
             let byTranslation =
@@ -401,6 +413,10 @@ let main args =
 
             if candidates.IsEmpty then
                 failwith "No verses match the requested translation/book/chapter selection"
+            elif books.IsEmpty then
+                // The whole Bible ("The Bible" game type) favors the famous
+                // verses — see docs/web/famous-verses.
+                FamousVerses.pickOne Random.Shared.Next famous.ChancePercent (Verse.bookNumbers byTranslation) candidates
             else
                 candidates[Random.Shared.Next(candidates.Length)])
     )

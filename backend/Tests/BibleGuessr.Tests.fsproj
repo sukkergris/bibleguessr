@@ -21,6 +21,7 @@
     <Compile Include="GameTypeNumberTests.fs" />
     <Compile Include="GameTypeIsolationTests.fs" />
     <Compile Include="GameTypeScoringTests.fs" />
+    <Compile Include="FamousVersesTests.fs" />
     <Compile Include="DailyQuizTests.fs" />
     <Compile Include="DailyQuizStoreTests.fs" />
     <Compile Include="MultiplayerScoringByNumberTests.fs" />

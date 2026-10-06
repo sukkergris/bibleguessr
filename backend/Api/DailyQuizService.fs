@@ -22,6 +22,7 @@ type Settings =
 let getOrCreate
     (connectionString: string)
     (settings: Settings)
+    (famous: FamousVerses.Settings)
     (verses: Verse list)
     (nextIndex: int -> int)
     (now: DateTimeOffset)
@@ -30,7 +31,7 @@ let getOrCreate
     match DailyQuizStore.tryGet connectionString date with
     | Some quiz -> Some quiz
     | None ->
-        match DailyQuiz.pick nextIndex settings.VerseCount verses with
+        match DailyQuiz.pick nextIndex famous.ChancePercent settings.VerseCount verses with
         | [] -> None
         | picked ->
             // If another caller stored this day's quiz in the meantime,
@@ -39,15 +40,22 @@ let getOrCreate
             DailyQuizStore.tryGet connectionString date
 
 /// Today's quiz (UTC), creating it if needed.
-let today (connectionString: string) (settings: Settings) (verses: Verse list) (timeProvider: TimeProvider) =
+let today
+    (connectionString: string)
+    (settings: Settings)
+    (famous: FamousVerses.Settings)
+    (verses: Verse list)
+    (timeProvider: TimeProvider)
+    =
     let now = timeProvider.GetUtcNow()
-    getOrCreate connectionString settings verses Random.Shared.Next now (DailyQuiz.dateOf now)
+    getOrCreate connectionString settings famous verses Random.Shared.Next now (DailyQuiz.dateOf now)
 
 /// Makes the day's quiz at startup and then at every 00:00 UTC.
 type DailyQuizScheduler
     (
         database: Database.Settings,
         settings: Settings,
+        famous: FamousVerses.Settings,
         verses: Verse list,
         timeProvider: TimeProvider,
         logger: ILogger<DailyQuizScheduler>
@@ -62,7 +70,7 @@ type DailyQuizScheduler
         // would ever be made ahead of time again — the request-time
         // fallback would still cover it, but late.
         try
-            match today connectionString settings verses timeProvider with
+            match today connectionString settings famous verses timeProvider with
             | Some quiz -> logger.LogInformation("Daily quiz ready for {Date}", quiz.Date)
             | None -> logger.LogWarning("No verses loaded; no daily quiz could be made")
         with ex ->

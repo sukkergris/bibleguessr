@@ -89,7 +89,8 @@ https://www.bibleguessr.single/</code></pre>
       <p>
         The rules are pure functions in <span class="file-ref">backend/Domain/DailyQuiz.fs</span>: which UTC day a
         moment belongs to, when the next one starts, and drawing a number of <em>distinct</em> verses (the same verse in
-        two translations counts once). The randomness is passed in, so the draw is testable.
+        two translations counts once). The randomness is passed in, so the draw is testable. Each verse has a 20%
+        chance of being one of the famous verses — see <a href="../famous-verses/index.html">Famous verses</a>.
       </p>
 
       <div class="callout">
@@ -157,6 +158,7 @@ https://www.bibleguessr.single/</code></pre>
         <tbody>
           <tr><td><code>Database:FilePath</code></td><td><code>../../.data/bibleguessr.db</code></td><td>The database file; its folder is created if missing.</td></tr>
           <tr><td><code>DailyQuiz:VerseCount</code></td><td><code>5</code></td><td>Verses per quiz.</td></tr>
+          <tr><td><code>FamousVerses:ChancePercent</code></td><td><code>20</code></td><td>Chance per verse of a famous verse — see <a href="../famous-verses/index.html">Famous verses</a>.</td></tr>
         </tbody>
       </table>
 

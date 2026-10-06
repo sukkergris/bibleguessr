@@ -229,14 +229,25 @@ let private maxChatMessageLength = 500
 /// and the server's "Dommerne" still match correctly. Each player's
 /// client resolves the returned reference against their OWN chosen
 /// VerseSource for the actual displayable text. None if nothing matches
-/// (an empty/misconfigured book+chapter selection).
-let private pickRandomVerse (verses: Verse list) (gameType: GameType) : VerseReference option =
+/// (an empty/misconfigured book+chapter selection). A game played over
+/// the whole Bible favors the famous verses — see FamousVerses.
+let private pickRandomVerse
+    (verses: Verse list)
+    (famous: FamousVerses.Settings)
+    (gameType: GameType)
+    : VerseReference option =
     let numbersByBookName = Verse.bookNumbers verses
     let books, chaptersByBook = GameType.restrictionOf gameType
     let candidates = verses |> List.filter (Verse.matchesRestrictionByNumber numbersByBookName books chaptersByBook)
 
     if candidates.IsEmpty then
         None
+    elif GameType.drawsFromWholeBible gameType then
+        Some(
+            Verse.referenceOfIn
+                numbersByBookName
+                (FamousVerses.pickOne Random.Shared.Next famous.ChancePercent numbersByBookName candidates)
+        )
     else
         Some(Verse.referenceOfIn numbersByBookName candidates[Random.Shared.Next(candidates.Length)])
 
@@ -281,7 +292,13 @@ type private RoundResolution =
 /// and if the round turns out to already be resolved, it's left as
 /// NothingToResolve and nothing is broadcast (the winning racer already
 /// did).
-let private resolveRound (group: IClientProxy) (verses: Verse list) (rooms: RoomStore) (roomCode: string) : Task =
+let private resolveRound
+    (group: IClientProxy)
+    (verses: Verse list)
+    (famous: FamousVerses.Settings)
+    (rooms: RoomStore)
+    (roomCode: string)
+    : Task =
     task {
         let mutable resolution = NothingToResolve
 
@@ -304,7 +321,7 @@ let private resolveRound (group: IClientProxy) (verses: Verse list) (rooms: Room
                         if GameSession.isOver scored then
                             endCompleted ()
                         else
-                            match pickRandomVerse verses scored.GameType with
+                            match pickRandomVerse verses famous scored.GameType with
                             | None ->
                                 // The book/chapter selection stopped
                                 // matching anything (shouldn't normally
@@ -329,7 +346,7 @@ let private resolveRound (group: IClientProxy) (verses: Verse list) (rooms: Room
             do! group.SendAsync(RoundStartedEvent, advanced)
     }
 
-type GameHub(rooms: RoomStore, verses: Verse list) =
+type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings) =
     inherit Hub()
 
     /// Adds the caller to `room` as a new player, registers the connection,
@@ -584,7 +601,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                                     outcome <- Ok None
                                     room
                                 | Some request ->
-                                    match pickRandomVerse verses request.GameType with
+                                    match pickRandomVerse verses famous request.GameType with
                                     | None ->
                                         outcome <- Error "No verses match that game's book/chapter selection"
                                         room
@@ -692,7 +709,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
 
                 match outcome with
                 | Error message -> do! this.Clients.Caller.SendAsync("Error", message)
-                | Ok true -> do! resolveRound (this.Clients.Group(roomCode)) verses rooms roomCode
+                | Ok true -> do! resolveRound (this.Clients.Group(roomCode)) verses famous rooms roomCode
                 | Ok false -> ()
         }
 
@@ -742,7 +759,7 @@ type GameHub(rooms: RoomStore, verses: Verse list) =
                                 // asked first, and the joiner opted into
                                 // "whatever is open" rather than a
                                 // particular game.
-                                match pickRandomVerse verses opponent.GameType with
+                                match pickRandomVerse verses famous opponent.GameType with
                                 | None -> room
                                 | Some firstVerse ->
                                     let session =
@@ -1053,7 +1070,14 @@ type RoundTimeoutSettings = { SweepInterval: TimeSpan }
 /// InProgress, so a round SubmitGuess already advanced/scored is simply
 /// skipped on the next tick — no cancellation or locking needed,
 /// consistent with RoomStore's atomic ConcurrentDictionary.Set.
-type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubContext<GameHub>, settings: RoundTimeoutSettings) =
+type RoundTimeoutService
+    (
+        rooms: RoomStore,
+        verses: Verse list,
+        famous: FamousVerses.Settings,
+        hubContext: IHubContext<GameHub>,
+        settings: RoundTimeoutSettings
+    ) =
     inherit Microsoft.Extensions.Hosting.BackgroundService()
 
     override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
@@ -1077,7 +1101,7 @@ type RoundTimeoutService(rooms: RoomStore, verses: Verse list, hubContext: IHubC
                     try
                         match room.ActiveGame with
                         | Some session when GameSession.isRoundExpired now session ->
-                            do! resolveRound (hubContext.Clients.Group(roomCode)) verses rooms roomCode
+                            do! resolveRound (hubContext.Clients.Group(roomCode)) verses famous rooms roomCode
                         | _ -> ()
                     with ex ->
                         eprintfn "[RoundTimeoutService] failed to resolve round for room %s: %O" roomCode ex

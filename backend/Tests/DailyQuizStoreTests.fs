@@ -59,6 +59,9 @@ let private pool = [ for chapter in 1..3 do for v in 1..4 -> verse "1.Mosebog" c
 
 let private settings: DailyQuizService.Settings = { VerseCount = 5 }
 
+/// These tests are about storing a quiz, not about which verses it draws.
+let private noFamousBias: FamousVerses.Settings = { ChancePercent = 0 }
+
 [<Fact>]
 let ``migrating twice leaves the schema at the latest version`` () =
     use db = new InMemoryDatabase()
@@ -88,8 +91,8 @@ let ``a second quiz for the same day is refused and the first one kept`` () =
 [<Fact>]
 let ``getOrCreate creates the day's quiz once and then returns that same quiz`` () =
     use db = new InMemoryDatabase()
-    let first = DailyQuizService.getOrCreate db.ConnectionString settings pool (fun upper -> Random(1).Next upper) createdAt today
-    let second = DailyQuizService.getOrCreate db.ConnectionString settings pool (fun upper -> Random(2).Next upper) createdAt today
+    let first = DailyQuizService.getOrCreate db.ConnectionString settings noFamousBias pool (fun upper -> Random(1).Next upper) createdAt today
+    let second = DailyQuizService.getOrCreate db.ConnectionString settings noFamousBias pool (fun upper -> Random(2).Next upper) createdAt today
 
     Assert.True(first.IsSome)
     Assert.Equal(settings.VerseCount, first.Value.Verses.Length)
@@ -100,8 +103,8 @@ let ``each day gets its own quiz`` () =
     use db = new InMemoryDatabase()
     let pickFirst (_: int) = 0
     let pickLast upper = upper - 1
-    let todays = DailyQuizService.getOrCreate db.ConnectionString settings pool pickFirst createdAt today
-    let tomorrows = DailyQuizService.getOrCreate db.ConnectionString settings pool pickLast createdAt (today.AddDays 1)
+    let todays = DailyQuizService.getOrCreate db.ConnectionString settings noFamousBias pool pickFirst createdAt today
+    let tomorrows = DailyQuizService.getOrCreate db.ConnectionString settings noFamousBias pool pickLast createdAt (today.AddDays 1)
 
     Assert.Equal(today.AddDays 1, tomorrows.Value.Date)
     Assert.NotEqual<VerseReference list>(todays.Value.Verses, tomorrows.Value.Verses)
@@ -110,5 +113,5 @@ let ``each day gets its own quiz`` () =
 [<Fact>]
 let ``no verses means no quiz, and nothing is stored`` () =
     use db = new InMemoryDatabase()
-    Assert.Equal(None, DailyQuizService.getOrCreate db.ConnectionString settings [] (fun _ -> 0) createdAt today)
+    Assert.Equal(None, DailyQuizService.getOrCreate db.ConnectionString settings noFamousBias [] (fun _ -> 0) createdAt today)
     Assert.Equal(None, DailyQuizStore.tryGet db.ConnectionString today)

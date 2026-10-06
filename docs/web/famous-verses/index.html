@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Famous verses — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Famous verses</h1>
+      <p class="subtitle">
+        A draw from the whole Bible has a 20% chance of picking one of a fixed list of well-known verses, so players
+        meet verses they're likely to recognize more often than pure chance would give them.
+      </p>
+
+      <h2>Where it applies</h2>
+      <table>
+        <thead>
+          <tr><th>Draw</th><th>Favors famous verses?</th><th>Where</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Daily quiz</td>
+            <td>Yes — each verse of the quiz rolls on its own</td>
+            <td><code>DailyQuiz.pick</code> (<span class="file-ref">backend/Domain/DailyQuiz.fs</span>)</td>
+          </tr>
+          <tr>
+            <td>Singleplayer, "The Bible", server translation</td>
+            <td>Yes</td>
+            <td><code>GET /api/verses/random</code> with no <code>book</code> parameter
+              (<span class="file-ref">backend/Api/Program.fs</span>)</td>
+          </tr>
+          <tr>
+            <td>Multiplayer, "The Bible"</td>
+            <td>Yes</td>
+            <td><code>pickRandomVerse</code> (<span class="file-ref">backend/Api/GameHub.fs</span>), when
+              <code>GameType.drawsFromWholeBible</code></td>
+          </tr>
+          <tr>
+            <td>Books or chapters chosen</td>
+            <td>No — every verse in play is equally likely</td>
+            <td>Same places</td>
+          </tr>
+          <tr>
+            <td>Singleplayer from the player's own file</td>
+            <td>No — that draw happens in the browser</td>
+            <td><span class="file-ref">frontend/src/bible-sources/local-verses.ts</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>How a draw works</h2>
+      <ol>
+        <li>
+          Roll: a famous draw with <code>FamousVerses:ChancePercent</code> chance, otherwise an ordinary one
+          (<code>FamousVerses.drawKind</code>, an explicit <code>Famous | Any</code>).
+        </li>
+        <li>
+          A famous draw picks evenly among the famous verses that are in play. If none are (a translation without
+          them, or — in the daily quiz — all of them already drawn), it falls back to an ordinary draw.
+        </li>
+        <li>An ordinary draw picks evenly among every verse in play, as before.</li>
+      </ol>
+      <p>
+        So the real share of famous verses is a little over the configured chance: the ordinary draw can land on one
+        too. The daily quiz never repeats a verse; a famous draw only considers famous verses not yet drawn that day.
+        The randomness is passed in as a function, so tests make every draw predictable.
+      </p>
+
+      <h2>The list</h2>
+      <p>
+        <code>FamousVerses.all</code> in <span class="file-ref">backend/Domain/FamousVerses.fs</span>: verses chosen by
+        the maintainer, plus 100 well-known verses Jehovah's Witnesses will recognize. Adding a verse is one line,
+        e.g. <code>famous Book.john 3 16 // Joh 3,16</code>. A verse range is one line per verse, since a draw is one
+        verse. The list holds references only — never verse text.
+      </p>
+
+      <div class="callout limitation">
+        <span class="callout-title">Numbered as the server's Bible, not as NWT</span>
+        <p>
+          Like everything the server draws, entries use the bibelen-dk pool's own numbering:
+        </p>
+        <ul>
+          <li>
+            Books are numbered by their position in that pool, which is in Lutheran order: Hebrews 58, 1 Peter 59,
+            2 Peter 60, 1 John 61, James 64. <code>FamousVerses.Book</code> names each number used.
+          </li>
+          <li>A psalm's heading is its verse 1, so NWT's Psalm 83:18 is <code>psalms 83 19</code>.</li>
+          <li>NWT's Joel 2:32 is <code>joel 3 5</code>.</li>
+        </ul>
+        <p>
+          A player playing from their own file (e.g. NWT) resolves a drawn reference by position in their own Bible,
+          so a verse from Hebrews–Jude, or from a psalm with a heading, can resolve to a different verse there. That
+          applies to every drawn verse, not just famous ones, and is not solved yet.
+        </p>
+      </div>
+
+      <h2>Settings</h2>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Default</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>FamousVerses:ChancePercent</code></td>
+            <td><code>20</code></td>
+            <td>The chance, in whole percent (0–100), that a whole-Bible draw is a famous draw. <code>0</code> turns
+              the feature off.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Tests</h2>
+      <ul>
+        <li>
+          <span class="file-ref">backend/Tests/FamousVersesTests.fs</span> — the roll's boundaries, the famous and
+          ordinary pick and its fallback, matching by book number rather than name, no duplicates, and against the
+          real bibelen-dk archive: every <code>Book</code> number is that book's position, and every entry is a verse
+          that exists.
+        </li>
+        <li>
+          <span class="file-ref">backend/Tests/DailyQuizTests.fs</span> — a quiz favors the famous verses, then draws
+          as usual once they're used up, and stays distinct.
+        </li>
+      </ul>
+      <p>
+        The tests can't tell a wrong verse number that still exists (say, 83:18 instead of 83:19) from the right one;
+        every entry was checked by hand against the verse text when it was added — do the same for new ones.
+      </p>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">backend/Domain/FamousVerses.fs</span> ·
+        <span class="file-ref">backend/Domain/DailyQuiz.fs</span> ·
+        <span class="file-ref">backend/Api/GameHub.fs</span> ·
+        <span class="file-ref">backend/Api/Program.fs</span>
+      </footer>
+    </main>
+  </body>
+</html>

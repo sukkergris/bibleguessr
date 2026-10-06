@@ -42,6 +42,15 @@ module GameType =
         | Chapters selection when Map.isEmpty selection -> AllVerses
         | _ -> gameType
 
+    /// Whether `gameType` draws its verses from the whole Bible (see
+    /// playedAs) — the draws that favor the famous verses (see
+    /// FamousVerses and docs/web/famous-verses).
+    let drawsFromWholeBible (gameType: GameType) : bool =
+        match playedAs gameType with
+        | AllVerses -> true
+        | Books _
+        | Chapters _ -> false
+
     /// Converts a GameType into Verse.matchesRestrictionByNumber's (books,
     /// chaptersByBook) shape, by asking the game type's own module. Needed
     /// because the server (not the client) picks the verse for a
