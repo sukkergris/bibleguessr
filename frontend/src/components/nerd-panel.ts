@@ -3,17 +3,8 @@ import { customElement, state } from 'lit/decorators.js'
 import './theme-select'
 import { api } from '../api';
 import { buildInfoText, type BuildInfoState } from './build-info';
-
-/** How often the "Is alive" row pings the server while the panel is open. */
-const PING_INTERVAL_MS = 5_000;
-/** How long one ping may take before it counts as no answer. */
-const PING_TIMEOUT_MS = 5_000;
-
-/** The latest /api/healthz ping, as the "Is alive" row shows it. */
-type PingState =
-  | { kind: 'checking' }
-  | { kind: 'alive'; ms: number }
-  | { kind: 'down'; reason: string };
+import { groupByBook, needsLoading, type FamousVersesState } from './famous-verses';
+import { healthText, nextCheckText, serverHealth, type ServerHealthSnapshot } from '../server-health';
 
 /**
  * A debug drawer along the right edge, toggled with Ctrl+Shift+N — the
@@ -48,17 +39,23 @@ export class NerdPanel extends LitElement {
   @state()
   private buildInfo: BuildInfoState = { kind: 'loading' };
 
-  /** The latest /api/healthz ping — see _ping. */
+  /** /api/famous-verses — see _onFamousVersesToggle. */
   @state()
-  private ping: PingState = { kind: 'checking' };
+  private famousVerses: FamousVersesState = { kind: 'idle' };
 
-  private _pingTimer?: ReturnType<typeof setInterval>;
+  /** The app's shared /api/healthz check — see server-health.ts. The
+   * connection indicator shows the same one. */
+  @state()
+  private health: ServerHealthSnapshot = { check: { status: 'checking' }, secondsToNextCheck: 0 };
+
+  private _unsubscribeHealth?: () => void;
 
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener('keydown', this._onKeydown);
     void this._loadRevisions();
     void this._loadBuildInfo();
+    this._unsubscribeHealth = serverHealth.subscribe((health) => (this.health = health));
 
     // Deliberate, permanent console hint — keep this even when trimming
     // other logging elsewhere. The nerd panel has no visible on-page
@@ -69,7 +66,7 @@ export class NerdPanel extends LitElement {
 
   disconnectedCallback() {
     window.removeEventListener('keydown', this._onKeydown);
-    this._stopPinging();
+    this._unsubscribeHealth?.();
     super.disconnectedCallback();
   }
 
@@ -117,6 +114,46 @@ export class NerdPanel extends LitElement {
     }
   }
 
+  /** Loads the famous verses the first time the list is opened (and
+   * again after a failure) — nobody needs them until then. */
+  private _onFamousVersesToggle = async (e: Event) => {
+    if (!(e.target as HTMLDetailsElement).open || !needsLoading(this.famousVerses)) return;
+    this.famousVerses = { kind: 'loading' };
+    try {
+      const references = await api.getFamousVerses();
+      this.famousVerses = { kind: 'loaded', count: references.length, books: groupByBook(references) };
+    } catch (error) {
+      this.famousVerses = {
+        kind: 'failed',
+        reason: error instanceof Error ? error.message : 'Famous verses unavailable.',
+      };
+    }
+  };
+
+  private _famousVersesContent() {
+    switch (this.famousVerses.kind) {
+      case 'idle':
+      case 'loading':
+        return html`<p class="note">Loading…</p>`;
+      case 'failed':
+        return html`<p class="error">${this.famousVerses.reason}</p>`;
+      case 'loaded':
+        return html`
+          <p class="note">${this.famousVerses.count} verses, in Bible order.</p>
+          <dl>
+            ${this.famousVerses.books.map(
+              (group) => html`
+                <div>
+                  <dt>${group.book}</dt>
+                  <dd>${group.references.join(', ')}</dd>
+                </div>
+              `,
+            )}
+          </dl>
+        `;
+    }
+  }
+
   private _frontendRevision() {
     return (
       document
@@ -131,54 +168,6 @@ export class NerdPanel extends LitElement {
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('open')) {
       this.toggleAttribute('data-open', this.open);
-      if (this.open) this._startPinging();
-      else this._stopPinging();
-    }
-  }
-
-  // Only while the panel is open: nobody sees the result otherwise.
-  private _startPinging() {
-    this._stopPinging();
-    this.ping = { kind: 'checking' };
-    void this._ping();
-    this._pingTimer = setInterval(() => void this._ping(), PING_INTERVAL_MS);
-  }
-
-  private _stopPinging() {
-    clearInterval(this._pingTimer);
-    this._pingTimer = undefined;
-  }
-
-  /** Times one round trip to /api/healthz — the same check the connection
-   * dot uses (see connection-status.ts), shown here with its number. */
-  private async _ping() {
-    const start = performance.now();
-    try {
-      const response = await fetch(`${api.baseUrl}/api/healthz`, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(PING_TIMEOUT_MS),
-      });
-      const ms = Math.round(performance.now() - start);
-      this.ping = response.ok
-        ? { kind: 'alive', ms }
-        : { kind: 'down', reason: `server answered ${response.status}` };
-    } catch (err) {
-      const reason =
-        err instanceof DOMException && err.name === 'TimeoutError'
-          ? `no answer within ${PING_TIMEOUT_MS / 1000}s`
-          : 'could not reach the server';
-      this.ping = { kind: 'down', reason };
-    }
-  }
-
-  private _pingText(): string {
-    switch (this.ping.kind) {
-      case 'checking':
-        return 'Checking…';
-      case 'alive':
-        return `Yes · ${this.ping.ms} ms`;
-      case 'down':
-        return `No — ${this.ping.reason}`;
     }
   }
 
@@ -223,14 +212,21 @@ export class NerdPanel extends LitElement {
             </p>
           </section>
 
-          <!-- Not a live region: it changes every few seconds, and
-               announcing each ping would drown everything else out. -->
+          <!-- The same health check as the connection indicator (see
+               server-health.ts). Not a live region: it changes every
+               second, and announcing each check or tick would drown
+               everything else out. The countdown is a role="timer", whose
+               implicit aria-live is off. -->
           <section class="server" aria-labelledby="server-heading">
             <h3 id="server-heading">Server</h3>
             <dl>
               <div>
                 <dt>Is alive</dt>
-                <dd>${this._pingText()}</dd>
+                <dd>${healthText(this.health.check)}</dd>
+              </div>
+              <div>
+                <dt>Next check</dt>
+                <dd><span role="timer">${nextCheckText(this.health.secondsToNextCheck)}</span></dd>
               </div>
             </dl>
           </section>
@@ -279,6 +275,15 @@ export class NerdPanel extends LitElement {
                 `
               : null}
           </section>
+
+          <section class="famous" aria-labelledby="famous-heading">
+            <h3 id="famous-heading">Famous verses</h3>
+            <p class="note">Draws from the whole Bible favor these verses.</p>
+            <details @toggle=${this._onFamousVersesToggle}>
+              <summary>Show the list</summary>
+              ${this._famousVersesContent()}
+            </details>
+          </section>
           <slot></slot>
         </div>
       </div>
@@ -286,21 +291,51 @@ export class NerdPanel extends LitElement {
   }
 
   static styles = css`
+    /* Each shortcut: its keys on one line, what it does below them — side
+       by side, the keys got squeezed into a column and broke apart. */
+    .shortcuts dl > div {
+      display: block;
+      padding: 0;
+    }
+
+    .shortcuts dt {
+      white-space: nowrap;
+      color: inherit;
+    }
+
+    .shortcuts dd {
+      margin-top: 0.5rem;
+      font-family: inherit;
+      line-height: 1.4;
+    }
+
     .shortcuts kbd {
+      display: inline-block;
+      min-width: 1.6em;
+      text-align: center;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.85em;
-      padding: 0.1rem 0.35rem;
-      border: 1px solid rgba(128, 128, 128, 0.6);
+      padding: 0.1rem 0.4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
       border-radius: 4px;
       /* The border and monospace face carry the meaning; the guide still
          reads correctly without any of this styling. */
     }
 
-    .shortcuts .caveat,
-    .shortcuts .note {
-      margin: 0.35rem 0 0;
+    .shortcuts .caveat {
+      margin: 0.5rem 0 0;
+      padding-left: 0.6rem;
+      border-left: 2px solid var(--border);
       font-size: 0.85em;
-      opacity: 0.85;
+      color: var(--text-muted);
+    }
+
+    .shortcuts .note {
+      margin: 0.75rem 0 0;
+      font-size: 0.85em;
+      color: var(--text-muted);
     }
 
     /* :host itself is the thing that widens/narrows — the flex sibling in
@@ -323,7 +358,7 @@ export class NerdPanel extends LitElement {
       width: min(22rem, 90vw);
       height: 100%;
       background: var(--surface-raised);
-      border-left: 1px solid #ddd;
+      border-left: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -335,7 +370,7 @@ export class NerdPanel extends LitElement {
       align-items: center;
       justify-content: space-between;
       padding: 1rem;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid var(--border);
     }
 
 
@@ -359,17 +394,25 @@ export class NerdPanel extends LitElement {
       padding: 1rem;
     }
 
+    .shortcuts,
     .server,
     .revisions,
-    .build {
-      border: 1px solid #ddd;
+    .build,
+    .famous {
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 0.8rem;
     }
 
+    .shortcuts,
     .server,
-    .revisions {
+    .revisions,
+    .build {
       margin-bottom: 0.75rem;
+    }
+
+    .shortcuts {
+      margin-top: 0.75rem;
     }
 
     /* A full 40-character commit SHA is wider than the panel: let it wrap
@@ -403,6 +446,26 @@ export class NerdPanel extends LitElement {
     dd {
       margin: 0;
       font-family: monospace;
+    }
+
+    .famous .note {
+      margin: 0 0 0.5rem;
+      font-size: 0.85em;
+      opacity: 0.85;
+    }
+
+    .famous summary {
+      cursor: pointer;
+    }
+
+    /* Book above its references: a long book name and a long list of
+       references don't fit side by side in the panel. */
+    .famous dl > div {
+      display: block;
+    }
+
+    .famous dd {
+      overflow-wrap: anywhere;
     }
 
     .error {

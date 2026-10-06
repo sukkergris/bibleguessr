@@ -33,9 +33,10 @@
         </li>
         <li>
           <strong><code>/api/healthz</code></strong> — a periodic <code>GET</code>, showing round-trip latency when it
-          succeeds, with the base URL alongside it because that is the useful part when diagnosing a port-forwarding
-          gap. The countdown to the next check sits in this row, so the reader can tell how old the latency figure is
-          rather than guessing.
+          succeeds ("OK · 23 ms"), with the base URL alongside it because that is the useful part when diagnosing a
+          port-forwarding gap. The countdown to the next check sits in this row, so the reader can tell how old the
+          latency figure is rather than guessing. This is the app's one health check, shared with the nerd panel —
+          see <a href="#one-check">One check, two places</a>.
         </li>
         <li>
           <strong>Realtime (SignalR)</strong> — the hub connection's own state, reported through its
@@ -95,9 +96,12 @@
           15.2 seconds before it existed.
         </li>
         <li>
-          <strong>Adaptive polling</strong> — 15 seconds while healthy, 3 seconds while not. A working server does
-          not need poking, but someone who has just lost their connection is watching the dot and wants to know when
-          it returns.
+          <strong>Adaptive polling</strong> — 15 seconds while healthy, 3 seconds while not: the last check failed,
+          or another row is red (the indicator tells the shared check through <code>setUrgent</code>). A working
+          server does not need poking, but someone who has just lost their connection is watching the dot and wants
+          to know when it returns. A new check never starts while one is still waiting for its answer (up to 5
+          seconds), so a server that hangs is reported as "No answer within 5 s" instead of each check being
+          canceled by the next.
         </li>
         <li>
           <strong>SignalR callbacks</strong> fire as soon as the hub itself notices, which is prompt for a clean
@@ -110,15 +114,29 @@
         rather than being reported as a state.
       </p>
 
-      <h2>"Is alive" in the nerd panel</h2>
+      <h2 id="one-check">One check, two places</h2>
       <p>
-        The nerd panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) has a <em>Server</em> section with an
-        <em>Is alive</em> row: the same <code>/api/healthz</code> check, with its round-trip time —
-        "Yes · 23 ms", or "No — no answer within 5s" / "No — could not reach the server" / "No — server answered 503".
-        It pings once when the panel opens and every 5 seconds while it stays open, and not at all while it's closed.
-        Deliberately not a live region, so a screen reader isn't interrupted on every ping. See
-        <span class="file-ref">frontend/src/components/nerd-panel.ts</span> and
-        <span class="file-ref">frontend/e2e/nerd-panel-ping.spec.ts</span>.
+        The indicator and the nerd panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) show the same
+        <code>/api/healthz</code> check. <span class="file-ref">frontend/src/server-health.ts</span> owns it: the
+        fetch, the 5-second timeout, the adaptive interval and the countdown. Both components subscribe to
+        <code>serverHealth</code>. The server gets one request per check, and both places show the same result in the
+        same words: "OK · 23 ms", "Server answered 503", "No answer within 5 s" or "Could not reach the server". They
+        also count down to the same next check. Checking starts with the first subscriber and stops when the last one
+        leaves.
+      </p>
+      <p>
+        In the nerd panel, the <em>Server</em> section has an <em>Is alive</em> row with the result and a
+        <em>Next check</em> row ("in 12 s", then "now"); the indicator shows the same countdown as "12s" in its row.
+        One 1-second timer drives both the countdown and the checks, restarted whenever the next check is scheduled,
+        so the countdown reaches 0 exactly when the check starts. The nerd panel's section is deliberately not a live
+        region, and its countdown is a <code>role="timer"</code>, whose implicit <code>aria-live</code> is off, so a
+        screen reader isn't interrupted on every check or tick.
+      </p>
+      <p>
+        Tests: <span class="file-ref">frontend/src/server-health.test.ts</span> (sharing, intervals, timeout, no
+        overlapping checks, stopping), <span class="file-ref">frontend/e2e/nerd-panel-ping.spec.ts</span> (the nerd
+        panel matches the indicator, and one request per check) and
+        <span class="file-ref">frontend/e2e/connection-status.spec.ts</span>.
       </p>
 
       <h2>Known limits</h2>

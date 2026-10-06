@@ -74,8 +74,22 @@
       <p>
         <code>FamousVerses.all</code> in <span class="file-ref">backend/Domain/FamousVerses.fs</span>: verses chosen by
         the maintainer, plus 100 well-known verses Jehovah's Witnesses will recognize. Adding a verse is one line,
-        e.g. <code>famous Book.john 3 16 // Joh 3,16</code>. A verse range is one line per verse, since a draw is one
+        e.g. <code>famous Book.john 3 16</code>. A verse range is one line per verse, since a draw is one
         verse. The list holds references only — never verse text.
+      </p>
+
+      <h2>Seeing the list</h2>
+      <p>
+        The nerd panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) has a <em>Famous verses</em> section. Its
+        <em>Show the list</em> is a native <code>&lt;details&gt;</code>, so it opens with a click or Enter/Space. The
+        first opening fetches <code>GET /api/famous-verses</code>, and a failed fetch is tried again on the next
+        opening. The list is grouped by book, each book above its references (<code>3:16, 17:3</code>).
+      </p>
+      <p>
+        The endpoint returns the list as verse references (<code>book</code>, <code>bookNumber</code>,
+        <code>chapter</code>, <code>verseNumber</code>), never text. They're sorted in the server pool's Bible order:
+        by book, then chapter, then verse. Each one carries the pool's spelling of its book
+        (<code>FamousVerses.referencesIn</code>). Since the pool is in Lutheran order, James comes after 1 John.
       </p>
 
       <div class="callout limitation">
@@ -122,6 +136,19 @@
           that exists.
         </li>
         <li>
+          <span class="file-ref">backend/Tests/FamousVersesTests.fs</span> also checks that
+          <code>referencesIn</code> sorts by book, chapter and verse, uses the pool's book names, and lists all of
+          them against the real pool.
+        </li>
+        <li>
+          <span class="file-ref">frontend/src/components/famous-verses.test.ts</span> — grouping by book number, and
+          when the list (re)loads.
+        </li>
+        <li>
+          <span class="file-ref">frontend/e2e/nerd-panel-famous-verses.spec.ts</span> — the list in the panel with a
+          mocked endpoint: grouping, fetched only on opening, opening from the keyboard, and retrying after a failure.
+        </li>
+        <li>
           <span class="file-ref">backend/Tests/DailyQuizTests.fs</span> — a quiz favors the famous verses, then draws
           as usual once they're used up, and stays distinct.
         </li>
@@ -135,7 +162,8 @@
         Key files: <span class="file-ref">backend/Domain/FamousVerses.fs</span> ·
         <span class="file-ref">backend/Domain/DailyQuiz.fs</span> ·
         <span class="file-ref">backend/Api/GameHub.fs</span> ·
-        <span class="file-ref">backend/Api/Program.fs</span>
+        <span class="file-ref">backend/Api/Program.fs</span> ·
+        <span class="file-ref">frontend/src/components/famous-verses.ts</span>
       </footer>
     </main>
   </body>

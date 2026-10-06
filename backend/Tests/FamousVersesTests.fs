@@ -21,8 +21,8 @@ let private last (upper: int) = upper - 1
 /// A chance that is the default, written out so the boundaries read plainly.
 let private twentyPercent = 20
 
-// "1.Mosebog" is book 1 in this pool, as in the server's, so 1 Mos 9,4 is
-// famous here; 1 Mos 1,2 is not.
+// "1.Mosebog" (Genesis) is book 1 in this pool, as in the server's, so
+// Genesis 9:4 is famous here; Genesis 1:2 is not.
 let private famousVerse = verse "1.Mosebog" 9 4
 let private plainVerse = verse "1.Mosebog" 1 2
 let private anotherPlainVerse = verse "1.Mosebog" 1 3
@@ -62,7 +62,7 @@ let ``an ordinary draw can pick a plain verse even when a famous one is in play`
 
 [<Fact>]
 let ``a verse is famous by its pool's book number, not its book name`` () =
-    // Here "1.Mosebog" is book 2, so its 9,4 is not the famous 1 Mos 9,4.
+    // Here "1.Mosebog" is book 2, so its 9:4 is not the famous Genesis 9:4.
     let otherNumbers = Verse.bookNumbers [ verse "Indledning" 1 1; famousVerse ]
     Assert.False(FamousVerses.isFamous otherNumbers famousVerse)
     Assert.True(FamousVerses.isFamous numbers famousVerse)
@@ -128,3 +128,35 @@ let ``every famous verse is in the server's bibelen-dk pool`` () =
                 && v.VerseNumber = famous.VerseNumber),
             $"{famous.BookNumber} {famous.Chapter},{famous.VerseNumber} is not in the pool"
         )
+
+[<Fact>]
+let ``the list's references come in Bible order, with the pool's book names`` () =
+    // A pool with only the first book: just its famous verses, sorted by
+    // chapter and verse — though FamousVerses.all lists 9,4 first.
+    let genesisOnly = [ verse "1.Mosebog" 1 1 ]
+
+    let references = FamousVerses.referencesIn genesisOnly
+
+    Assert.Equal<(string * int * int) list>(
+        [ "1.Mosebog", 1, 1
+          "1.Mosebog", 1, 28
+          "1.Mosebog", 2, 7
+          "1.Mosebog", 2, 17
+          "1.Mosebog", 3, 4
+          "1.Mosebog", 3, 15
+          "1.Mosebog", 3, 19
+          "1.Mosebog", 9, 4
+          "1.Mosebog", 22, 18 ],
+        references |> List.map (fun r -> r.Book, r.Chapter, r.VerseNumber)
+    )
+
+[<Fact>]
+let ``against the server's pool, every famous verse is listed, in book order`` () =
+    let references = FamousVerses.referencesIn (loadFromZip TestPaths.bibelenDkArchive)
+
+    Assert.Equal(FamousVerses.all.Length, references.Length)
+
+    let keys = references |> List.map (fun r -> r.BookNumber, r.Chapter, r.VerseNumber)
+    Assert.Equal<(int * int * int) list>(List.sort keys, keys)
+
+    Assert.Contains({ Book = "Jakob"; BookNumber = 64; Chapter = 1; VerseNumber = 13 }, references)

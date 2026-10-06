@@ -88,6 +88,8 @@ export const api = {
   baseUrl: API_BASE_URL,
   getRevision: () => getJson<{ revision: number }>('/api/revision'),
   getBuildInfo: () => getJson<BuildInfo>('/api/build-info'),
+  // The famous verses, in Bible order — see docs/web/famous-verses.
+  getFamousVerses: () => getJson<VerseReference[]>('/api/famous-verses'),
   getTranslations: () => getJson<string[]>('/api/translations'),
   // `restriction` narrows the pool of candidate verses to specific
   // books/chapters — see docs/SCRUM/Feature.BibleSelector.md. Encoded as

@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     novnc \
     websockify \
     procps \
+    sqlite3 \
     gettext-base \
     # Chromium runtime dependencies (for Playwright, e.g. `playwright-cli` /
     # `@playwright/mcp` installed via install-global-npm-tools.sh) — without

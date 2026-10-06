@@ -44,7 +44,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 10
+let BackendRevision = 11
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"
@@ -381,6 +381,14 @@ let main args =
     let buildInfo = BuildInfo.fromEnvironment ()
 
     app.MapGet("/api/build-info", Func<_>(fun () -> buildInfo)) |> ignore
+
+    // The famous verses, in Bible order, for the nerd panel — see
+    // docs/web/famous-verses. References only, never text.
+    app.MapGet(
+        "/api/famous-verses",
+        Func<Verse list, VerseReference list>(fun verses -> FamousVerses.referencesIn verses)
+    )
+    |> ignore
 
     app.MapGet(
         "/api/verses/random",
