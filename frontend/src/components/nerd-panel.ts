@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import './theme-select'
 import { api } from '../api';
+import { buildInfoText, type BuildInfoState } from './build-info';
 
 /** How often the "Is alive" row pings the server while the panel is open. */
 const PING_INTERVAL_MS = 5_000;
@@ -43,6 +44,10 @@ export class NerdPanel extends LitElement {
   @state()
   private revisionError?: string;
 
+  /** /api/build-info — see _loadBuildInfo. */
+  @state()
+  private buildInfo: BuildInfoState = { kind: 'loading' };
+
   /** The latest /api/healthz ping — see _ping. */
   @state()
   private ping: PingState = { kind: 'checking' };
@@ -53,6 +58,7 @@ export class NerdPanel extends LitElement {
     super.connectedCallback();
     window.addEventListener('keydown', this._onKeydown);
     void this._loadRevisions();
+    void this._loadBuildInfo();
 
     // Deliberate, permanent console hint — keep this even when trimming
     // other logging elsewhere. The nerd panel has no visible on-page
@@ -95,6 +101,19 @@ export class NerdPanel extends LitElement {
     } catch (error) {
       this.revisionError =
         error instanceof Error ? error.message : 'Backend revision unavailable.';
+    }
+  }
+
+  /** Which build the API image is. Loaded once: it can't change while
+   * the page is open. */
+  private async _loadBuildInfo() {
+    try {
+      this.buildInfo = { kind: 'loaded', info: await api.getBuildInfo() };
+    } catch (error) {
+      this.buildInfo = {
+        kind: 'failed',
+        reason: error instanceof Error ? error.message : 'Build info unavailable.',
+      };
     }
   }
 
@@ -237,6 +256,29 @@ export class NerdPanel extends LitElement {
                 `
               : null}
           </section>
+
+          <section class="build" aria-labelledby="build-heading">
+            <h3 id="build-heading">API image</h3>
+            <dl>
+              <div>
+                <dt>Image tag</dt>
+                <dd>${buildInfoText(this.buildInfo, 'imageTag')}</dd>
+              </div>
+              <div>
+                <dt>Commit</dt>
+                <dd>${buildInfoText(this.buildInfo, 'buildSha')}</dd>
+              </div>
+              <div>
+                <dt>Build context</dt>
+                <dd>${buildInfoText(this.buildInfo, 'buildContext')}</dd>
+              </div>
+            </dl>
+            ${this.buildInfo.kind === 'failed'
+              ? html`
+                  <p class="error">${this.buildInfo.reason}</p>
+                `
+              : null}
+          </section>
           <slot></slot>
         </div>
       </div>
@@ -318,14 +360,24 @@ export class NerdPanel extends LitElement {
     }
 
     .server,
-    .revisions {
+    .revisions,
+    .build {
       border: 1px solid #ddd;
       border-radius: 8px;
       padding: 0.8rem;
     }
 
-    .server {
+    .server,
+    .revisions {
       margin-bottom: 0.75rem;
+    }
+
+    /* A full 40-character commit SHA is wider than the panel: let it wrap
+       rather than push the row out of view. */
+    .build dd {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: right;
     }
 
     h3 {

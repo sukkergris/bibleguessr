@@ -44,7 +44,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 9
+let BackendRevision = 10
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"
@@ -374,6 +374,13 @@ let main args =
         Func<_>(fun () -> {| revision = BackendRevision |})
     )
     |> ignore
+
+    // Which image this is: commit, build context and image tag — see
+    // docs/web/build-info. Read once; the environment doesn't change while
+    // the process runs.
+    let buildInfo = BuildInfo.fromEnvironment ()
+
+    app.MapGet("/api/build-info", Func<_>(fun () -> buildInfo)) |> ignore
 
     app.MapGet(
         "/api/verses/random",

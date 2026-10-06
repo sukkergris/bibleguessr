@@ -181,7 +181,8 @@ image: ${DOCKER_USERNAME:?}/bibleguessr-nginx:${IMAGE_TAG:?}</code></pre>
         applications inside a release count their revisions separately, and a
         release records which of their revisions it contains through
         <code>/api/revision</code>
-        and the Nerd panel.
+        and the Nerd panel. The API image also reports its own image tag and
+        commit — see <a href="../build-info/index.html">Build info</a>.
       </p>
 
       <h3>Where the value comes from</h3>

@@ -33,6 +33,7 @@
     <Compile Include="RequestLoggingTests.fs" />
     <Compile Include="ReportLoggingConfigTests.fs" />
     <Compile Include="BibleArchiveUnpackerTests.fs" />
+    <Compile Include="BuildInfoTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

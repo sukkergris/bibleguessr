@@ -55,15 +55,19 @@ VOLUME /data/bibles
 # and backed up — across deploys.
 VOLUME /data/db
 
+# Which build this image is, served at /api/build-info and shown in the
+# nerd panel — see backend/Api/BuildInfo.fs and docs/web/build-info.
 ARG BUILD_SHA
 ARG BUILD_CONTEXT
+ARG IMAGE_TAG
 
 ENV ASPNETCORE_URLS=http://+:8080 \
     Verses__ArchivePath="/app/bibles/bibelen-dk/src/Bibelen Files.zip" \
     Verses__DataDirectory=/data/bibles \
     Database__FilePath=/data/db/bibleguessr.db \
     BUILD_SHA="${BUILD_SHA}" \
-    BUILD_CONTEXT="${BUILD_CONTEXT}"
+    BUILD_CONTEXT="${BUILD_CONTEXT}" \
+    IMAGE_TAG="${IMAGE_TAG}"
 
 EXPOSE 8080
 

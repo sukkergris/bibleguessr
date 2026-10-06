@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Build info — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Build info</h1>
+      <p class="subtitle">
+        The API image carries the commit it was built from, where it was built and its image tag. The API serves
+        them at <code>/api/build-info</code>, and the nerd panel shows them, so a running server says exactly which
+        build it is.
+      </p>
+
+      <h2>The three values</h2>
+      <table>
+        <thead>
+          <tr><th>Variable</th><th>Nerd panel row</th><th>Set by</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>BUILD_SHA</code></td>
+            <td>Commit</td>
+            <td>The workflows (<code>github.sha</code>); a local build passes it by hand.</td>
+          </tr>
+          <tr>
+            <td><code>BUILD_CONTEXT</code></td>
+            <td>Build context</td>
+            <td>The <code>BUILD_CONTEXT</code> workflow variable; locally the gitignored
+              <code>.github/workflows/.vars</code> or the shell — see
+              <a href="../multi-platform-images/index.html">Multi-platform images</a>.</td>
+          </tr>
+          <tr>
+            <td><code>IMAGE_TAG</code></td>
+            <td>Image tag</td>
+            <td>Task (<span class="file-ref">Taskfile.Docker.yml</span>): the release version from
+              <span class="file-ref">scripts/ci/load-image-version.sh</span>, or <code>local</code> for a host-only
+              build — see <a href="../versioning/index.html#release-version">Versioning</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>How they get there</h2>
+      <ol>
+        <li>
+          <span class="file-ref">build/docker-compose.build.yml</span> passes all three as build args to the API
+          image, in the <code>${VAR:?}</code> form, so a build without one fails instead of baking in an empty value.
+        </li>
+        <li>
+          <span class="file-ref">build/Dockerfile.api</span> turns each <code>ARG</code> into an <code>ENV</code> of the
+          same name in the runtime image.
+        </li>
+        <li>
+          <span class="file-ref">backend/Api/BuildInfo.fs</span> reads them from the environment once at startup. An
+          empty or missing variable becomes <code>null</code> on the wire.
+        </li>
+        <li>
+          <code>GET /api/build-info</code> answers
+          <code>{"buildSha": "…", "buildContext": "…", "imageTag": "…"}</code>.
+        </li>
+        <li>
+          The nerd panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) fetches it once and shows an
+          <em>API image</em> section: <em>Not set</em> for a <code>null</code> value, <em>Unavailable</em> with the
+          error if the request fails. A full commit SHA wraps rather than running out of the panel.
+        </li>
+      </ol>
+
+      <div class="callout limitation">
+        <span class="callout-title">Outside an image</span>
+        <p>
+          Under <code>task dotnet:dev</code> the API reports whatever its process inherited, not a build: the commit
+          is <em>Not set</em>, the devcontainer sets <code>BUILD_CONTEXT=debian-devcontainer</code>, and Task exports
+          <code>IMAGE_TAG</code> to every task from <span class="file-ref">Taskfile.Docker.yml</span>, so the image
+          tag shows the release version in the working tree.
+        </p>
+      </div>
+
+      <p>
+        These are the API image's values. The nginx image gets <code>BUILD_SHA</code> and <code>BUILD_CONTEXT</code>
+        too, written to <code>build-sha.txt</code> and <code>build-context.txt</code> next to the frontend; the nerd
+        panel doesn't read those.
+      </p>
+
+      <h2>Tests</h2>
+      <ul>
+        <li>
+          <span class="file-ref">backend/Tests/BuildInfoTests.fs</span> — reading the variables, unset and empty
+          values, trimming, and the JSON shape the frontend expects.
+        </li>
+        <li>
+          <span class="file-ref">frontend/src/components/build-info.test.ts</span> — the text each row shows while
+          loading, once loaded, for a <code>null</code> value and after a failure.
+        </li>
+        <li>
+          <span class="file-ref">frontend/e2e/nerd-panel-build-info.spec.ts</span> — the section with a mocked
+          endpoint: the values, <em>Not set</em>, <em>Unavailable</em>, and a full SHA wrapping.
+        </li>
+      </ul>
+      <p>
+        To check a real image: build it with <code>task docker:build:api</code> (with <code>DOCKER_USERNAME</code>,
+        <code>BUILD_SHA</code> and <code>BUILD_CONTEXT</code> set), run it, and request <code>/api/build-info</code>
+        from inside the container (<code>docker exec &lt;container&gt; wget -qO- http://127.0.0.1:8080/api/build-info</code>).
+      </p>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">build/Dockerfile.api</span> ·
+        <span class="file-ref">build/docker-compose.build.yml</span> ·
+        <span class="file-ref">backend/Api/BuildInfo.fs</span> ·
+        <span class="file-ref">frontend/src/components/nerd-panel.ts</span> ·
+        <span class="file-ref">frontend/src/components/build-info.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

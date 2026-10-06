@@ -75,9 +75,19 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
   return request<T>('POST', path, body)
 }
 
+/** Which build the API image is — see backend/Api/BuildInfo.fs and
+ * docs/web/build-info. A value is null when nothing set it, e.g. the
+ * commit when the API runs outside an image (`task dotnet:dev`). */
+export type BuildInfo = {
+  buildSha: string | null
+  buildContext: string | null
+  imageTag: string | null
+}
+
 export const api = {
   baseUrl: API_BASE_URL,
   getRevision: () => getJson<{ revision: number }>('/api/revision'),
+  getBuildInfo: () => getJson<BuildInfo>('/api/build-info'),
   getTranslations: () => getJson<string[]>('/api/translations'),
   // `restriction` narrows the pool of candidate verses to specific
   // books/chapters — see docs/SCRUM/Feature.BibleSelector.md. Encoded as
