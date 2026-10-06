@@ -82,7 +82,7 @@ export class ReportAbuse extends LitElement {
         <h1 id="report-title">Report abuse</h1>
 
         <p class="intro">
-          Tell us about abusive, harassing or unsafe behaviour. Your report is sent to the application owner for
+          Tell us about abusive, harassing or unsafe behavior. Your report is sent to the application owner for
           review.
         </p>
         <p class="warning">
@@ -269,7 +269,7 @@ export class ReportAbuse extends LitElement {
       box-sizing: border-box;
     }
 
-    /* Not colour alone: an invalid field also gets a thicker border, so
+    /* Not color alone: an invalid field also gets a thicker border, so
        the state is visible without relying on hue. */
     [aria-invalid='true'] {
       border-color: var(--error);

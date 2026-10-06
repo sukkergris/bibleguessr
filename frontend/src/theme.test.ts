@@ -17,7 +17,7 @@ describe('parseTheme', () => {
     expect(parseTheme('')).toBe(DEFAULT_THEME)
   })
 
-  it('falls back rather than trusting an unrecognised value', () => {
+  it('falls back rather than trusting an unrecognized value', () => {
     expect(parseTheme('midnight')).toBe(DEFAULT_THEME)
     expect(parseTheme('{"theme":"dark"}')).toBe(DEFAULT_THEME)
     expect(parseTheme('DARK')).toBe(DEFAULT_THEME)
@@ -31,7 +31,7 @@ describe('parseTheme', () => {
 })
 
 describe('resolveTheme', () => {
-  it('honours an explicit choice regardless of the system setting', () => {
+  it('honors an explicit choice regardless of the system setting', () => {
     expect(resolveTheme('light', true)).toBe('light')
     expect(resolveTheme('dark', false)).toBe('dark')
   })

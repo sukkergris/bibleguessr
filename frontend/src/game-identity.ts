@@ -20,7 +20,7 @@
  * identified by `currentGameId`.
  *
  * Returns false when the client has no current game id yet: an
- * unrecognised message must never be allowed to end a game. The server
+ * unrecognized message must never be allowed to end a game. The server
  * re-broadcasts authoritative state on the next round, so ignoring one is
  * always recoverable — wrongly acting on one is not.
  */

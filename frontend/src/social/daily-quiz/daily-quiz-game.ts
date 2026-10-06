@@ -141,7 +141,7 @@ export class DailyQuizGame extends LitElement {
       gameUrl(),
     )
     const outcome = await shareOrCopy(text)
-    if (outcome !== 'cancelled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]
+    if (outcome !== 'canceled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]
   }
 
   private _onBack = () => {
@@ -315,7 +315,7 @@ export class DailyQuizGame extends LitElement {
       border: 1px solid var(--border);
     }
 
-    /* Points text says how it went; the colour only backs it up. */
+    /* Points text says how it went; the color only backs it up. */
     .feedback.correct {
       background: rgba(34, 197, 94, 0.15);
     }

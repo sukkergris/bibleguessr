@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test'
 
-// Dark mode — see docs/SCRUM/DONE/Feature.EnableDarkmode.md. Colours live
+// Dark mode — see docs/SCRUM/DONE/Feature.EnableDarkmode.md. Colors live
 // as semantic tokens on :root and are inherited into every shadow root, so
-// these assert on the resolved theme and on real computed colours rather
+// these assert on the resolved theme and on real computed colors rather
 // than on any component's own CSS.
 
 const resolvedTheme = (page: Page) =>
@@ -62,8 +62,8 @@ test('corrupt stored preferences fall back to following the system', async ({ br
   }
 })
 
-test('dark mode actually changes rendered colours, including inside shadow roots', async ({ browser }) => {
-  const readColours = (page: Page) =>
+test('dark mode actually changes rendered colors, including inside shadow roots', async ({ browser }) => {
+  const readColors = (page: Page) =>
     page.evaluate(() => {
       const body = getComputedStyle(document.body)
       // A muted-text element rather than the accent-filled buttons: those
@@ -89,8 +89,8 @@ test('dark mode actually changes rendered colours, including inside shadow roots
     await lightPage.goto('/')
     await darkPage.goto('/')
 
-    const light = await readColours(lightPage)
-    const dark = await readColours(darkPage)
+    const light = await readColors(lightPage)
+    const dark = await readColors(darkPage)
 
     // The theme must reach past the shadow boundary, not just the body.
     expect(dark.bodyBg).not.toBe(light.bodyBg)
@@ -122,7 +122,7 @@ test('switching theme does not disturb the game underneath', async ({ page }) =>
   expect(await page.locator('bg-verse-card .text').innerText()).toBe(verseBefore)
 })
 
-test('the theme control is a labelled radio group, operable by keyboard', async ({ page }) => {
+test('the theme control is a labeled radio group, operable by keyboard', async ({ page }) => {
   await page.goto('/')
   await openThemeControl(page)
 
@@ -151,7 +151,7 @@ function contrastRatio(fg: string, bg: string): number {
 
 // Regression test for a real defect: several surfaces kept a hard-coded
 // white background in dark mode while their text turned light, leaving
-// near-white on white. Keyword colours (`background: white`) were missed
+// near-white on white. Keyword colors (`background: white`) were missed
 // by a migration that only looked for hex literals.
 test('surfaces keep readable contrast in dark mode', async ({ browser }) => {
   const ctx = await browser.newContext({ colorScheme: 'dark' })

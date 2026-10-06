@@ -173,7 +173,7 @@ export const api = {
       errorMessage: report.errorMessage,
     }),
 
-  /** Reports abusive or unsafe behaviour — see
+  /** Reports abusive or unsafe behavior — see
    * docs/SCRUM/Feature.ReportAbuse.md. A dedicated endpoint rather than
    * submitBibleFileUploadReport above, which is specifically for Bible-file upload
    * failures. Rejects (throws) on validation, rate-limit and delivery

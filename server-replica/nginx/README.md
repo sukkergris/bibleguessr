@@ -1,1 +1,1 @@
-# Optimised for nginx with njs
+# Optimized for nginx with njs

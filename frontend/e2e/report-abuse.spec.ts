@@ -25,7 +25,7 @@ test('the report control is reachable from anywhere and opens the report view', 
   await expect(page.getByLabel(/What happened/)).toBeVisible()
 })
 
-test('cancelling returns to the previous screen without sending anything', async ({ page }) => {
+test('canceling returns to the previous screen without sending anything', async ({ page }) => {
   let requestCount = 0
   await page.route(REPORT_ENDPOINT, (route) => {
     requestCount += 1
@@ -170,11 +170,11 @@ test('a rate-limited report shows the server’s message and can be retried', as
   )
 
   await openReportForm(page)
-  await page.getByLabel(/What happened/).fill('Abusive behaviour')
+  await page.getByLabel(/What happened/).fill('Abusive behavior')
   await page.getByRole('button', { name: 'Send report' }).click()
 
   await expect(page.getByText(/too many reports/i)).toBeVisible()
-  await expect(page.getByLabel(/What happened/)).toHaveValue('Abusive behaviour')
+  await expect(page.getByLabel(/What happened/)).toHaveValue('Abusive behavior')
 })
 
 test('the form can be completed and submitted using the keyboard alone', async ({ page }) => {

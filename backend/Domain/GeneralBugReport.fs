@@ -9,7 +9,7 @@ open System
 /// Deliberately its own type, distinct from both siblings: BugReport
 /// describes a failed Bible-file upload and captures the file name and
 /// loader error automatically, and AbuseReport is about another player's
-/// behaviour. A general bug is neither, and the spec is explicit that it
+/// behavior. A general bug is neither, and the spec is explicit that it
 /// must not be routed through the abuse flow.
 ///
 /// Nothing here is captured automatically. A report can only ever contain
@@ -32,12 +32,12 @@ module GeneralBugReport =
     let maxContextLength = 2000
     let maxReplyToLength = 320
 
-    let private normaliseOptional (value: string option) =
+    let private normalizeOptional (value: string option) =
         value
         |> Option.map (fun v -> v.Trim())
         |> Option.filter (fun v -> v <> "")
 
-    /// Validates and normalises a submitted report. Shares
+    /// Validates and normalizes a submitted report. Shares
     /// AbuseReportRejection rather than duplicating an identical union —
     /// the reasons a report is refused are the same, only the fields
     /// differ.
@@ -48,8 +48,8 @@ module GeneralBugReport =
         (submittedAt: DateTimeOffset)
         : Result<GeneralBugReport, AbuseReportRejection> =
         let description = if isNull description then "" else description.Trim()
-        let context = normaliseOptional context
-        let replyTo = normaliseOptional replyTo
+        let context = normalizeOptional context
+        let replyTo = normalizeOptional replyTo
 
         let tooLong (field: string) (maxLength: int) (value: string option) =
             if value |> Option.exists (fun v -> v.Length > maxLength) then

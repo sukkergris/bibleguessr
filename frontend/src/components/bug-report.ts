@@ -18,7 +18,7 @@ type SubmitState =
  *
  * Deliberately separate from both sibling flows: the Bible-file error
  * reporter captures a filename and loader error automatically, and abuse
- * reports concern another player's behaviour. This one is for technical
+ * reports concern another player's behavior. This one is for technical
  * problems and must not be routed through either.
  *
  * Nothing is captured automatically — no Bible file, verse text, chat
@@ -254,7 +254,7 @@ export class BugReport extends LitElement {
       box-sizing: border-box;
     }
 
-    /* Not colour alone: an invalid field also thickens its border. */
+    /* Not color alone: an invalid field also thickens its border. */
     [aria-invalid='true'] {
       border-color: var(--error);
       border-width: 2px;

@@ -347,7 +347,7 @@ type RoundState =
       <div class="callout">
         <span class="callout-title">Why a sweep instead of a scheduled per-round callback</span>
         <p>
-          A per-round <code>Task.Delay</code>/timer callback would need to be cancelled the instant
+          A per-round <code>Task.Delay</code>/timer callback would need to be canceled the instant
           <code>SubmitGuess</code> resolves the same round early (both players guessed before time ran out) — that's
           real cancellation-token plumbing threaded through every round-advance path, and a real race if the
           callback fires at the same moment a guess lands. A periodic sweep sidesteps all of it:

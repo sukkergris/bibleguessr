@@ -26,7 +26,7 @@ export const emptyBusyState: RosterBusyState = {
 }
 
 /** A game started: both of its players are busy, and the game is tracked so
- * its own end can later be recognised. */
+ * its own end can later be recognized. */
 export function gameStarted(state: RosterBusyState, gameId: string, playerA: string, playerB: string): RosterBusyState {
   return {
     activeGameIds: new Set(state.activeGameIds).add(gameId),

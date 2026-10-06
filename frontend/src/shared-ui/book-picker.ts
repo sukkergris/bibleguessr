@@ -26,7 +26,7 @@ export interface BookCategoryDefinition {
 
 /** The number of books in the canon the category table below describes.
  * A source with any other count (e.g. one including deuterocanonical
- * books) gets an ungrouped grid instead of wrongly-labelled groups. */
+ * books) gets an ungrouped grid instead of wrongly-labeled groups. */
 export const STANDARD_CANON_BOOK_COUNT = 66
 
 export const TESTAMENT_LABELS: Record<Testament, string> = {

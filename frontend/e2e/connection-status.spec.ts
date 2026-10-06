@@ -39,7 +39,7 @@ test('losing connectivity is reflected promptly, not after the polling interval'
   await expect.poll(async () => (await dotState(page)).cls, { timeout: 5_000 }).toContain('bad')
 })
 
-test('the indicator describes its state in words, not by colour alone', async ({ page }) => {
+test('the indicator describes its state in words, not by color alone', async ({ page }) => {
   await page.goto('/')
   await waitForHealthy(page)
 
@@ -80,10 +80,10 @@ const realtimeValue = (page: Page) =>
     return value ? { text: value.textContent?.trim() ?? '', className: value.className } : null
   })
 
-// The panel uses two colours and no more: red means something is wrong,
+// The panel uses two colors and no more: red means something is wrong,
 // green means nothing is. Where no hub connection exists there is nothing
 // broken, so the row is green and the *text* carries the fact that it is
-// not in use — a third colour for "not applicable" was tried and dropped.
+// not in use — a third color for "not applicable" was tried and dropped.
 test('the realtime row is green and says it is unused where no hub connection exists', async ({ page }) => {
   await page.goto('/')
   await page.locator('bg-connection-status').click()
@@ -103,7 +103,7 @@ const rowStates = (page: Page) =>
     }))
   })
 
-// The dot used to derive its colour from HTTP and SignalR only, ignoring
+// The dot used to derive its color from HTTP and SignalR only, ignoring
 // the browser's own connectivity — so a device with no network showed a
 // green dot above a panel whose first row said "offline". Any red row
 // must turn the dot red.

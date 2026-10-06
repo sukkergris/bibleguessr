@@ -65,12 +65,12 @@ test('player can send and withdraw a play request', async ({ browser }) => {
 })
 
 // See docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md: a pending
-// invitation is cancelled the INSTANT one party disconnects — not left
+// invitation is canceled the INSTANT one party disconnects — not left
 // live for the full 2-minute grace period until the removal sweep would
 // otherwise catch it (see backend/Tests/DisconnectCleanupTests.fs's
 // cancelPendingRequestsFor tests for the domain-level coverage of that
 // timing). This only checks the live wiring reaches the UI.
-test('a pending invitation is cancelled immediately if the SENDER disconnects', async ({ browser }) => {
+test('a pending invitation is canceled immediately if the SENDER disconnects', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const ctxB = await browser.newContext()
   const pageA = await ctxA.newPage()
@@ -101,7 +101,7 @@ test('a pending invitation is cancelled immediately if the SENDER disconnects', 
   }
 })
 
-test('a pending invitation is cancelled immediately if the TARGET disconnects', async ({ browser }) => {
+test('a pending invitation is canceled immediately if the TARGET disconnects', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const ctxB = await browser.newContext()
   const pageA = await ctxA.newPage()

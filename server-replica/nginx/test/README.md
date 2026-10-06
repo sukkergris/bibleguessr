@@ -185,7 +185,7 @@ Two njs details worth knowing if you edit these files:
   `lua_code_cache off` equivalent. The runner therefore **restarts** the probe
   server after swapping `current-probe.js` (`use_probe`); overwriting the file
   alone would keep serving the previously compiled module. The two fixtures use
-  separate `pid` files so one can be stopped without signalling the other.
+  separate `pid` files so one can be stopped without signaling the other.
 
 ### The one probe that is not njs
 
@@ -198,7 +198,7 @@ a truer simulation of a scanner dropping the connection anyway.
 
 The rate assertions allow generous headroom (roughly 0.75x–1.4x of target). One
 in-flight block plus socket buffering always overshoots, and CI machines are
-noisy. The point is that the tiers are distinct and in the right neighbourhood,
+noisy. The point is that the tiers are distinct and in the right neighborhood,
 not that they are exact.
 
 ---
@@ -212,7 +212,7 @@ and confirming the suite goes red.
 | --- | --- |
 | Header template left in the repeating body | `exactly one header line` (saw 36) |
 | Configured `rate` ignored | `4096 B/s endpoint`, `fast outruns slow` |
-| `max_seconds` never honoured | `capped endpoint finished early` (the run never terminates) |
+| `max_seconds` never honored | `capped endpoint finished early` (the run never terminates) |
 | `\.php$` ordered above the CMS list | `CMS paths are throttled harder than generic .php` |
 
 The last one has now slipped through **twice**, in both the Lua and njs

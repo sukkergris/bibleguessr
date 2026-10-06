@@ -88,12 +88,12 @@ export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
  * remove the underlying hook from the connection. That's fine in practice:
  * the connection is a shared singleton for the app's lifetime, so the
  * handful of hooks registered by however many components have subscribed
- * over time just sit there harmlessly once cancelled. */
+ * over time just sit there harmlessly once canceled. */
 export function onConnectionStateChange(handler: (state: ConnectionState) => void): () => void {
-  let cancelled = false
+  let canceled = false
 
   void getGameHubConnection().then((hub) => {
-    if (cancelled) return
+    if (canceled) return
 
     // Report the state as of right now — the connection may already be up
     // by the time a caller subscribes (getGameHubConnection only resolves
@@ -102,18 +102,18 @@ export function onConnectionStateChange(handler: (state: ConnectionState) => voi
     handler('connected')
 
     hub.onclose(() => {
-      if (!cancelled) handler('disconnected')
+      if (!canceled) handler('disconnected')
     })
     hub.onreconnecting(() => {
-      if (!cancelled) handler('reconnecting')
+      if (!canceled) handler('reconnecting')
     })
     hub.onreconnected(() => {
-      if (!cancelled) handler('connected')
+      if (!canceled) handler('connected')
     })
   })
 
   return () => {
-    cancelled = true
+    canceled = true
   }
 }
 
@@ -140,15 +140,15 @@ export async function sendChatMessage(text: string): Promise<void> {
 /** Subscribes to chat messages arriving in whatever room the caller has
  * joined. Returns an unsubscribe function. */
 export function onChatMessage(handler: (message: ChatMessage) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (message: ChatMessage) => {
-    if (!cancelled) handler(message)
+    if (!canceled) handler(message)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.ChatMessageReceived, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.ChatMessageReceived, listener))
   }
 }
@@ -157,30 +157,30 @@ export function onChatMessage(handler: (message: ChatMessage) => void): () => vo
  * — the room's recent messages (oldest first), so a new joiner sees
  * context instead of a blank chat. Returns an unsubscribe function. */
 export function onChatHistory(handler: (messages: ChatMessage[]) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (messages: ChatMessage[]) => {
-    if (!cancelled) handler(messages)
+    if (!canceled) handler(messages)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.ChatHistory, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.ChatHistory, listener))
   }
 }
 
 /** Subscribes to PlayerJoined events. Returns an unsubscribe function. */
 export function onPlayerJoined(handler: (player: Player) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (player: Player) => {
-    if (!cancelled) handler(player)
+    if (!canceled) handler(player)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayerJoined, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayerJoined, listener))
   }
 }
@@ -190,15 +190,15 @@ export function onPlayerJoined(handler: (player: Player) => void): () => void {
  * snapshot, not a delta: replace your local players list wholesale on
  * receipt rather than appending. Returns an unsubscribe function. */
 export function onRoomPlayers(handler: (players: Player[]) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (players: Player[]) => {
-    if (!cancelled) handler(players)
+    if (!canceled) handler(players)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.RoomPlayers, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.RoomPlayers, listener))
   }
 }
@@ -278,15 +278,15 @@ export async function leaveRoom(): Promise<void> {
  * your own id, same pattern as filtering ChatMessageReceived by room
  * membership. Returns an unsubscribe function. */
 export function onPlayRequestReceived(handler: (request: PlayRequest) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (request: PlayRequest) => {
-    if (!cancelled) handler(request)
+    if (!canceled) handler(request)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestReceived, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestReceived, listener))
   }
 }
@@ -294,15 +294,15 @@ export function onPlayRequestReceived(handler: (request: PlayRequest) => void): 
 /** Subscribes to play-request withdrawals — payload is the withdrawing
  * sender's player id. Returns an unsubscribe function. */
 export function onPlayRequestWithdrawn(handler: (fromPlayerId: string) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (fromPlayerId: string) => {
-    if (!cancelled) handler(fromPlayerId)
+    if (!canceled) handler(fromPlayerId)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestWithdrawn, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestWithdrawn, listener))
   }
 }
@@ -313,15 +313,15 @@ export function onPlayRequestWithdrawn(handler: (fromPlayerId: string) => void):
  * matters to you, same pattern as filtering ChatMessageReceived by room
  * membership. Returns an unsubscribe function. */
 export function onPlayRequestAccepted(handler: (fromPlayerId: string, toPlayerId: string) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (fromPlayerId: string, toPlayerId: string) => {
-    if (!cancelled) handler(fromPlayerId, toPlayerId)
+    if (!canceled) handler(fromPlayerId, toPlayerId)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestAccepted, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestAccepted, listener))
   }
 }
@@ -329,15 +329,15 @@ export function onPlayRequestAccepted(handler: (fromPlayerId: string, toPlayerId
 /** Subscribes to a play request being denied — same payload shape as
  * onPlayRequestAccepted. Returns an unsubscribe function. */
 export function onPlayRequestDenied(handler: (fromPlayerId: string, toPlayerId: string) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (fromPlayerId: string, toPlayerId: string) => {
-    if (!cancelled) handler(fromPlayerId, toPlayerId)
+    if (!canceled) handler(fromPlayerId, toPlayerId)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayRequestDenied, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayRequestDenied, listener))
   }
 }
@@ -348,15 +348,15 @@ export function onPlayRequestDenied(handler: (fromPlayerId: string, toPlayerId: 
  * types.ts's GameSession doc comment for why this is a full snapshot
  * rather than a delta. Returns an unsubscribe function. */
 export function onRoundStarted(handler: (session: GameSession) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (session: GameSession) => {
-    if (!cancelled) handler(session)
+    if (!canceled) handler(session)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.RoundStarted, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.RoundStarted, listener))
   }
 }
@@ -365,15 +365,15 @@ export function onRoundStarted(handler: (session: GameSession) => void): () => v
  * the time limit elapsed) — payload is the full GameSession, with `round`
  * now the Scored case. Returns an unsubscribe function. */
 export function onRoundScored(handler: (session: GameSession) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (session: GameSession) => {
-    if (!cancelled) handler(session)
+    if (!canceled) handler(session)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.RoundScored, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.RoundScored, listener))
   }
 }
@@ -400,7 +400,7 @@ export function onGameOver(
     reason: GameOverReason,
   ) => void,
 ): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (
     gameId: string,
     scores: Record<string, number>,
@@ -408,13 +408,13 @@ export function onGameOver(
     playerB: string,
     reason: GameOverReason,
   ) => {
-    if (!cancelled) handler(gameId, scores, playerA, playerB, reason)
+    if (!canceled) handler(gameId, scores, playerA, playerB, reason)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.GameOver, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.GameOver, listener))
   }
 }
@@ -426,15 +426,15 @@ export function onGameOver(
  * see onPlayerLeft for the actual removal, once the server-side grace
  * period elapses. Returns an unsubscribe function. */
 export function onPlayerDisconnected(handler: (playerId: string) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (playerId: string) => {
-    if (!cancelled) handler(playerId)
+    if (!canceled) handler(playerId)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayerDisconnected, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayerDisconnected, listener))
   }
 }
@@ -443,30 +443,30 @@ export function onPlayerDisconnected(handler: (playerId: string) => void): () =>
  * disconnected for longer than the server's grace period — payload is
  * their player id. Returns an unsubscribe function. */
 export function onPlayerLeft(handler: (playerId: string) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (playerId: string) => {
-    if (!cancelled) handler(playerId)
+    if (!canceled) handler(playerId)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.PlayerLeft, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.PlayerLeft, listener))
   }
 }
 
 /** Subscribes to server-pushed error messages. Returns an unsubscribe function. */
 export function onHubError(handler: (message: string) => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = (message: string) => {
-    if (!cancelled) handler(message)
+    if (!canceled) handler(message)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.Error, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.Error, listener))
   }
 }
@@ -492,30 +492,30 @@ export async function cancelMatchmaking(): Promise<void> {
 
 /** Subscribes to being queued for a match. Returns an unsubscribe function. */
 export function onWaitingForMatch(handler: () => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = () => {
-    if (!cancelled) handler()
+    if (!canceled) handler()
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.WaitingForMatch, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.WaitingForMatch, listener))
   }
 }
 
-/** Subscribes to matchmaking being cancelled. Returns an unsubscribe function. */
+/** Subscribes to matchmaking being canceled. Returns an unsubscribe function. */
 export function onMatchmakingCancelled(handler: () => void): () => void {
-  let cancelled = false
+  let canceled = false
   const listener = () => {
-    if (!cancelled) handler()
+    if (!canceled) handler()
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.MatchmakingCancelled, listener))
 
   return () => {
-    cancelled = true
+    canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.MatchmakingCancelled, listener))
   }
 }

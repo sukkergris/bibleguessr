@@ -31,7 +31,7 @@ export class BgApp extends LitElement {
    * docs/SCRUM/Feature.ReportAbuse.md. Deliberately a flag alongside
    * `phase` rather than another GamePhase value: reporting can happen from
    * ANY screen, and this way the screen underneath is remembered, so
-   * cancelling returns the player exactly where they were rather than to a
+   * canceling returns the player exactly where they were rather than to a
    * default. */
   @state()
   private reportingAbuse = false

@@ -104,7 +104,7 @@ let rate = Number(r.variables.tarpit_rate) || defaultRateBytesPerSecond;
 ```
 
 This keeps the routing rules declarative and readable in the config, with the
-JS holding only behaviour. Compare `includes/tarpit.conf` before and after the
+JS holding only behavior. Compare `includes/tarpit.conf` before and after the
 migration to see the difference: the Lua version passed a table literal inline
 in every location block.
 
@@ -112,7 +112,7 @@ in every location block.
 > it a default (`js_var $tarpit_max_seconds 2;`) when you want one — the test
 > fixture relies on exactly this to cap the otherwise-uncapped production rules.
 
-**Done when** you have a handler whose behaviour changes based on a `set` in
+**Done when** you have a handler whose behavior changes based on a `set` in
 the location block, with no JS edit.
 
 ---
@@ -225,7 +225,7 @@ restore, confirm green.
 | --- | --- |
 | Header emitted inside the repeating body | `exactly one header line` |
 | Configured rate ignored | `4096 B/s endpoint`, `fast outruns slow` |
-| `max_seconds` never honoured | `capped endpoint finished early` |
+| `max_seconds` never honored | `capped endpoint finished early` |
 | `\.php$` ordered above the CMS list | `CMS paths are throttled harder` |
 
 **Work the last row yourself — it is the whole lesson.** Shadowing the CMS rule

@@ -13,7 +13,7 @@ Remove Git objects larger than size-limit from this repository's complete histor
 Arguments:
   size-limit  Maximum retained object size accepted by git-filter-repo.
               Default: ${DEFAULT_SIZE_LIMIT}
-  --yes       Required acknowledgement that this rewrites Git history.
+  --yes       Required acknowledgment that this rewrites Git history.
 
 Example:
   ${SCRIPT_NAME} 60M --yes

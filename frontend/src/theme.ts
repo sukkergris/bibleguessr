@@ -1,7 +1,7 @@
 /**
  * The application's theme: Light, Dark, or follow the operating system.
  *
- * See docs/SCRUM/TODO/Feature.EnableDarkmode.md. Colours are defined once
+ * See docs/SCRUM/TODO/Feature.EnableDarkmode.md. Colors are defined once
  * as semantic tokens on `:root` in index.css and inherited into every Lit
  * shadow root — CSS custom properties cross shadow boundaries, which is
  * what makes one contract possible instead of per-component overrides.
@@ -20,7 +20,7 @@ const THEMES: readonly Theme[] = ['light', 'dark', 'system']
 
 /** Narrows an arbitrary stored value to a theme.
  *
- * Anything unrecognised — corrupt, hand-edited, or written by an older
+ * Anything unrecognized — corrupt, hand-edited, or written by an older
  * version — falls back to following the OS rather than leaving the
  * application unstyled or refusing to start. */
 export function parseTheme(raw: string | null): Theme {

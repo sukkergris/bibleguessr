@@ -393,7 +393,7 @@ module Room =
             let withoutExisting = room.WaitingForMatch |> List.filter (fun e -> e.PlayerId <> entry.PlayerId)
             { room with WaitingForMatch = withoutExisting @ [ entry ] }
 
-    /// Removes a player from the queue — cancelling, leaving, or being
+    /// Removes a player from the queue — canceling, leaving, or being
     /// matched. A no-op if they weren't waiting.
     let leaveMatchmaking (playerId: PlayerId) (room: Room) =
         { room with WaitingForMatch = room.WaitingForMatch |> List.filter (fun e -> e.PlayerId <> playerId) }
@@ -478,18 +478,18 @@ module Room =
     /// — see GameHub.OnDisconnectedAsync. A no-op (empty list) if
     /// `playerId` had no pending request on either side.
     let cancelPendingRequestsFor (playerId: PlayerId) (room: Room) : Room * PlayRequest list =
-        let cancelled =
+        let canceled =
             room.PendingRequests
             |> List.filter (fun r -> r.FromPlayerId = playerId || r.ToPlayerId = playerId)
 
-        if cancelled.IsEmpty then
+        if canceled.IsEmpty then
             room, []
         else
             { room with
                 PendingRequests =
                     room.PendingRequests
                     |> List.filter (fun r -> r.FromPlayerId <> playerId && r.ToPlayerId <> playerId) },
-            cancelled
+            canceled
 
     /// Removes every player in `idsToRemove` from the room entirely —
     /// dropped from Players/DisconnectedPlayers, along with any play

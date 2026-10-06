@@ -21,7 +21,7 @@ export const ALL_COLUMNS: readonly ResultColumn[] = ['book', 'chapter', 'verseNu
 const COLUMN_LABELS: Record<ResultColumn, string> = { book: 'Book', chapter: 'Chapter', verseNumber: 'Verse' }
 const COLUMN_SEPARATOR = ' · '
 
-/** The header the marks sit under — so they don't rest on colour alone
+/** The header the marks sit under — so they don't rest on color alone
  * (check and cross also differ in shape). */
 export function columnsHeader(columns: readonly ResultColumn[] = ALL_COLUMNS): string {
   return columns.map((column) => COLUMN_LABELS[column]).join(COLUMN_SEPARATOR)

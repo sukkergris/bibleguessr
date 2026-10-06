@@ -2,7 +2,7 @@ namespace BibleGuessr.Domain
 
 open System
 
-/// A player's report of abusive, harassing or otherwise unsafe behaviour by
+/// A player's report of abusive, harassing or otherwise unsafe behavior by
 /// another player — see docs/SCRUM/Feature.ReportAbuse.md. Emailed to the
 /// application owner (see Api/MailSender.fs) rather than stored anywhere,
 /// same handling as BibleFileUploadReport.
@@ -47,14 +47,14 @@ module AbuseReport =
     let maxReportedPlayerLength = 200
     let maxReplyToLength = 320
 
-    /// Normalises optional free text: trims it, and treats blank as absent
+    /// Normalizes optional free text: trims it, and treats blank as absent
     /// so an empty box and an untouched box are the same thing.
-    let private normaliseOptional (value: string option) =
+    let private normalizeOptional (value: string option) =
         value
         |> Option.map (fun v -> v.Trim())
         |> Option.filter (fun v -> v <> "")
 
-    /// Validates and normalises a submitted report, returning either the
+    /// Validates and normalizes a submitted report, returning either the
     /// report to send or the reason it was refused.
     ///
     /// Trimming happens BEFORE the empty check, so a description of only
@@ -68,8 +68,8 @@ module AbuseReport =
         (submittedAt: DateTimeOffset)
         : Result<AbuseReport, AbuseReportRejection> =
         let description = if isNull description then "" else description.Trim()
-        let reportedPlayer = normaliseOptional reportedPlayer
-        let replyTo = normaliseOptional replyTo
+        let reportedPlayer = normalizeOptional reportedPlayer
+        let replyTo = normalizeOptional replyTo
 
         let tooLong (field: string) (maxLength: int) (value: string option) =
             value |> Option.exists (fun v -> v.Length > maxLength) |> function

@@ -1,11 +1,11 @@
 /** What sharing a result ended in — see shareOrCopy. */
-export type ShareOutcome = 'shared' | 'copied' | 'cancelled' | 'failed'
+export type ShareOutcome = 'shared' | 'copied' | 'canceled' | 'failed'
 
 /** The status line to show for each outcome — undefined where the outcome
- * speaks for itself (the share menu closed after sharing, or was cancelled). */
+ * speaks for itself (the share menu closed after sharing, or was canceled). */
 export const SHARE_OUTCOME_MESSAGES: Record<ShareOutcome, string | undefined> = {
   shared: undefined,
-  cancelled: undefined,
+  canceled: undefined,
   copied: 'Result copied — paste it anywhere.',
   failed: "The result couldn't be shared or copied.",
 }
@@ -13,7 +13,7 @@ export const SHARE_OUTCOME_MESSAGES: Record<ShareOutcome, string | undefined> = 
 /**
  * Shares `text` through the device's own share menu where there is one
  * (phones, mostly), and copies it to the clipboard otherwise — or when the
- * share menu itself fails. Cancelling the share menu is not a failure.
+ * share menu itself fails. Canceling the share menu is not a failure.
  * Every share button in the app goes through this, so they behave alike.
  */
 export async function shareOrCopy(text: string): Promise<ShareOutcome> {
@@ -24,7 +24,7 @@ export async function shareOrCopy(text: string): Promise<ShareOutcome> {
       await navigator.share({ text })
       return 'shared'
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled'
+      if (error instanceof DOMException && error.name === 'AbortError') return 'canceled'
       // Otherwise fall back to the clipboard below.
     }
   }

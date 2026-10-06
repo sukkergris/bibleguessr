@@ -3,12 +3,12 @@ import { test, expect, type Page, type Browser } from '@playwright/test'
 // Regression test for a real defect: both copies of the translation-source
 // mode switch styled the *unselected* tab with `color: var(--surface-raised)`
 // — a background token used as a foreground — so the label was painted in the
-// surface colour behind it and vanished. White-on-white in the light theme,
+// surface color behind it and vanished. White-on-white in the light theme,
 // near-black-on-black in the dark theme. See
 // docs/SCRUM/DONE/Bug.ModeSwitchTabLabelInvisible.md.
 //
 // The label was still in the DOM and still had an accessible name, so the
-// existing a11y audit could not catch this; only a computed-colour check can.
+// existing a11y audit could not catch this; only a computed-color check can.
 
 /** WCAG relative luminance, then the standard contrast ratio. */
 function contrastRatio(fg: string, bg: string): number {
@@ -28,7 +28,7 @@ function contrastRatio(fg: string, bg: string): number {
 let minimumContrast = 4.5
 
 /** Reads every mode-switch tab's foreground against the background actually
- * painted behind it — the pill itself is transparent, so the colour has to be
+ * painted behind it — the pill itself is transparent, so the color has to be
  * resolved by walking up through shadow hosts. */
 async function sampleTabs(page: Page) {
   return page.evaluate(() => {

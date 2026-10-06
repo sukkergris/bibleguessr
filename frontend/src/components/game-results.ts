@@ -99,7 +99,7 @@ export class GameResults extends LitElement {
       this.columns,
     )
     const outcome = await shareOrCopy(text)
-    if (outcome !== 'cancelled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]
+    if (outcome !== 'canceled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]
   }
 
   private _onPlayAgain() {

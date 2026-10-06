@@ -11,7 +11,7 @@ open System
 /// Named for what it actually is rather than the generic "bug report" it
 /// used to be called: this flow is tied to a file name and a loader error,
 /// and is distinct from GeneralBugReport (a player-reported technical
-/// problem) and AbuseReport (another player's behaviour). The three share
+/// problem) and AbuseReport (another player's behavior). The three share
 /// SMTP configuration and rate limiting but must never share a contract.
 type BibleFileUploadReport =
     { /// What the player typed describing the problem — the only field

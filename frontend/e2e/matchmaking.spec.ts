@@ -78,9 +78,9 @@ test('a waiting player can stop waiting', async ({ browser }) => {
   }
 })
 
-// Having cancelled, a player is out of the queue: the next person asking
+// Having canceled, a player is out of the queue: the next person asking
 // for a match must wait rather than being paired with a ghost.
-test('a cancelled player is no longer in the queue', async ({ browser }) => {
+test('a canceled player is no longer in the queue', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const ctxB = await browser.newContext()
   const pageA = await ctxA.newPage()

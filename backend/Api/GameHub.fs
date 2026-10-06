@@ -917,7 +917,7 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     /// docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md and
     /// Room.cancelPendingRequestsFor's own doc comment — broadcasting
     /// PlayRequestWithdrawn (they were the sender) or PlayRequestDenied
-    /// (they were the target) per cancelled request, the exact same
+    /// (they were the target) per canceled request, the exact same
     /// events/payload shapes WithdrawPlayRequest/DenyPlayRequest already
     /// send for an explicit withdraw/deny, so the frontend needs no new
     /// handling at all.
@@ -936,18 +936,18 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                 // inside ONE atomic rooms.Update call, not two separate
                 // ones — a second, separate Update would reopen a race
                 // window (e.g. AcceptPlayRequest landing between "marked
-                // disconnected" and "requests cancelled") of exactly the
+                // disconnected" and "requests canceled") of exactly the
                 // kind rooms.Update itself exists to close. See
                 // RoomStoreConcurrencyTests.fs.
-                let mutable cancelledRequests: PlayRequest list = []
+                let mutable canceledRequests: PlayRequest list = []
 
                 match
                     rooms.Update(
                         roomCode,
                         fun room ->
                             let disconnected = Room.markDisconnected player.Id DateTimeOffset.UtcNow room
-                            let updated, cancelled = Room.cancelPendingRequestsFor player.Id disconnected
-                            cancelledRequests <- cancelled
+                            let updated, canceled = Room.cancelPendingRequestsFor player.Id disconnected
+                            canceledRequests <- canceled
                             updated
                     )
                 with
@@ -956,7 +956,7 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                     let (PlayerId playerGuid) = player.Id
                     do! this.Clients.Group(roomCode).SendAsync(PlayerDisconnectedEvent, string playerGuid)
 
-                    for request in cancelledRequests do
+                    for request in canceledRequests do
                         let (PlayerId fromGuid) = request.FromPlayerId
                         let (PlayerId toGuid) = request.ToPlayerId
 

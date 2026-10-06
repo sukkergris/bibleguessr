@@ -67,7 +67,7 @@ test('the toggle cannot interrupt or duplicate an in-flight report', async ({ pa
   await page.getByRole('button', { name: 'Send report' }).click()
 
   // While sending, the toggle must not tear the view down underneath the
-  // request. Disabled is the chosen behaviour.
+  // request. Disabled is the chosen behavior.
   const toggle = page.getByRole('button', { name: /report abuse/i })
   await expect(toggle).toBeDisabled()
 

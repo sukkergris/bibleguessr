@@ -32,7 +32,7 @@ test('uploading a bad file shows an error and lets the player report it', async 
   await expect(page.getByText('✓ Thanks — your report was sent.')).toBeVisible({ timeout: 10_000 })
 })
 
-test('cancelling the report form collapses it back to the link', async ({ page }) => {
+test('canceling the report form collapses it back to the link', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'The Bible', exact: false }).first().click()
   await page.getByRole('tab', { name: 'My own Bible file' }).click()

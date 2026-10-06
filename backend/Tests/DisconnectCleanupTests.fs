@@ -154,10 +154,10 @@ let ``cancelPendingRequestsFor drops a request sent by the just-disconnected pla
             Players = [ disconnecting; other ]
             PendingRequests = [ request ] }
 
-    let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
+    let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
     Assert.Empty(updated.PendingRequests)
-    Assert.Equal<PlayRequest list>([ request ], cancelled)
+    Assert.Equal<PlayRequest list>([ request ], canceled)
 
 [<Fact>]
 let ``cancelPendingRequestsFor drops a request received by the just-disconnected player`` () =
@@ -178,10 +178,10 @@ let ``cancelPendingRequestsFor drops a request received by the just-disconnected
             Players = [ disconnecting; other ]
             PendingRequests = [ request ] }
 
-    let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
+    let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
     Assert.Empty(updated.PendingRequests)
-    Assert.Equal<PlayRequest list>([ request ], cancelled)
+    Assert.Equal<PlayRequest list>([ request ], canceled)
 
 [<Fact>]
 let ``cancelPendingRequestsFor leaves unrelated requests untouched and keeps the player in Players`` () =
@@ -221,10 +221,10 @@ let ``cancelPendingRequestsFor leaves unrelated requests untouched and keeps the
             Players = [ disconnecting; other; third ]
             PendingRequests = [ requestFromDisconnecting; requestToDisconnecting; requestUnrelated ] }
 
-    let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
+    let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
     Assert.Equal<PlayRequest list>([ requestUnrelated ], updated.PendingRequests)
-    Assert.Equal(2, cancelled.Length)
+    Assert.Equal(2, canceled.Length)
     // The key behavioral difference from removeStaleDisconnections/removePlayers — the
     // disconnecting player is NOT removed here, only their pending requests are.
     Assert.Contains(disconnecting, updated.Players)
@@ -251,9 +251,9 @@ let ``cancelPendingRequestsFor does not touch ActiveGame`` () =
     let room = Room.sendPlayRequest request room
     let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) disconnecting.Id opponent.Id verse DateTimeOffset.UtcNow room
 
-    let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
+    let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
-    Assert.Empty(cancelled)
+    Assert.Empty(canceled)
     Assert.True(updated.ActiveGame.IsSome)
 
 [<Fact>]
@@ -261,9 +261,9 @@ let ``cancelPendingRequestsFor is a no-op when the player has no pending request
     let disconnecting = makePlayer "Alice"
     let room = { Room.create (RoomCode "1234") with Players = [ disconnecting ] }
 
-    let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
+    let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
-    Assert.Empty(cancelled)
+    Assert.Empty(canceled)
     Assert.Equal<Room>(room, updated)
 
 [<Fact>]
@@ -295,12 +295,12 @@ let ``cancelPendingRequestsFor drops multiple requests received from different s
             Players = [ disconnecting; senderA; senderB ]
             PendingRequests = [ requestA; requestB ] }
 
-    let updated, cancelled = Room.cancelPendingRequestsFor disconnecting.Id room
+    let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
     Assert.Empty(updated.PendingRequests)
-    Assert.Equal(2, cancelled.Length)
-    Assert.Contains(requestA, cancelled)
-    Assert.Contains(requestB, cancelled)
+    Assert.Equal(2, canceled.Length)
+    Assert.Contains(requestA, canceled)
+    Assert.Contains(requestB, canceled)
 
 [<Fact>]
 let ``disconnectGracePeriod is two minutes`` () =

@@ -6,7 +6,7 @@ import { getGameHubConnection, onConnectionStateChange, type ConnectionState } f
 
 /** One line in the details panel.
  *
- * `ok` drives both the row's colour and the dot's, so a red row always
+ * `ok` drives both the row's color and the dot's, so a red row always
  * turns the dot red. `summary` is what the dot says when this row is the
  * reason — absent when the row has nothing to report. */
 interface ConnectionRow {
@@ -125,7 +125,7 @@ export class ConnectionStatus extends LitElement {
    * of getters that had to agree with each other by hand — see CLAUDE.md's
    * preference for explicit state models.
    *
-   * `ok` is the single source of truth for colour. Two colours only: red
+   * `ok` is the single source of truth for color. Two colors only: red
    * means something is wrong, green means nothing is. A row that measures
    * nothing (no hub connection outside multiplayer) is green, because
    * nothing is wrong — the text says it is not in use.
@@ -166,7 +166,7 @@ export class ConnectionStatus extends LitElement {
     switch (this.signalR) {
       case 'not-started':
         // Nothing is wrong here: there is no hub connection to break
-        // outside multiplayer. The text carries that, not a third colour.
+        // outside multiplayer. The text carries that, not a third color.
         return { ...base, ok: true, value: 'not used on this screen', summary: undefined }
       case 'connecting':
         return { ...base, ok: true, value: 'connecting…', summary: 'Connecting…' }
@@ -244,7 +244,7 @@ export class ConnectionStatus extends LitElement {
   }
 
   /** One row, rendered straight from its state object — the row decides
-   * its own colour via `ok`, so the panel cannot drift out of step with
+   * its own color via `ok`, so the panel cannot drift out of step with
    * the dot above it. */
   private _renderRow(row: ConnectionRow) {
     return html`
@@ -343,7 +343,7 @@ export class ConnectionStatus extends LitElement {
     }
 
     /* A failing row is marked by weight and a left rule as well as
-       colour, so the state is not carried by hue alone. */
+       color, so the state is not carried by hue alone. */
     .row-bad {
       border-left: 3px solid var(--error);
       padding-left: 0.4rem;

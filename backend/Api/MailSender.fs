@@ -132,7 +132,7 @@ let private buildAbuseBody (report: AbuseReport) : string =
     $"""
     <html>
     <body>
-        <p>A player reported abusive or unsafe behaviour.</p>
+        <p>A player reported abusive or unsafe behavior.</p>
         <h3>Report</h3>
         <table border="1" cellpadding="5" style="border-collapse:collapse; width:100%%;">
             <tr>
@@ -154,7 +154,7 @@ let private buildAbuseBody (report: AbuseReport) : string =
 ///
 /// The reporter's own address is NEVER used as the sender (see
 /// docs/SCRUM/Feature.ReportAbuse.md): the From address stays the
-/// configured, relay-authorised one, and their address goes on Reply-To
+/// configured, relay-authorized one, and their address goes on Reply-To
 /// instead, which is what actually lets the owner answer them.
 let sendAbuseReport (settings: SmtpSettings) (logger: ILogger) (report: AbuseReport) : bool =
     use smtpClient =
@@ -241,7 +241,7 @@ let private buildGeneralBugBody (report: GeneralBugReport) : string =
 /// Sends a general bug report. Same never-throws contract as the others,
 /// and the same rule about the sender address: the reporter's own address
 /// goes on Reply-To, never on From, which stays the configured
-/// relay-authorised address.
+/// relay-authorized address.
 let sendGeneralBugReport (settings: SmtpSettings) (logger: ILogger) (report: GeneralBugReport) : bool =
     use smtpClient =
         new SmtpClient(settings.Host, settings.Port, EnableSsl = settings.EnableSsl,

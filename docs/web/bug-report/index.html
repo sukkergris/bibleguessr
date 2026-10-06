@@ -19,7 +19,7 @@
       <p>
         There are three, and they are deliberately kept apart. The Bible-file error reporter captures a filename and
         loader error automatically for a failed upload. <a href="../report-abuse/index.html">Report abuse</a> is about
-        another player's behaviour. This one is for technical problems, and the spec is explicit that a bug must never
+        another player's behavior. This one is for technical problems, and the spec is explicit that a bug must never
         be routed through the abuse endpoint.
       </p>
       <p>
@@ -44,7 +44,7 @@
       <p>
         Reports go to <code>POST /api/bug-reports</code>, its own contract. Every field is treated as untrusted input
         and HTML-encoded before it reaches the email body. The reporter's address is never the sender: the configured
-        relay-authorised <code>From</code> stays, and their address is attached as <code>Reply-To</code>, with an
+        relay-authorized <code>From</code> stays, and their address is attached as <code>Reply-To</code>, with an
         unparseable one dropped rather than blocking delivery.
       </p>
       <p>

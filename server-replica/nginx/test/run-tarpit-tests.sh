@@ -122,7 +122,7 @@ slow=$(echo "$rates" | grep -F "/_rate/slow" | sed -n 's/.*measured= *\([0-9]*\)
 fast=$(echo "$rates" | grep -F "/_rate/fast" | sed -n 's/.*measured= *\([0-9]*\).*/\1/p')
 # Allow generous headroom: one in-flight block plus socket buffering always
 # overshoots, and CI machines are noisy. The point is the rates are distinct
-# and in the right neighbourhood, not that they are exact.
+# and in the right neighborhood, not that they are exact.
 [ -n "$slow" ] && assert_between "4096 B/s endpoint" "$slow" 3000 6500 || fail "4096 B/s endpoint" "no measurement"
 [ -n "$fast" ] && assert_between "10240 B/s endpoint" "$fast" 8000 14000 || fail "10240 B/s endpoint" "no measurement"
 if [ -n "$slow" ] && [ -n "$fast" ] && [ "$fast" -gt "$slow" ]; then

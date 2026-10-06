@@ -33,7 +33,7 @@
           <strong>Immediate — visible, but not invitable:</strong> the instant a connection drops, the player is
           marked disconnected. They move into a separate <strong>Offline</strong> section of the roster (still
           visible — a brief drop shouldn't make someone vanish from the conversation), but any invitation involving
-          them is cancelled right away, and they can no longer be clicked to send a new one — see
+          them is canceled right away, and they can no longer be clicked to send a new one — see
           <a href="../unique-player-names/index.html">Unique player names</a> for the sibling feature this one
           builds directly on.
         </li>
@@ -71,7 +71,7 @@
               Drops any pending invitation naming <code>playerId</code> (sent or received) — the instant they
               disconnect, not waiting for the grace period. Leaves <code>Players</code>, <code>DisconnectedPlayers</code>,
               and <code>ActiveGame</code> untouched — this is the one thing that DOES change immediately on
-              disconnect, everything else waits. Returns <code>(updatedRoom, cancelledRequests)</code> so the caller
+              disconnect, everything else waits. Returns <code>(updatedRoom, canceledRequests)</code> so the caller
               knows which withdrawn/denied-equivalent event to broadcast per request.
             </td>
           </tr>
@@ -87,7 +87,7 @@
             <td><code>removeStaleDisconnections cutoff room</code></td>
             <td>
               Removes every player disconnected before <code>cutoff</code>, along with any play requests they sent
-              or received (already-cancelled ones from <code>cancelPendingRequestsFor</code> included, harmlessly —
+              or received (already-canceled ones from <code>cancelPendingRequestsFor</code> included, harmlessly —
               there's nothing left to drop for them by this point). Returns <code>(updatedRoom, removedPlayerIds)</code>.
             </td>
           </tr>
@@ -102,7 +102,7 @@
         <code>DateTimeOffset.UtcNow</code>) and <code>Room.cancelPendingRequestsFor</code> run together, not as two
         separate updates. Broadcasts <code>PlayerDisconnected</code>, then <code>PlayRequestWithdrawn</code> (the
         disconnecting player was the sender) or <code>PlayRequestDenied</code> (they were the target) for each
-        cancelled request — the exact same events/payload shapes <code>WithdrawPlayRequest</code>/
+        canceled request — the exact same events/payload shapes <code>WithdrawPlayRequest</code>/
         <code>DenyPlayRequest</code> already send for an explicit withdraw/deny, so the frontend needed zero new
         event handling.
       </p>
@@ -110,7 +110,7 @@
         <span class="callout-title">Why one atomic update, not two</span>
         <p>
           A second, separate <code>rooms.Update</code> call for <code>cancelPendingRequestsFor</code> would reopen a
-          real race window between "marked disconnected" and "requests cancelled" — e.g. <code>AcceptPlayRequest</code>
+          real race window between "marked disconnected" and "requests canceled" — e.g. <code>AcceptPlayRequest</code>
           landing in that gap and starting a game against someone who'd already disconnected. Every room-state
           change in this hub goes through <code>RoomStore.Update</code>'s compare-and-swap retry loop for exactly
           this reason (see <span class="file-ref">backend/Tests/RoomStoreConcurrencyTests.fs</span> — a real
@@ -202,9 +202,9 @@
         Offline section only renders when non-empty.
       </p>
       <p>
-        Within Online, the existing <code>.status-dot</code> (green = connected, grey = this viewer's own
+        Within Online, the existing <code>.status-dot</code> (green = connected, gray = this viewer's own
         connection is uncertain) still applies. Offline rows drop the dot entirely — the section itself already
-        says "offline" — and are rendered greyed out with <strong>no <code>class="clickable"</code> and no
+        says "offline" — and are rendered grayed out with <strong>no <code>class="clickable"</code> and no
         <code>@click</code> handler at all</strong>, structurally rather than via a runtime guard: there's simply no
         click target for an offline player, so nothing can invite them. <span class="file-ref">bg-room-setup.ts</span>'s
         <code>_onPlayerSelected</code> also checks <code>disconnectedPlayerIds</code> itself as defense in depth, for

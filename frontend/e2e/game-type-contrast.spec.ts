@@ -5,13 +5,13 @@ import { test, expect, type Page, type Browser } from '@playwright/test'
 // (All/Books/Chapters) in the room screen, and the cached-translation
 // entries in both game-setup and translation-source-select. Each styled its
 // unselected state with `color: var(--surface-raised)` — a background token
-// used as a foreground — so the label was painted in the surface colour
+// used as a foreground — so the label was painted in the surface color
 // behind it and vanished. White-on-white (1.00:1) in the light theme,
 // near-black-on-black (1.22:1) in the dark theme.
 //
 // The labels were still in the DOM and still had accessible names, so
 // neither the a11y audit nor any unit test could catch this; only a
-// computed-colour check can.
+// computed-color check can.
 
 /** WCAG relative luminance, then the standard contrast ratio. */
 function contrastRatio(fg: string, bg: string): number {

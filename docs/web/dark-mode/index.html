@@ -18,7 +18,7 @@
 
       <h2>One contract, not twenty</h2>
       <p>
-        Colours are defined once as semantic tokens on <code>:root</code> in
+        Colors are defined once as semantic tokens on <code>:root</code> in
         <span class="file-ref">frontend/src/index.css</span> and inherited into every Lit shadow root, because CSS
         custom properties cross shadow boundaries. That is what makes a single theme contract possible.
       </p>
@@ -28,7 +28,7 @@
         which theme is active.
       </p>
       <p>
-        The migration replaced 89 hard-coded colour literals across 20 components and removed
+        The migration replaced 89 hard-coded color literals across 20 components and removed
         <strong>every</strong> per-component <code>prefers-color-scheme</code> block. Those blocks were not merely
         redundant: they key off the operating system, so they would have overridden an explicit Light choice on a
         dark machine.
@@ -41,7 +41,7 @@
         native semantics give arrow-key navigation and correct announcement for free.
       </p>
       <p>
-        Only the preference is stored, under a versioned <code>bibleguessr:</code> key. An unrecognised, corrupt or
+        Only the preference is stored, under a versioned <code>bibleguessr:</code> key. An unrecognized, corrupt or
         unreadable value falls back to following the system rather than leaving the application unstyled. Changing
         theme does not touch game, chat, setup, report or cached-file state.
       </p>
@@ -64,13 +64,13 @@
         (&ldquo;Server translation&rdquo; / &ldquo;My own Bible file&rdquo;) set the unselected tab's
         <code>color</code> to <code>var(--surface-raised)</code> &mdash; a <em>background</em> token used as a
         <em>foreground</em>. Since the pill is <code>background: transparent</code>, the label was painted in the
-        colour of the surface behind it and disappeared: white on white at <strong>1.00:1</strong> in the light
+        color of the surface behind it and disappeared: white on white at <strong>1.00:1</strong> in the light
         theme, and <strong>1.22:1</strong> in the dark theme.
       </p>
       <p>
-        The selected tab was unaffected, because its <code>.active</code> rule overrides the colour &mdash; which is
+        The selected tab was unaffected, because its <code>.active</code> rule overrides the color &mdash; which is
         why the switch looked half-broken rather than obviously wrong. The label was also still in the DOM with a
-        correct accessible name, so the a11y audit could not see it. Only a computed-colour check catches a defect
+        correct accessible name, so the a11y audit could not see it. Only a computed-color check catches a defect
         of this shape, which is what <span class="file-ref">frontend/e2e/mode-switch-contrast.spec.ts</span> does,
         in both themes and both screens.
       </p>
@@ -88,7 +88,7 @@
         too. See <span class="file-ref">docs/SCRUM/DONE/Bug.DarkThemeAccentContrast.md</span>.
       </p>
       <p>
-        The same class of defect as a hardcoded colour: the verse card set its text to <code>#1a1a1a</code> while
+        The same class of defect as a hardcoded color: the verse card set its text to <code>#1a1a1a</code> while
         its background followed the theme, so in dark mode the verse itself read at <strong>1.19:1</strong>. A few
         components likewise hardcoded reds (<code>#d33</code>, <code>#922</code>, <code>#b42318</code>) for error text,
         which fall below 4.5:1 on the dark surfaces; they now use <code>--error</code>. A hex value in a
@@ -101,8 +101,8 @@
       <p>
         <span class="file-ref">frontend/src/theme.ts</span> holds the preference, its validation and the apply logic;
         <span class="file-ref">frontend/src/components/theme-select.ts</span> is the control. Preference validation is
-        unit tested in <span class="file-ref">frontend/src/theme.test.ts</span>; default/system behaviour,
-        persistence, corrupt storage, real rendered colours inside shadow roots, keyboard operation and
+        unit tested in <span class="file-ref">frontend/src/theme.test.ts</span>; default/system behavior,
+        persistence, corrupt storage, real rendered colors inside shadow roots, keyboard operation and
         state preservation are covered by <span class="file-ref">frontend/e2e/theme.spec.ts</span>.
       </p>
     </main>

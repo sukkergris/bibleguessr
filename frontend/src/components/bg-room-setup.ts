@@ -126,7 +126,7 @@ export class RoomSetup extends LitElement {
   private activeGameIds = new Set<string>()
 
   /** Whether this player is queued for a random match. Server-driven: set
-   * by WaitingForMatch, cleared by the game starting or by cancelling, so
+   * by WaitingForMatch, cleared by the game starting or by canceling, so
    * the UI never claims to be waiting when the server disagrees. */
   @state()
   private waitingForMatch = false

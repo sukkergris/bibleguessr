@@ -13,7 +13,7 @@ describe('isSameGame', () => {
     expect(isSameGame('game-2', 'game-1')).toBe(false)
   })
 
-  // Ignoring an unrecognised message is recoverable (the server
+  // Ignoring an unrecognized message is recoverable (the server
   // re-broadcasts state next round); wrongly ending a live game is not.
   it('rejects a message when the client has no current game', () => {
     expect(isSameGame(undefined, 'game-1')).toBe(false)

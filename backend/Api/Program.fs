@@ -36,7 +36,7 @@ type AbuseReportRequest =
 /// docs/SCRUM/DONE/Feature.BugReport.md. Distinct from both
 /// ReportRequest (Bible-file upload failures, which capture the file name
 /// and loader error automatically) and AbuseReportRequest (another
-/// player's behaviour); the spec is explicit that a technical bug must
+/// player's behavior); the spec is explicit that a technical bug must
 /// not be routed through the abuse flow.
 type GeneralBugReportRequest =
     { Description: string
