@@ -40,3 +40,13 @@ Per the testing rule in `CLAUDE.md`, each guard must be proven to fire:
 Acceptance criterion 2 in `BACKLOG/Feature.CI-CD-construction.md`; "no
 dirty-tree or existing-tag guard" in `BACKLOG/Feature.BuildFrontendAndPublishToGithubRelease.md`'s
 "What remains".
+
+## Closed without implementation (2026-10-06)
+
+Superseded by D5 in `BACKLOG/Feature.BuildFrontendAndPublishToGithubRelease.md`:
+a release is started by pushing `v<release version>` by hand (see
+`docs/web/cutting-a-release`), which has shipped v0.0.2–v0.0.6. The guards
+this task wanted already exist elsewhere: git refuses to move an existing tag
+without `-f`, and the release workflow's `check-tag` job refuses a tag that
+doesn't match `scripts/ci/load-image-version.sh`. There is no `release:tag`
+task pointing at a missing file.

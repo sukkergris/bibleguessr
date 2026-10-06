@@ -37,3 +37,10 @@ automate either.
 
 Acceptance criterion 9 (D5) in `BACKLOG/Feature.CI-CD-construction.md`;
 "The backend has no version" precondition in the same document.
+
+## Closed without implementation (2026-10-06)
+
+Overtaken by the switch to integer revisions (see "Versioning" in
+`CLAUDE.md`), as this task's own note said. The backend revision is the
+`BackendRevision` literal, and `build/fsx/IncrementRevision.fsx` already reads
+and bumps it from outside the process; `/api/revision` serves it.

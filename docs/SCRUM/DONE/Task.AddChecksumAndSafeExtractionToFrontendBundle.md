@@ -46,3 +46,12 @@ Per the testing rule in `CLAUDE.md`:
 
 Acceptance criterion 4 in `BACKLOG/Feature.BuildFrontendAndPublishToGithubRelease.md`;
 its "What remains" section.
+
+## Closed without implementation (2026-10-06)
+
+GitHub already records a SHA-256 digest for every release asset (e.g.
+`bibleguessr-frontend-r17.zip` on v0.0.6 has one, via `gh release view
+--json assets`). Nothing deploys from the zip: the production nginx image
+builds the frontend from source (`build/Dockerfile.nginx`). The zip's
+layout and its `unzip -d` instruction stay documented in
+`docs/web/frontend-release`.

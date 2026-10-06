@@ -43,3 +43,10 @@ Per the testing rule in `CLAUDE.md`:
 Acceptance criterion 3 in `BACKLOG/Feature.CI-CD-construction.md`; "no
 local publish path" in `BACKLOG/Feature.BuildFrontendAndPublishToGithubRelease.md`'s
 "What remains".
+
+## Closed without implementation (2026-10-06)
+
+Superseded by D5: `release.yml` creates the draft release inline with
+`gh release create ... --draft`, and that works. The task's motivation was a
+local publish path, but releases are deliberately only cut and checked in CI,
+never rehearsed locally.

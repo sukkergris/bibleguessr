@@ -31,3 +31,14 @@ new script that reads `frontend/package.json` or `frontend/dist/index.html`
 ## Source
 
 Acceptance criterion 4 in `BACKLOG/Feature.CI-CD-construction.md`.
+
+## Closed without implementation (2026-10-06)
+
+The failure this task predicted doesn't happen. Task runs every command from
+the directory holding `Taskfile.yml` (`dir: .`), wherever it is started from:
+`task release:frontend` passed unchanged both from `frontend/` and from `/tmp`
+(`task -d /xyz release:frontend`). Only calling the script directly from
+another directory (`dotnet fsi ../build/fsx/VerifyFrontendArtifact.fsx`)
+fails, and nothing does that — the one caller is `task release:bundle` in
+`release.yml`. The "prerequisite" argument went with D5: `AddGitTag.fsx` was
+never going to be written.
