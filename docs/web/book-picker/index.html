@@ -76,6 +76,15 @@
           option), so it also works when a Chapters game allows only, say, chapters 3 and 7.
         </li>
         <li>
+          A tap anywhere on a slider picks the position under the finger. iPhone Safari moves a native slider only
+          when a drag starts exactly on its thumb, and every thumb starts at the far left. That left Chapters games
+          (and Books games with one book), where chapter and verse are all there is to pick, unplayable on an
+          iPhone. So when a press ends and the browser has not moved the slider itself, the guess form picks the
+          position at the point where the press ended (<code>_onSliderPointerUp</code>, with the pure
+          <code>positionAtPoint</code> in <span class="file-ref">frontend/src/shared-ui/slider-position.ts</span>).
+          Browsers that already move the slider on a tap are left alone.
+        </li>
+        <li>
           The Guess button shares the bottom line with the report buttons fixed in the screen's corners: it is inset
           by <code>--corner-controls-inline-clearance</code> (see <span class="file-ref">frontend/src/index.css</span>)
           so they never cover it.
@@ -147,6 +156,10 @@
           usable width.
         </li>
         <li>
+          No slider needs dragging (WCAG 2.2 SC 2.5.7 Dragging Movements): a single tap picks a position in every
+          browser, iPhone Safari included.
+        </li>
+        <li>
           The summary is deliberately not a live region: each tile and slider already announces its own new value, so
           announcing the summary too would say everything twice.
         </li>
@@ -177,6 +190,12 @@
         Grouping is unit tested in <span class="file-ref">frontend/src/shared-ui/book-picker.test.ts</span>.
         The grids' behavior (grouping, tiles and book slider in sync, chapter/verse scoping and resets, stacking order, the pinned bar, keyboard operation) is covered
         by <span class="file-ref">frontend/e2e/book-picker.spec.ts</span>.
+      </p>
+      <p>
+        Tapping a slider is covered by <span class="file-ref">frontend/e2e/slider-tap.spec.ts</span>. Playwright has
+        no iPhone Safari, so it delivers the tap the way that browser leaves it to the page: pointer events the
+        browser itself does not act on. The position math is unit tested in
+        <span class="file-ref">frontend/src/shared-ui/slider-position.test.ts</span>.
       </p>
     </main>
   </body>

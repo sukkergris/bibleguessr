@@ -4,6 +4,7 @@ import type { Guess, VerseSource } from '../shared-kernel/bible'
 import { ANY_BOOK, type GuessConstraint } from '../shared-kernel/guess-constraint'
 import { layoutBooks, type BookCategoryGroup, type BookLayout } from './book-picker'
 import { buttonStyles } from './button-styles'
+import { positionAtPoint } from './slider-position'
 
 const BOOK_FIELD = 'bg-book-guess'
 const CHAPTER_FIELD = 'bg-chapter-guess'
@@ -12,6 +13,24 @@ const VERSE_FIELD = 'bg-verse-guess'
 /** The slider position that picks nothing: no book yet, or "any"
  * chapter/verse (those two are optional). */
 const NONE_POSITION = 0
+
+/** Browsers don't expose the size of a native slider's thumb; this is
+ * close to the common one. It only matters for the tap fallback (see
+ * _onSliderPointerUp), and only shifts a tap near either end by a few
+ * pixels. */
+const ESTIMATED_THUMB_WIDTH_PX = 16
+
+/** PointerEvent.button for a touch, a pen tip or the main mouse button. */
+const MAIN_BUTTON = 0
+
+/** A press on a slider that hasn't been let go yet — see
+ * _onSliderPointerUp. */
+interface SliderPress {
+  pointerId: number
+  /** The slider's value when pressed, to tell whether the browser moved
+   * the slider itself. */
+  valueAtPress: string
+}
 
 /** One slider in the guess bar: the book, the chapter or the verse. */
 interface SliderSpec<T> {
@@ -133,6 +152,9 @@ export class GuessForm extends LitElement {
   // Set when the book slider picks a book, so updated() can bring that
   // book's tile into view in the grid — the two controls show one choice.
   private revealBookTile = false
+
+  // Each slider's press in progress, if any — see _onSliderPointerUp.
+  private sliderPresses = new WeakMap<HTMLInputElement, SliderPress>()
 
   connectedCallback() {
     super.connectedCallback()
@@ -415,6 +437,8 @@ export class GuessForm extends LitElement {
     const valueText = spec.selected === undefined ? spec.noneValueText : spec.valueText(spec.selected)
     const hintId = `${spec.name}-hint`
     const disabled = this.disabled || !!spec.waitingFor
+    const selectPosition = (next: number) =>
+      spec.onSelect(next === NONE_POSITION ? undefined : spec.options[next - 1])
 
     return html`
       <div class="slider-row">
@@ -431,16 +455,47 @@ export class GuessForm extends LitElement {
           aria-valuetext=${valueText}
           aria-describedby=${spec.waitingFor ? hintId : nothing}
           ?disabled=${disabled}
-          @input=${(event: Event) => {
-            const next = Number((event.target as HTMLInputElement).value)
-            spec.onSelect(next === NONE_POSITION ? undefined : spec.options[next - 1])
-          }}
+          @input=${(event: Event) => selectPosition(Number((event.target as HTMLInputElement).value))}
           @keydown=${this._onSelectFieldKeydown}
+          @pointerdown=${this._onSliderPointerDown}
+          @pointerup=${(event: PointerEvent) => this._onSliderPointerUp(event, spec.options.length, selectPosition)}
+          @pointercancel=${this._onSliderPointerCancel}
         />
         ${spec.waitingFor ? html`<p id=${hintId} class="picker-hint">${spec.waitingFor}</p>` : null}
         </div>
       </div>
     `
+  }
+
+  // iPhone Safari moves a range slider only when a drag starts on its
+  // thumb: a tap anywhere else on the track leaves it where it is. Every
+  // slider starts at the far left, so there a chapter or verse seemed
+  // impossible to pick. So when a press ends without the browser having
+  // moved the slider itself, the point where it ended picks the position.
+  // Browsers that do move the slider for a tap are left alone. This also
+  // means a slider never needs dragging (WCAG 2.2 SC 2.5.7).
+  private _onSliderPointerDown(event: PointerEvent) {
+    if (!event.isPrimary || event.button !== MAIN_BUTTON) return
+    const input = event.currentTarget as HTMLInputElement
+    this.sliderPresses.set(input, { pointerId: event.pointerId, valueAtPress: input.value })
+  }
+
+  private _onSliderPointerUp(event: PointerEvent, maxPosition: number, selectPosition: (position: number) => void) {
+    const input = event.currentTarget as HTMLInputElement
+    const press = this.sliderPresses.get(input)
+    this.sliderPresses.delete(input)
+    if (!press || press.pointerId !== event.pointerId) return
+    if (input.disabled || input.value !== press.valueAtPress) return
+
+    const box = input.getBoundingClientRect()
+    const slider = { left: box.left, width: box.width, thumbWidth: ESTIMATED_THUMB_WIDTH_PX }
+    const position = positionAtPoint(event.clientX, slider, maxPosition)
+    if (String(position) !== input.value) selectPosition(position)
+  }
+
+  // The browser took the press over, e.g. to scroll the page — not a tap.
+  private _onSliderPointerCancel(event: PointerEvent) {
+    this.sliderPresses.delete(event.currentTarget as HTMLInputElement)
   }
 
   private _selectBook(book: string) {
