@@ -39,12 +39,10 @@ rule in `CLAUDE.md` forbids. That is out of scope.
 
 ### Remember the last choice
 
-- Remember the player's last Bible choice: either a server translation or a
-  cached file. Store the cached file's fingerprint, never verse text.
-- Preselect that choice on every setup screen, so a returning player can
-  start right away.
-- If the remembered file is no longer in the cache, fall back to today's
-  default without an error.
+Covered by
+[Feature.RememberBibleChoiceAcrossGameTypes.md](Feature.RememberBibleChoiceAcrossGameTypes.md).
+That feature remembers the Bible choice, including an uploaded file, across
+every game type and every visit.
 
 ### Keep the original file
 
@@ -118,7 +116,8 @@ file to re-parse. Shipping this together with the fix for
 ## Acceptance criteria
 
 - [ ] A returning player finds their last-used Bible file preselected on the
-      singleplayer, multiplayer and daily quiz setup screens.
+      singleplayer, multiplayer and daily quiz setup screens. This is
+      delivered by `Feature.RememberBibleChoiceAcrossGameTypes.md`.
 - [ ] After a `PARSER_VERSION` bump, a cached file is re-parsed from the
       stored file without asking the player to upload it again.
 - [ ] Entries from before this feature are shown as needing one more upload.
