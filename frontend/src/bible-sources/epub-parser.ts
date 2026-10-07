@@ -53,8 +53,17 @@ const footnoteRefRegex = /<span id="footnotesource\d+"><\/span><a epub:type="not
 
 const stripTagsRegex = /<[^>]+>/g
 
+// Where a line or paragraph ends inside a verse — poetry, or a verse that
+// runs over several paragraphs. Often nothing separates the two lines in
+// the source (`</p><p …>`), so the break itself has to become the space
+// between their words. Every other tag is inline (spans, emphasis, the
+// verse-number label) and stands for nothing: a word with formatting in
+// the middle stays one word. See docs/SCRUM/BUGS/Bug.VerseTextMissingSpaces.md.
+const lineBreakTagRegex = /<\/p\s*>|<br\b[^>]*>/gi
+const LINE_BREAK_TEXT = ' '
+
 function stripTags(html: string): string {
-  return html.replace(stripTagsRegex, '')
+  return html.replace(lineBreakTagRegex, LINE_BREAK_TEXT).replace(stripTagsRegex, '')
 }
 
 // EPUB's package metadata file (OEBPS/content.opf is the JW Library export's

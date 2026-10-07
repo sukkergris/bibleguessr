@@ -65,8 +65,21 @@ function decodeUnicodeEscapes(text: string): string {
 // around them — what's left is the plain text content.
 const controlWordRegex = /\\[a-zA-Z]+-?\d*[ ]?/g
 
+// Where a line or paragraph ends inside a verse (\par, \line) — poetry, or
+// a verse that runs over several paragraphs. Nothing else separates the
+// two lines' words, so the break itself has to become the space between
+// them, before controlWordRegex removes it without a trace. Whole control
+// words only: \pard resets paragraph formatting and is no break. Character
+// formatting stands for nothing, so a word formatted in the middle stays
+// one word. See docs/SCRUM/BUGS/Bug.VerseTextMissingSpaces.md.
+const lineBreakControlWordRegex = /\\(?:par|line)(?![a-zA-Z])/g
+const LINE_BREAK_TEXT = ' '
+
 function stripControlWords(text: string): string {
-  return text.replace(controlWordRegex, '').replace(/[{}]/g, '')
+  return text
+    .replace(lineBreakControlWordRegex, LINE_BREAK_TEXT)
+    .replace(controlWordRegex, '')
+    .replace(/[{}]/g, '')
 }
 
 function collapseWhitespace(text: string): string {

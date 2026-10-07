@@ -1,6 +1,6 @@
 import { zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
-import { parseRtfZip } from './rtf-parser'
+import { parseBookEntry, parseRtfZip } from './rtf-parser'
 
 function makeBookRtf(bookName: string, chapterCount: number): string {
   // Minimal shape matching rtf-parser.ts's regexes — just enough to
@@ -61,5 +61,33 @@ describe('parseRtfZip', () => {
 
     expect(verses.filter((v) => v.book === 'Genesis')).toHaveLength(4) // 2 chapters x 2 verses
     expect(verses.filter((v) => v.book === 'Revelation')).toHaveLength(2) // 1 chapter x 2 verses
+  })
+})
+
+// See docs/SCRUM/BUGS/Bug.VerseTextMissingSpaces.md. Placeholder text only —
+// never real text from an uploaded translation (see NOTICE.md).
+describe('parseBookEntry verse text', () => {
+  /** A one-chapter book with a single verse whose body is `body`. */
+  function verseText(body: string): string {
+    const rtf = String.raw`{\rtf1{\f0\fs36\cf1\b Book\par}{\f1\cf1 1}{\f2\cf1 ` + body + '}}'
+    return parseBookEntry(rtf, 'Test Translation')[0].text
+  }
+
+  it('shows a paragraph break inside a verse as one space', () => {
+    expect(verseText(String.raw`end of first paragraph.\par}{\rtlch\f2\cf1 Next paragraph`)).toBe(
+      'end of first paragraph. Next paragraph',
+    )
+  })
+
+  it('shows a line break inside a verse as one space', () => {
+    expect(verseText(String.raw`first line\line second line`)).toBe('first line second line')
+  })
+
+  it('adds no space for character formatting inside a word or before punctuation', () => {
+    expect(verseText(String.raw`one wo}{\f2\cf1\i rd}{\f2\cf1 , then more.`)).toBe('one word, then more.')
+  })
+
+  it('adds no space for a paragraph formatting reset, which is not a break', () => {
+    expect(verseText(String.raw`one wo}{\pard\f2\cf1 rd`)).toBe('one word')
   })
 })

@@ -36,7 +36,11 @@
             <strong>not</strong> the rendered verse-number label, because verse 1 of a chapter renders the
             <em>chapter</em> number as a drop cap, not "1". The marker id is the only reliable source.
           </li>
-          <li>Strips the rendered number label and inline footnote markers, decodes HTML entities, collapses whitespace.</li>
+          <li>
+            Strips the rendered number label and inline footnote markers, turns line and paragraph breaks
+            (<code>&lt;/p&gt;</code>, <code>&lt;br&gt;</code>) into a space, drops every other tag, decodes HTML
+            entities, collapses whitespace.
+          </li>
           <li>
             Processes chapter files in batches of 50, yielding to the main thread between batches
             (<code>requestIdleCallback</code>, falling back to <code>setTimeout</code>) so a multi-MB file doesn't
@@ -62,7 +66,10 @@
             just expressed through RTF fonts instead of HTML.
           </li>
           <li>Single-chapter books (Obadiah, Philemon) have no chapter heading; all their verses default to chapter 1.</li>
-          <li>Handles <code>\uNNNN?</code> Unicode escapes and strips RTF control words.</li>
+          <li>
+            Handles <code>\uNNNN?</code> Unicode escapes, turns line and paragraph breaks (<code>\par</code>,
+            <code>\line</code>) into a space, and strips every other RTF control word.
+          </li>
           <li>Processes in batches of 5 books (smaller than EPUB's 50 — each RTF book file is much larger than one EPUB chapter fragment).</li>
         </ul>
         <div class="callout limitation">
@@ -73,6 +80,18 @@
             inherited from the export — and is documented in the file rather than worked around.
           </p>
         </div>
+      </div>
+
+      <div class="callout">
+        <span class="callout-title">Line breaks inside a verse are one space</span>
+        <p>
+          Poetry, and verses that run over several paragraphs, are split over several paragraphs in both formats,
+          often with nothing between the last word of one line and the first word of the next. Both parsers turn
+          each such break into a space, and only those breaks: inline markup (spans, emphasis, RTF character
+          formatting) stands for nothing, so a word formatted in the middle stays one word and no space appears
+          before punctuation. Before <code>PARSER_VERSION</code> 2 the breaks were dropped, gluing the words together
+          in about one verse in five.
+        </p>
       </div>
 
       <p>Both parsers share a comment convention: bump <code>PARSER_VERSION</code> in <span class="file-ref">verse-cache.ts</span> if their regexes ever change, so stale cached parses get invalidated automatically.</p>
@@ -131,10 +150,16 @@
           <code>createLocalVerseSource</code>'s filtering/sorting/dedup behavior.
         </li>
         <li>
-          <strong>Coverage gap:</strong> there are no dedicated unit tests for
-          <span class="file-ref">epub-parser.ts</span>, <span class="file-ref">rtf-parser.ts</span>, or
-          <span class="file-ref">verse-cache.ts</span> despite their parsing complexity — worth adding if you're
-          touching those files.
+          <span class="file-ref">frontend/src/bible-sources/epub-parser.test.ts</span> and
+          <span class="file-ref">rtf-parser.test.ts</span> cover verse text (a line or paragraph break is one space,
+          inline markup adds none); <span class="file-ref">rtf-parser.test.ts</span> also covers book order.
+          <span class="file-ref">verse-cache.test.ts</span> covers the file names shown for cached files. Fixtures use
+          placeholder text only, never text from a real export (see <span class="file-ref">NOTICE.md</span>).
+        </li>
+        <li>
+          <strong>Coverage gap:</strong> chapter and verse boundary detection is only lightly covered, and the
+          IndexedDB side of <span class="file-ref">verse-cache.ts</span> not at all — worth adding if you're touching
+          those parts.
         </li>
         <li>Manual: upload a real EPUB/RTF export, confirm the parsed book/chapter/verse counts look right and the translation name displays sensibly, then reload the page and confirm it appears in the cached-file list without re-parsing.</li>
       </ul>

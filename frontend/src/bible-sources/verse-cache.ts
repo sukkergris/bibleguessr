@@ -16,7 +16,9 @@ import type { Verse } from '../shared-kernel/bible'
 // Bump whenever epub-parser.ts's or rtf-parser.ts's parsing logic changes,
 // so entries parsed with older, possibly-different logic are detected and
 // dropped rather than silently served.
-const PARSER_VERSION = 1
+// 2: line and paragraph breaks inside a verse became a space (they used to
+// glue the words on either side together).
+const PARSER_VERSION = 2
 
 const DB_NAME = 'bibleguessr'
 const STORE_NAME = 'local-bible-cache'

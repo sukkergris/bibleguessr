@@ -67,28 +67,10 @@ bug easy to miss when testing with Danish files.
 
 ## Cause 2: Typos in the bundled server text (bibelen-dk)
 
-The server translation's loader (`backend/Api/BibelenDkLoader.fs`) is not at
-fault. Its `<pre>` blocks have no paragraph markup inside verses, and newlines
-already become spaces. But the source text itself has spaces missing in a few
-hundred places. The same typos are in the original archive
-(`bibles/bibelen-dk/archive/Bibelen hela.txt`), so they come from the
-digitization, not from our processing:
-
-- Genesis 1:26: `alt Kryb,der kryber` (the same phrase is spelled
-  `Kryb, der` elsewhere)
-- Genesis 4:1: `Eva,og hun blev`
-- First Kings 5:6: `dineFolk den Løn`
-- Second Kings 5:5: `etBrevmed` (should be `et Brev med`)
-
-A heuristic scan found about 200 "punctuation directly followed by a letter"
-cases in 194 verses and about 40 "lowercase directly followed by uppercase"
-cases in 37 verses. A few of these may be other typos (e.g. `IsraeLs`) rather
-than missing spaces.
-
-Fixing this means either correcting the source data or adding a narrowly
-scoped normalization in the loader. Either way it changes the bundled text, so
-it is a separate decision from cause 1. It can be split into its own bug if
-preferred.
+The bundled server text has spaces missing in a few hundred places (e.g.
+`etBrevmed` in Second Kings 5:5). The typos come from the digitization, not
+from our processing. Split into its own bug, with the decision recorded:
+`docs/SCRUM/BUGS/Bug.BibelenDkSourceTypos.md`.
 
 ## Expected behavior
 
@@ -128,16 +110,41 @@ counted in the table. It added no new "space before punctuation" cases.
 - As `CLAUDE.md` requires, confirm that each new test fails against the
   current parser before the fix, and passes after it.
 
+## Resolution
+
+Cause 1 is fixed as proposed above:
+
+- `epub-parser.ts`: `</p>` and `<br>` become a space before the other tags
+  are stripped.
+- `rtf-parser.ts`: `\par` and `\line` become a space before the other
+  control words are stripped. Only whole control words match, so `\pard` (a
+  paragraph formatting reset) adds nothing.
+- `PARSER_VERSION` is now 2.
+
+Regression tests are in `epub-parser.test.ts` (new, with a small `document`
+shim) and `rtf-parser.test.ts`. They use placeholder text only. Both "break
+becomes a space" tests in each file failed against the old parsers and pass
+now. The "inline markup adds no space" tests pass both before and after, and
+guard against overcorrecting.
+
+A check against the four local test files in `docs/jw.org/` (comparing old and
+new output, printing only counts) gave exactly the numbers in the table above:
+6,331, 6,285, 6,323 and 7,582 verses changed. In every changed verse only
+spaces were added, no verse got a new space before punctuation, and verse
+counts are unchanged.
+
+Cause 2 is split into `docs/SCRUM/BUGS/Bug.BibelenDkSourceTypos.md`.
+
 ## Acceptance criteria
 
-- [ ] Verses split over several paragraphs in an EPUB upload show a space
+- [x] Verses split over several paragraphs in an EPUB upload show a space
       between the lines.
-- [ ] Verses split over several paragraphs in an RTF upload show a space
+- [x] Verses split over several paragraphs in an RTF upload show a space
       between the lines.
-- [ ] Inline markup does not add a space inside words or before punctuation.
-- [ ] `PARSER_VERSION` is bumped, so old cached parses are not used.
-- [ ] Regression tests for both parsers fail without the fix and pass with
+- [x] Inline markup does not add a space inside words or before punctuation.
+- [x] `PARSER_VERSION` is bumped, so old cached parses are not used.
+- [x] Regression tests for both parsers fail without the fix and pass with
       it.
-- [ ] Cause 2 (bibelen-dk source typos) is either fixed or split into its own
+- [x] Cause 2 (bibelen-dk source typos) is either fixed or split into its own
       bug with a decision recorded.
-- [ ] Frontend `revision` is incremented when the fix ships.
+- [x] Frontend `revision` is incremented when the fix ships.
