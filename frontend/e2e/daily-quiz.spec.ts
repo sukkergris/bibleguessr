@@ -202,8 +202,8 @@ test('the quiz can be played from the player’s own Bible file', async ({ page 
 })
 
 // The picker's long translation names must not widen the page at phone
-// width — here, on the multiplayer screen (the same picker) and in
-// singleplayer setup (its own copy of the dropdown).
+// width — here, on the multiplayer screen and in singleplayer setup (the
+// same picker on every screen).
 test('the Bible pickers fit a phone screen without sideways scrolling', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 700 })
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -217,7 +217,7 @@ test('the Bible pickers fit a phone screen without sideways scrolling', async ({
   await expect(page.locator('bg-translation-source-select select')).toBeVisible()
   expect(await overflow()).toBeLessThanOrEqual(0)
 
-  // Singleplayer setup has its own copy of the same dropdown.
+  // Singleplayer setup hosts the same picker.
   await page.goto('/')
   await page.getByRole('button', { name: 'The Bible' }).first().click()
   await expect(page.locator('bg-game-setup select')).not.toHaveValue('')

@@ -40,7 +40,7 @@ rule in `CLAUDE.md` forbids. That is out of scope.
 ### Remember the last choice
 
 Covered by
-[Feature.RememberBibleChoiceAcrossGameTypes.md](Feature.RememberBibleChoiceAcrossGameTypes.md).
+[Feature.RememberBibleChoiceAcrossGameTypes.md](../DONE/Feature.RememberBibleChoiceAcrossGameTypes.md).
 That feature remembers the Bible choice, including an uploaded file, across
 every game type and every visit.
 
@@ -115,7 +115,7 @@ file to re-parse. Shipping this together with the fix for
 
 ## Acceptance criteria
 
-- [ ] A returning player finds their last-used Bible file preselected on the
+- [x] A returning player finds their last-used Bible file preselected on the
       singleplayer, multiplayer and daily quiz setup screens. This is
       delivered by `Feature.RememberBibleChoiceAcrossGameTypes.md`.
 - [ ] After a `PARSER_VERSION` bump, a cached file is re-parsed from the

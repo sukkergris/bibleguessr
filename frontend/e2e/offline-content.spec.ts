@@ -27,7 +27,7 @@ test('uploading and playing a local file works with the backend fully unreachabl
 
   // The setup screen defaults to "Server translation" mode, so the
   // backend-down error is expected here — switching to file mode is what
-  // must make it disappear (see game-setup.ts's mode-scoped error banner).
+  // must make it disappear (see translation-source-select.ts's mode-scoped error banner).
   await page.getByRole('tab', { name: 'My own Bible file' }).click()
   await expect(page.locator('bg-game-setup .error')).toHaveCount(0)
 

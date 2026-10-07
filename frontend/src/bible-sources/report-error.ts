@@ -7,7 +7,7 @@ type Status = 'collapsed' | 'expanded' | 'sending' | 'sent' | 'failed'
 
 /**
  * "Report this issue" — shown alongside a Bible-file upload error (see
- * game-setup.ts's FileState 'error' variant and
+ * translation-source-select.ts's FileState 'error' variant and
  * docs/SCRUM/Feature.ErrorMessageBibleLoader.md). Collapsed to a single
  * link by default; expanding it reveals a short description field and a
  * submit button. The error message and file name that triggered this are

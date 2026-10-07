@@ -56,6 +56,10 @@ test('"Books" restricts to only the checked books', async ({ page }) => {
   // getRandomVerse, not just the UI state at setup time.
   for (let round = 1; round <= 3; round++) {
     const daniel = page.locator('bg-guess-form').getByRole('radio', { name: 'Daniel' })
+    // The lone book is already checked, so check() returns at once — wait
+    // for the round's verse to load (the form is disabled until then), or
+    // the Enter below is lost.
+    await expect(daniel).toBeEnabled()
     await daniel.check()
     await daniel.press('Enter')
     await expect(page.locator('.feedback')).toContainText('Daniel')

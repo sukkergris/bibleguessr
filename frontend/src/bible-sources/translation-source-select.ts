@@ -1,20 +1,33 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { createLocalVerseSource } from './local-verses'
-import { deleteCacheEntry, fingerprintFile, listCache, writeCache, type CachedBible } from './verse-cache'
+import {
+  deleteCacheEntry,
+  fileNameFromFingerprint,
+  fingerprintFile,
+  listCache,
+  writeCache,
+  type CachedBible,
+} from './verse-cache'
+import {
+  fileToRestore,
+  loadBibleChoice,
+  saveBibleChoice,
+  translationToPreselect,
+  type BibleChoice,
+} from './bible-choice-storage'
 import type { VerseSource } from '../shared-kernel/bible'
 import type { SubmitBibleFileReport } from './server-access'
 import './report-error'
 import { buttonStyles } from '../shared-ui/button-styles'
 
-/** What the player has picked: a server translation name, or a
- * client-parsed/cached local file with its own VerseSource — see
- * game-setup.ts's GameOptions, which this mirrors the shape of (minus
- * roundCount/restriction, which are scope-specific to a singleplayer
- * game and don't apply to a translation choice on its own). */
+/** What the player has picked: a server translation, or a
+ * client-parsed/cached local file with its own VerseSource. `bible` says
+ * which, in the form that is remembered — see bible-choice-storage.ts. */
 export interface TranslationChoice {
   translation: string
   verseSource: VerseSource
+  bible: BibleChoice
 }
 
 type Mode = 'server' | 'file'
@@ -23,20 +36,33 @@ type FileState =
   | { status: 'idle' }
   | { status: 'picking' }
   | { status: 'parsing'; fileName: string; processed: number; total: number }
-  | { status: 'ready'; fileName: string; translation: string; verseSource: VerseSource }
+  | {
+      status: 'ready'
+      fileName: string
+      fingerprint: string
+      translation: string
+      verseSource: VerseSource
+      /** Whether the player picked the file just now or it was the
+       * remembered one — only announced differently. */
+      origin: 'chosen' | 'restored'
+    }
   | { status: 'error'; message: string; fileName?: string }
 
+/** Restoring the remembered Bible happens as the translation list and the
+ * file cache arrive — and is abandoned the moment the player makes a
+ * choice of their own, so a late answer never overrides it. */
+type Restore = 'pending' | 'done'
+
 /**
- * The "server translation" vs. "my own Bible file" picker — extracted from
- * game-setup.ts (which still owns it for singleplayer) so it can also be
- * used standalone wherever a player needs to pick a translation without
- * the rest of game-setup.ts's round-count/book-chapter-scope machinery —
- * see bg-room-setup.ts's pre-name multiplayer screen, where each player
- * picks their own translation before choosing a name (see
- * docs/SCRUM/Feature.RequestToStartMPGame.md's per-player-translation
- * note). Any drift between this and game-setup.ts's copy of the same
- * dropdown/drop-zone/caching UI should be fixed in both places until
- * game-setup.ts itself is migrated to use this component directly.
+ * The one Bible picker — "Server translation" or "My own Bible file" — used
+ * by every setup screen: singleplayer (game-setup.ts), multiplayer
+ * (bg-room-setup.ts) and the daily quiz. Each player picks their own Bible;
+ * other players don't need to match (see
+ * docs/SCRUM/Feature.RequestToStartMPGame.md's per-player-translation note).
+ *
+ * Starts on the remembered Bible (see bible-choice-storage.ts and
+ * docs/web/remembered-bible): one choice shared by every screen and kept
+ * across visits. Whatever the player picks here becomes that choice.
  *
  * Fires `translation-changed` CustomEvent<TranslationChoice | undefined>
  * whenever the resolved choice changes (undefined while nothing valid is
@@ -53,8 +79,18 @@ export class TranslationSourceSelect extends LitElement {
   @property({ attribute: false })
   submitBibleFileReport?: SubmitBibleFileReport
 
+  private remembered = loadBibleChoice()
+
+  private restore: Restore = 'pending'
+
+  // The remembered file is looked for on the first cache read only; later
+  // reads (after an upload or a removal) must not bring it back.
+  private rememberedFileLookedFor = false
+
+  // A remembered file opens in file mode straight away, so its tab doesn't
+  // flip over once the (local, quick) cache has been read.
   @state()
-  private mode: Mode = 'server'
+  private mode: Mode = this.remembered?.kind === 'file' ? 'file' : 'server'
 
   @state()
   private translations: string[] = []
@@ -86,15 +122,21 @@ export class TranslationSourceSelect extends LitElement {
     if (changed.has('serverSource') && this.serverSource) void this._loadTranslations()
   }
 
+  // Never gated on mode: a player who only ever uses their own file must be
+  // able to play with the server unreachable (see
+  // docs/SCRUM/Feature.OflineContentGaminig.md). The error is only shown in
+  // server mode, and a remembered server translation stays chosen even
+  // then — the picker never switches to a file on the player's behalf.
   private async _loadTranslations() {
     if (!this.serverSource) return
     try {
       this.translations = await this.serverSource.getTranslations()
       this.error = undefined
-      if (this.translations.length > 0) {
-        this.selectedTranslation = this.translations[0]
-        this._emitChange()
+      if (!this.selectedTranslation || !this.translations.includes(this.selectedTranslation)) {
+        this.selectedTranslation =
+          translationToPreselect(this.restore === 'pending' ? this.remembered : undefined, this.translations) ?? ''
       }
+      if (this.mode === 'server') this._emitChange()
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load translations.'
     }
@@ -102,16 +144,57 @@ export class TranslationSourceSelect extends LitElement {
 
   private _refreshCache() {
     listCache()
-      .then((cached) => (this.cachedFiles = cached))
-      .catch((err) => console.error('[translation-source-select] failed to read verse cache', err))
+      .then((cached) => {
+        this.cachedFiles = cached
+        this._restoreRememberedFile()
+      })
+      .catch((err) => {
+        console.error('[translation-source-select] failed to read verse cache', err)
+        this._restoreRememberedFile()
+      })
   }
 
+  // Runs once, on the first cache read. A remembered file that's gone
+  // (removed, or cached by an older parser) falls back to the server
+  // translation, just as if nothing had been remembered.
+  private _restoreRememberedFile() {
+    if (this.rememberedFileLookedFor) return
+    this.rememberedFileLookedFor = true
+    if (this.restore === 'done') return
+
+    const fingerprint = fileToRestore(
+      this.remembered,
+      this.cachedFiles.map((cached) => cached.fingerprint),
+    )
+    const cached = this.cachedFiles.find((entry) => entry.fingerprint === fingerprint)
+    if (cached) {
+      this._useCached(cached, 'restored')
+    } else if (this.mode === 'file') {
+      this.mode = 'server'
+      this._emitChange()
+    }
+  }
+
+  // Switches to "Server translation" mode, and retries loading the
+  // translation list if it failed — the server may be back by now.
   private _onSelectServerMode = () => {
+    this.restore = 'done'
     this.mode = 'server'
     if (this.translations.length === 0) {
       void this._loadTranslations()
     }
+    this._rememberServerTranslation()
     this._emitChange()
+  }
+
+  private _onSelectFileMode = () => {
+    this.restore = 'done'
+    this.mode = 'file'
+    this._emitChange()
+  }
+
+  private _rememberServerTranslation() {
+    if (this.selectedTranslation) saveBibleChoice({ kind: 'server', translation: this.selectedTranslation })
   }
 
   render() {
@@ -134,16 +217,14 @@ export class TranslationSourceSelect extends LitElement {
             role="tab"
             aria-selected=${this.mode === 'file'}
             class=${this.mode === 'file' ? 'active' : ''}
-            @click=${() => {
-              this.mode = 'file'
-              this._emitChange()
-            }}
+            @click=${this._onSelectFileMode}
           >
             My own Bible file
           </button>
         </div>
 
         ${this.mode === 'server' ? this._renderServerMode() : this._renderFileMode()}
+        ${this._renderFileStatusAnnouncement()}
       </div>
     `
   }
@@ -155,7 +236,9 @@ export class TranslationSourceSelect extends LitElement {
         <select
           .value=${this.selectedTranslation}
           @change=${(e: Event) => {
+            this.restore = 'done'
             this.selectedTranslation = (e.target as HTMLSelectElement).value
+            this._rememberServerTranslation()
             this._emitChange()
           }}
           ?disabled=${this.translations.length === 0}
@@ -167,6 +250,47 @@ export class TranslationSourceSelect extends LitElement {
         </select>
       </label>
     `
+  }
+
+  /** A single live region carrying the file's current state, so a
+   * screen-reader user is told what happened when a file is chosen,
+   * parsed, restored from last time, becomes ready, or fails. The visible
+   * markup conveys the same thing to sighted users, but only visually.
+   *
+   * Deliberately one region derived from `fileState` rather than
+   * announcements scattered through the visible markup: that keeps each
+   * transition announced exactly once, and never mid-parse on every
+   * progress tick (see the "status announcements must not be duplicated"
+   * requirement in docs/SCRUM/TODO/Feature.Accessibility.md).
+   *
+   * Only rendered in file mode — there is nothing to announce otherwise. A
+   * restored server translation is announced by nothing at all: the select
+   * itself shows and exposes it. */
+  private _renderFileStatusAnnouncement() {
+    if (this.mode !== 'file') return null
+
+    const message = (() => {
+      switch (this.fileState.status) {
+        case 'idle':
+          return ''
+        case 'picking':
+          return 'Reading the selected file…'
+        case 'parsing':
+          // Deliberately no progress numbers: this would otherwise
+          // re-announce on every chapter parsed.
+          return `Parsing ${this.fileState.fileName}…`
+        case 'ready':
+          return this.fileState.origin === 'restored'
+            ? `Using ${this.fileState.fileName} from last time.`
+            : `${this.fileState.fileName} is ready to play.`
+        case 'error':
+          return this.fileState.fileName
+            ? `${this.fileState.fileName} could not be used. ${this.fileState.message}`
+            : this.fileState.message
+      }
+    })()
+
+    return html`<p class="visually-hidden" role="status">${message}</p>`
   }
 
   private _renderFileMode() {
@@ -224,8 +348,14 @@ export class TranslationSourceSelect extends LitElement {
         @dragleave=${() => (this.dragOver = false)}
         @drop=${this._onDrop}
       >
-        <input type="file" accept=".epub,.zip" @change=${this._onFileInputChange} />
-        <span>Drop a .epub or .zip (RTF export) Bible file here, or click to choose one</span>
+        <input
+          type="file"
+          accept=".epub,.zip"
+          aria-label="Choose a Bible file"
+          aria-describedby="file-picker-hint"
+          @change=${this._onFileInputChange}
+        />
+        <span id="file-picker-hint">Drop a .epub or .zip (RTF export) Bible file here, or click to choose one</span>
       </label>
     `
   }
@@ -238,17 +368,17 @@ export class TranslationSourceSelect extends LitElement {
           ${this.cachedFiles.map(
             (cached) => html`
               <li>
-                <button type="button" class="cached-entry" @click=${() => this._useCached(cached)}>
+                <button type="button" class="cached-entry" @click=${() => this._useCached(cached, 'chosen')}>
                   <strong>${cached.translation}</strong>
                   <span class="cached-entry-detail"
-                    >${cached.fingerprint.split(':')[0]} · ${cached.verses.length} verses</span
+                    >${fileNameFromFingerprint(cached.fingerprint)} · ${cached.verses.length} verses</span
                   >
                 </button>
                 <button
                   type="button"
                   class="cached-remove"
                   title="Remove this cached file"
-                  aria-label="Remove ${cached.fingerprint.split(':')[0]} from cache"
+                  aria-label="Remove ${fileNameFromFingerprint(cached.fingerprint)} from cache"
                   @click=${() => this._removeCached(cached)}
                 >
                   ✕
@@ -271,13 +401,18 @@ export class TranslationSourceSelect extends LitElement {
     `
   }
 
-  private _useCached(cached: CachedBible) {
+  private _useCached(cached: CachedBible, origin: 'chosen' | 'restored') {
+    this.restore = 'done'
+    this.mode = 'file'
     this.fileState = {
       status: 'ready',
-      fileName: cached.fingerprint.split(':')[0],
+      fileName: fileNameFromFingerprint(cached.fingerprint),
+      fingerprint: cached.fingerprint,
       translation: cached.translation,
       verseSource: createLocalVerseSource(cached.verses),
+      origin,
     }
+    if (origin === 'chosen') saveBibleChoice({ kind: 'file', fingerprint: cached.fingerprint })
     this._emitChange()
   }
 
@@ -300,6 +435,7 @@ export class TranslationSourceSelect extends LitElement {
   }
 
   private async _loadFile(file: File) {
+    this.restore = 'done'
     const lowerName = file.name.toLowerCase()
     const isEpub = lowerName.endsWith('.epub')
     const isRtfZip = lowerName.endsWith('.zip')
@@ -313,6 +449,12 @@ export class TranslationSourceSelect extends LitElement {
       return
     }
 
+    // Downloaded exports are frequently all named the same generic thing
+    // (e.g. every JW Library EPUB export is "Bible NWT.epub" regardless of
+    // language) — the filename alone can't tell two cached translations
+    // apart. EPUBs carry a real title/language in their own metadata; use
+    // that when available and fall back to the filename otherwise (RTF
+    // exports have no equivalent metadata file to read).
     const fallbackName = file.name.replace(/\.(epub|zip)$/i, '')
     const epubParser = isEpub ? await import('./epub-parser') : undefined
     const translation = (await epubParser?.detectEpubTranslationName(file).catch(() => undefined)) ?? fallbackName
@@ -339,9 +481,18 @@ export class TranslationSourceSelect extends LitElement {
         return
       }
 
-      await writeCache(fingerprintFile(file), translation, verses)
+      const fingerprint = fingerprintFile(file)
+      await writeCache(fingerprint, translation, verses)
       this._refreshCache()
-      this.fileState = { status: 'ready', fileName: file.name, translation, verseSource: createLocalVerseSource(verses) }
+      this.fileState = {
+        status: 'ready',
+        fileName: file.name,
+        fingerprint,
+        translation,
+        verseSource: createLocalVerseSource(verses),
+        origin: 'chosen',
+      }
+      saveBibleChoice({ kind: 'file', fingerprint })
       this._emitChange()
     } catch (err) {
       console.error('[translation-source-select] failed to parse Bible file', err)
@@ -356,11 +507,19 @@ export class TranslationSourceSelect extends LitElement {
   private _emitChange() {
     const choice: TranslationChoice | undefined =
       this.mode === 'server'
-        ? this.selectedTranslation
-          ? { translation: this.selectedTranslation, verseSource: this.serverSource! }
+        ? this.selectedTranslation && this.serverSource
+          ? {
+              translation: this.selectedTranslation,
+              verseSource: this.serverSource,
+              bible: { kind: 'server', translation: this.selectedTranslation },
+            }
           : undefined
         : this.fileState.status === 'ready'
-          ? { translation: this.fileState.translation, verseSource: this.fileState.verseSource }
+          ? {
+              translation: this.fileState.translation,
+              verseSource: this.fileState.verseSource,
+              bible: { kind: 'file', fingerprint: this.fileState.fingerprint },
+            }
           : undefined
 
     this.dispatchEvent(
@@ -377,6 +536,20 @@ export class TranslationSourceSelect extends LitElement {
     css`
     :host {
       display: block;
+    }
+
+    /* Available to screen readers, invisible on screen — see
+       chat-panel.ts for the same pattern. */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     .picker {

@@ -7,7 +7,7 @@ import type { Guess, RoundResult, Verse, VerseSource } from '../types'
 import '../shared-ui/verse-card'
 import '../shared-ui/guess-form'
 import './game-setup'
-import type { GameOptions } from './game-setup'
+import type { GameOptions, SavedGameTypeChoice } from './game-setup'
 import './game-results'
 import './mode-select'
 import type { GameMode } from './mode-select'
@@ -83,9 +83,10 @@ export class BgApp extends LitElement {
   // mode-select and back — e.g. picking a handful of books in "Books",
   // backing out to Home, then coming back into "Books" restores that same
   // selection rather than starting empty again. One slot per game type so
-  // switching types never clobbers another type's selection.
+  // switching types never clobbers another type's selection. Each is kept
+  // with the Bible it was made against, and only restored for that Bible.
   @state()
-  private savedChoices: Partial<Record<GameTypeId, GameTypeChoice>> = {}
+  private savedChoices: Partial<Record<GameTypeId, SavedGameTypeChoice>> = {}
 
   @state()
   private roundCount = 0
@@ -161,19 +162,12 @@ export class BgApp extends LitElement {
     void this._loadNextVerse()
   }
 
-  // The persisted choice to hand bg-game-setup for the game type it's
-  // currently configuring, so returning to a game type restores what was
-  // picked last time — see savedChoices.
-  private get _initialChoiceForSetup(): GameTypeChoice {
-    return this.savedChoices[this.setupGameType] ?? freshChoice(this.setupGameType)
-  }
-
   // Tracks the in-progress choice live, as the player checks/unchecks
   // books or chapters — not just once they hit "Start game" — so leaving
   // this screen (Home, or picking a different game type) without starting
   // a game still keeps whatever they'd selected so far.
-  private _onGameTypeChoiceChanged = (event: CustomEvent<GameTypeChoice>) => {
-    this.savedChoices = { ...this.savedChoices, [event.detail.gameType]: event.detail }
+  private _onGameTypeChoiceChanged = (event: CustomEvent<SavedGameTypeChoice>) => {
+    this.savedChoices = { ...this.savedChoices, [event.detail.choice.gameType]: event.detail }
   }
 
   private async _loadNextVerse() {
@@ -378,7 +372,8 @@ export class BgApp extends LitElement {
             ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
             : this.phase === 'setup'
               ? html`<bg-game-setup
-                  .initialChoice=${this._initialChoiceForSetup}
+                  .gameType=${this.setupGameType}
+                  .savedChoice=${this.savedChoices[this.setupGameType]}
                   @game-started=${this._onGameStarted}
                   @game-type-choice-changed=${this._onGameTypeChoiceChanged}
                 ></bg-game-setup>`

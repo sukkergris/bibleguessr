@@ -85,23 +85,45 @@ contains the file name, so it is never sent anywhere either.
   `translation-source-select.ts` is an extraction of it. Both must read and
   write the same stored choice. Consolidating them first would keep this from
   drifting.
-- [Feature.UploadBibleFileOnce.md](Feature.UploadBibleFileOnce.md) builds on
+- [Feature.UploadBibleFileOnce.md](../BACKLOG/Feature.UploadBibleFileOnce.md) builds on
   this feature for preselecting an uploaded file. Its remembered-choice
   requirement is covered here.
 
+## Resolution
+
+- `frontend/src/bible-sources/bible-choice-storage.ts` holds the
+  `BibleChoice` union, the key `bibleguessr:preferences:bibleChoice:v1`, and
+  the pure rules: `parseBibleChoice`, `translationToPreselect` and
+  `fileToRestore` (one per list, since the translation list and the file
+  cache arrive independently, and a remembered file must work with the
+  server unreachable).
+- The two pickers are consolidated first: `game-setup.ts` now hosts
+  `<bg-translation-source-select>` instead of its own copy. The picker took
+  over the copy's file status live region and accessible file input, so
+  multiplayer and the daily quiz have them too.
+- The picker loads the remembered choice and saves only the player's own
+  actions, never its automatic preselection. Restoring is abandoned as soon
+  as the player chooses something.
+- A restored file is announced once: "Using <file> from last time."
+- Found along the way: a game type's saved selection (`savedChoices` in
+  `bg-app.ts`) names books in one Bible's spelling, and is now kept with that
+  Bible and only restored for it. Before, it was restored against whichever
+  Bible came first.
+- Documented in `docs/web/remembered-bible`. Frontend revision 24.
+
 ## Acceptance criteria
 
-- [ ] A Bible chosen in one game type is preselected in every other game type,
+- [x] A Bible chosen in one game type is preselected in every other game type,
       in multiplayer and in the daily quiz.
-- [ ] "Play again" keeps the chosen Bible.
-- [ ] The choice survives a page reload and a new visit.
-- [ ] Changing the choice on any screen updates it for all screens.
-- [ ] An unavailable translation, a removed file or a malformed stored value
+- [x] "Play again" keeps the chosen Bible.
+- [x] The choice survives a page reload and a new visit.
+- [x] Changing the choice on any screen updates it for all screens.
+- [x] An unavailable translation, a removed file or a malformed stored value
       falls back to the default without an error.
-- [ ] Nothing about the choice is sent to the server or to other players.
-- [ ] Unit tests cover parsing and validating the stored value. Each test is
+- [x] Nothing about the choice is sent to the server or to other players.
+- [x] Unit tests cover parsing and validating the stored value. Each test is
       first shown to fail without the change.
-- [ ] An e2e test chooses a Bible in one game type and finds it preselected in
+- [x] An e2e test chooses a Bible in one game type and finds it preselected in
       another game type and after a reload.
-- [ ] The feature is documented in `docs/web`.
-- [ ] Frontend `revision` is incremented.
+- [x] The feature is documented in `docs/web`.
+- [x] Frontend `revision` is incremented.

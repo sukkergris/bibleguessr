@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remembered Bible — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Remembered Bible</h1>
+      <p class="subtitle">
+        The player chooses their Bible once — a server translation or one of their own uploaded files — and every
+        setup screen starts on it, until they choose another. It survives closing the browser.
+      </p>
+
+      <h2>One choice for every screen</h2>
+      <p>
+        There is one Bible choice, not one per game type. Every setup screen preselects it: singleplayer for each
+        game type (The Bible, Books, Chapters), the multiplayer room setup, and the daily quiz. Choosing another Bible
+        on any of them changes it for all of them — including on "Play again" and on a new visit.
+      </p>
+      <p>
+        All of them use the same picker, <code>&lt;bg-translation-source-select&gt;</code> (see
+        <a href="../local-bible-files/index.html">Local Bible files</a>). Singleplayer used to have its own copy of it;
+        that copy is gone, so the remembering, the file announcements and the accessible file input exist in one
+        place only.
+      </p>
+
+      <h2>What is stored</h2>
+      <p>
+        Only which Bible: <code>{ kind: 'server', translation }</code> or <code>{ kind: 'file', fingerprint }</code>,
+        where the fingerprint is the uploaded file's cache key (name, size, last modified — see
+        <a href="../local-bible-files/index.html">Local Bible files</a>). It is kept in this browser's local storage
+        under <code>bibleguessr:preferences:bibleChoice:v1</code>. Never verse text, and never sent anywhere: a
+        fingerprint holds the file's name. In multiplayer each player already plays from their own Bible; the choice
+        only preselects this player's own picker, and only book, chapter and verse numbers travel, as before.
+      </p>
+      <p>
+        Only the player's own actions are remembered: picking a translation, switching to the server tab, choosing a
+        cached file or uploading one. The picker's automatic preselection of the first translation is not.
+      </p>
+
+      <h2>Validation and fallbacks</h2>
+      <p>
+        Every read is validated, like the <a href="../game-preferences/index.html">remembered setup choices</a>. A
+        missing, malformed or outdated value is simply no choice, and the picker behaves as it always did — the first
+        server translation:
+      </p>
+      <ul>
+        <li>A remembered translation the server no longer offers: the first translation.</li>
+        <li>
+          A remembered file that is no longer cached (removed, or parsed by an older parser — see
+          <code>PARSER_VERSION</code>): the first translation.
+        </li>
+        <li>Storage unavailable, as in private browsing: nothing is remembered.</li>
+        <li>
+          A remembered file is restored from the local cache alone, so it works with the server unreachable. A
+          remembered server translation with the server unreachable shows the usual error — the picker never
+          switches to a file on the player's behalf.
+        </li>
+      </ul>
+      <p>
+        The translation list (from the server) and the file cache (local) arrive independently. Restoring is
+        abandoned the moment the player makes a choice of their own, so a late answer never overrides it.
+      </p>
+
+      <h2>Game-type selections follow their Bible</h2>
+      <p>
+        The books or chapters picked for a game type are kept for the session in <code>bg-app.ts</code>'s
+        <code>savedChoices</code>. They name books in one Bible's own spelling, so each is kept with the Bible it was
+        made against and only restored for that Bible. With a different Bible the selection starts fresh; switching
+        back brings it back.
+      </p>
+
+      <h2>Accessibility</h2>
+      <ul>
+        <li>
+          A preselected server translation moves no focus and announces nothing: the select shows it and exposes it
+          to assistive technology.
+        </li>
+        <li>
+          A restored file is announced once through the picker's file status region: "Using
+          <em>file name</em> from last time."
+        </li>
+        <li>The mode tabs' <code>aria-selected</code> follows the restored mode.</li>
+        <li>Changing the Bible stays fully keyboard-operable.</li>
+      </ul>
+
+      <h2>Implementation and tests</h2>
+      <p>
+        <span class="file-ref">frontend/src/bible-sources/bible-choice-storage.ts</span> holds the
+        <code>BibleChoice</code> type, the storage key, and the pure parsing and fallback rules
+        (<code>parseBibleChoice</code>, <code>translationToPreselect</code>, <code>fileToRestore</code>), unit tested in
+        <span class="file-ref">bible-choice-storage.test.ts</span>. The picker in
+        <span class="file-ref">translation-source-select.ts</span> loads and saves it.
+        <span class="file-ref">frontend/src/components/game-setup.ts</span> keys the game-type selection by
+        Bible.
+      </p>
+      <p>
+        <span class="file-ref">frontend/e2e/remembered-bible.spec.ts</span> uploads a file in one game type and finds
+        it preselected in another, in multiplayer, in the daily quiz, after a reload and on "Play again", with nothing
+        about it sent to the server. It also covers the fallbacks and that a Books selection only comes back with its
+        own Bible.
+      </p>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">frontend/src/bible-sources/bible-choice-storage.ts</span> ·
+        <span class="file-ref">frontend/src/bible-sources/translation-source-select.ts</span> ·
+        <span class="file-ref">frontend/src/components/game-setup.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-app.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

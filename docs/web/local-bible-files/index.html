@@ -118,7 +118,13 @@
         <li>Entries from a stale <code>PARSER_VERSION</code> are filtered out as if absent, never silently served.</li>
       </ul>
 
-      <h2>Wiring — <span class="file-ref">frontend/src/components/game-setup.ts</span></h2>
+      <h2>Wiring — <span class="file-ref">frontend/src/bible-sources/translation-source-select.ts</span></h2>
+      <p>
+        One picker, <code>&lt;bg-translation-source-select&gt;</code>, on every setup screen: singleplayer
+        (<span class="file-ref">game-setup.ts</span>), multiplayer (<span class="file-ref">bg-room-setup.ts</span>) and
+        the daily quiz. It starts on the player's remembered Bible — see
+        <a href="../remembered-bible/index.html">Remembered Bible</a>.
+      </p>
       <ol class="flow">
         <li>Toggle between <code>Mode = 'server' | 'file'</code>. On mount, <code>listCache()</code> populates a list of previously-cached files, shown instead of a raw dropzone if any exist.</li>
         <li>File picker accepts <code>.epub,.zip</code> via a hidden input or drag-and-drop.</li>
@@ -129,6 +135,10 @@
           (<span class="file-ref">local-verses.ts</span>) into a <code>VerseSource</code> — the same interface the
           backend-backed <code>api</code> object implements, so <span class="file-ref">bg-app.ts</span> treats either
           source identically regardless of where the verses came from.
+        </li>
+        <li>
+          Reports the result as a <code>translation-changed</code> event: the translation, its
+          <code>VerseSource</code>, and which Bible it is (<code>BibleChoice</code>).
         </li>
       </ol>
 
@@ -169,7 +179,7 @@
         <span class="file-ref">frontend/src/bible-sources/rtf-parser.ts</span> ·
         <span class="file-ref">frontend/src/bible-sources/verse-cache.ts</span> ·
         <span class="file-ref">frontend/src/bible-sources/local-verses.ts</span> ·
-        <span class="file-ref">frontend/src/components/game-setup.ts</span>
+        <span class="file-ref">frontend/src/bible-sources/translation-source-select.ts</span>
       </footer>
     </main>
   </body>
