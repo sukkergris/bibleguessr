@@ -169,6 +169,8 @@ test('a player who leaves mid-game stays on the leaderboard and the others play 
     const leave = ben.getByRole('button', { name: 'Leave the game' })
     await leave.click()
     await expect(ben.getByRole('dialog', { name: 'Leave the game?' })).toBeVisible()
+    // Focus moves into the dialog, onto the safe choice.
+    await expect(ben.getByRole('button', { name: 'Stay' })).toBeFocused()
     await ben.keyboard.press('Escape')
     await expect(ben.getByRole('dialog')).toBeHidden()
     await expect(leave).toBeFocused()
@@ -184,6 +186,44 @@ test('a player who leaves mid-game stays on the leaderboard and the others play 
 
     const benRow = ann.locator('bg-leaderboard-table tbody tr', { hasText: 'Ben' })
     await expect(benRow).toContainText('Left')
+  } finally {
+    for (const context of room.contexts) await context.close()
+  }
+})
+
+// The guess form takes focus when a verse arrives. With the leave dialog
+// open that must not pull focus out of the dialog — a modal keeps focus
+// until it is closed. Holding Ben's verse back until his dialog is open
+// makes that timing certain.
+test('a verse arriving while the leave dialog is open does not take focus out of it', async ({ browser }) => {
+  const room = await roomWith(browser, ['Ann', 'Ben'])
+  const [ann, ben] = room.players
+
+  try {
+    let releaseVerse = () => {}
+    const verseHeld = new Promise<void>((resolve) => (releaseVerse = resolve))
+    await ben.route('**/api/verses/lookup?**', async (route) => {
+      await verseHeld
+      await route.continue()
+    })
+
+    await openLobby(room.host)
+    await joinLobby(ann)
+    await joinLobby(ben)
+    await room.host.getByRole('button', { name: 'Start the game' }).click()
+    await expect(ben.getByText(`Verse 1 of ${ROUNDS}`)).toBeVisible()
+
+    await ben.getByRole('button', { name: 'Leave the game' }).click()
+    const stay = ben.getByRole('button', { name: 'Stay' })
+    await expect(stay).toBeFocused()
+
+    releaseVerse()
+    await expect(ben.locator('bg-verse-card .text')).toBeVisible()
+    await expect(ben.locator('bg-guess-form').getByRole('radio').first()).toBeAttached()
+
+    await expect(stay).toBeFocused()
+    await ben.keyboard.press('Escape')
+    await expect(ben.getByRole('dialog')).toBeHidden()
   } finally {
     for (const context of room.contexts) await context.close()
   }

@@ -39,7 +39,9 @@
       <h2>In a Congregation</h2>
       <p>
         A <a href="../congregation/index.html">Congregation</a> has <strong>Leave the game</strong> instead, with the
-        same dialog behavior (Stay is focused, Escape and the backdrop close it, focus returns to the trigger). Leaving
+        same dialog behavior (Stay is focused, Escape and the backdrop close it, focus returns to the trigger), and
+        everything behind it is <code>inert</code> while it is open — so a verse arriving, which the guess form
+        would otherwise give focus to, can't pull focus out of the dialog. Leaving
         doesn't end the game for anyone else: the server marks the player as departed, keeps their score on the
         leaderboard and stops waiting for their guesses. The same <code>ForfeitGame</code> hub method serves both — it
         branches on the session's <code>Format</code>.

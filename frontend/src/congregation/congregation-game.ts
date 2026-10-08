@@ -146,25 +146,30 @@ export class CongregationGameView extends LitElement {
     const myScore = this.session.scores[this.myPlayerId] ?? 0
     const remaining = computeRemainingSeconds(deadlineOf(this.session.roundStartedAt, this.session.roundTimeLimit), this.now)
 
+    // While the leave dialog is open, everything behind it is inert: it
+    // can't be clicked or focused. That is what keeps focus in the dialog
+    // when a verse arrives and the guess form reaches for it.
     return html`
-      <header class="header">
-        <span class="round">Verse ${this.session.roundIndex + 1} of ${this.session.roundCount}</span>
-        <span class="score">Your score: ${myScore}</span>
-        ${this.revealed || remaining === undefined
-          ? null
-          : html`<span class="timer ${remaining <= 5 ? 'urgent' : ''}">${remaining}s left</span>`}
-      </header>
+      <div class="behind-dialog" ?inert=${this.leaveDialogOpen}>
+        <header class="header">
+          <span class="round">Verse ${this.session.roundIndex + 1} of ${this.session.roundCount}</span>
+          <span class="score">Your score: ${myScore}</span>
+          ${this.revealed || remaining === undefined
+            ? null
+            : html`<span class="timer ${remaining <= 5 ? 'urgent' : ''}">${remaining}s left</span>`}
+        </header>
 
-      ${this.renderRound()}
+        ${this.renderRound()}
 
-      <bg-leaderboard-table
-        .entries=${this.board?.entries ?? []}
-        .round=${this.board?.round ?? { Case: 'NotStarted' }}
-        .myPlayerId=${this.myPlayerId}
-        caption="Leaderboard"
-      ></bg-leaderboard-table>
+        <bg-leaderboard-table
+          .entries=${this.board?.entries ?? []}
+          .round=${this.board?.round ?? { Case: 'NotStarted' }}
+          .myPlayerId=${this.myPlayerId}
+          caption="Leaderboard"
+        ></bg-leaderboard-table>
 
-      <button type="button" class="compact danger leave" @click=${this.openLeaveDialog}>Leave the game</button>
+        <button type="button" class="compact danger leave" @click=${this.openLeaveDialog}>Leave the game</button>
+      </div>
       ${this.leaveDialogOpen ? this.renderLeaveDialog() : null}
     `
   }
@@ -266,10 +271,12 @@ export class CongregationGameView extends LitElement {
     this.shadowRoot?.querySelector<HTMLButtonElement>('[data-leave-cancel]')?.focus()
   }
 
-  private closeLeaveDialog() {
+  private async closeLeaveDialog() {
     const trigger = this.leaveTrigger
     this.leaveDialogOpen = false
     this.leaveTrigger = undefined
+    // The trigger is inert until the dialog is gone from the page.
+    await this.updateComplete
     if (trigger?.isConnected) trigger.focus()
   }
 
@@ -314,6 +321,10 @@ export class CongregationGameView extends LitElement {
     buttonStyles,
     css`
       :host {
+        display: block;
+      }
+
+      .behind-dialog {
         display: flex;
         flex-direction: column;
         gap: 1rem;
