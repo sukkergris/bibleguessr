@@ -118,7 +118,8 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
             <td><code>seo.spec.ts</code></td>
             <td>
               Each page's title, description and canonical link as the app leaves them, a room's pages kept out of
-              search results, every sitemap page opening as itself, and robots.txt.
+              search results, every sitemap page opening as itself, robots.txt, and canonical links following the
+              site configuration — or missing, without breaking the page, when it can't load.
             </td>
           </tr>
           <tr>

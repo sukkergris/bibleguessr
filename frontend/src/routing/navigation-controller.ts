@@ -1,4 +1,5 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit'
+import { loadSiteConfig } from '../site-config/load-site-config'
 import { showPageMeta } from './page-head'
 import { HOME, pathOf, routeFromPath, type Route } from './routes'
 
@@ -20,20 +21,30 @@ const PRIMARY_BUTTON = 0
  *   handled in the page instead of reloading it.
  *
  * Every change also sets the page's title, description and search-engine
- * tags (see page-head.ts).
+ * tags (see page-head.ts). The canonical link waits for the site
+ * configuration, which loads alongside the first screen rather than
+ * holding it up.
  */
 export class NavigationController implements ReactiveController {
   route: Route
 
   private readonly host: ReactiveControllerHost
 
+  /** The site's public address, once the site configuration has loaded. */
+  private siteUrl?: string
+
   constructor(host: ReactiveControllerHost) {
     this.host = host
     const route = routeFromPath(window.location.pathname)
     this.route = route ?? HOME
     if (!route) window.history.replaceState(null, '', pathOf(HOME))
-    showPageMeta(this.route)
+    showPageMeta(this.route, this.siteUrl)
     host.addController(this)
+
+    void loadSiteConfig().then((config) => {
+      this.siteUrl = config?.siteUrl
+      showPageMeta(this.route, this.siteUrl)
+    })
   }
 
   hostConnected() {
@@ -56,7 +67,7 @@ export class NavigationController implements ReactiveController {
 
   private show(route: Route) {
     this.route = route
-    showPageMeta(route)
+    showPageMeta(route, this.siteUrl)
     this.host.requestUpdate()
   }
 

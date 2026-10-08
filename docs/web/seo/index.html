@@ -66,12 +66,17 @@
 
       <h2>One public address</h2>
       <p>
-        Canonical links always point at <code>https://bibleguessr.uk</code> — <code>SITE_URL</code> in
-        <span class="file-ref">page-meta.ts</span> — whichever host served the page, so a copy on another host (www,
-        a test server, the local replica) points search engines at the real one. robots.txt and sitemap.xml are static
-        files and can't import it, so <span class="file-ref">page-meta.test.ts</span> checks that they, and the
-        description in <span class="file-ref">index.html</span>, agree with the code. Changing the domain means
-        changing all of them; the test says which.
+        Canonical links always point at the site's public address — <code>siteUrl</code> in the
+        <a href="../site-config/index.html">site configuration</a>, <code>https://bibleguessr.uk</code> in
+        production — whichever host served the page, so a copy on another host (www, a test server, the local
+        replica) points search engines at the real one. A page gets its canonical link once the configuration has
+        loaded, and has none if it can't.
+      </p>
+      <p>
+        robots.txt and sitemap.xml are static files and can't read the configuration, so
+        <span class="file-ref">page-meta.test.ts</span> checks that they name the same address as production's
+        configuration, and that the description in <span class="file-ref">index.html</span> agrees with the code.
+        Changing the domain means changing all of them; the test says which.
       </p>
 
       <h2>Pages built by the app</h2>

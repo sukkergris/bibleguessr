@@ -58,3 +58,28 @@ test('robots.txt points search engines at the sitemap', async ({ request }) => {
   expect(response.ok()).toBe(true)
   expect(await response.text()).toContain(`Sitemap: ${SITE_URL}/sitemap.xml`)
 })
+
+// The public address comes from the site configuration
+// (/config/environmentVariables.json — see docs/web/site-config), not
+// from the code.
+test('canonical links follow the configured address', async ({ page }) => {
+  await page.route('**/config/environmentVariables.json', (route) =>
+    route.fulfill({ json: { siteUrl: 'https://staging.example' } }),
+  )
+
+  await page.goto('/social')
+
+  await expect(canonical(page)).toHaveAttribute('href', 'https://staging.example/social')
+})
+
+test('without a configuration, pages still work and simply have no canonical link', async ({ page }) => {
+  await page.route('**/config/environmentVariables.json', (route) => route.abort())
+  const reported = page.waitForEvent('console', (message) => message.text().includes('[site-config]'))
+
+  await page.goto('/social')
+  await reported
+
+  await expect(page.getByRole('button', { name: /Play today's quiz/ })).toBeVisible()
+  await expect(page).toHaveTitle('Social — BibleGuessr')
+  await expect(canonical(page)).toHaveCount(0)
+})

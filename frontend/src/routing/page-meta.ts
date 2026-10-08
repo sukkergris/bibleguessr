@@ -7,12 +7,6 @@
 import { GAME_TYPE_IDS, hintOf, nameOf } from '../game-types/registry'
 import { HOME, urlOf, type Route } from './routes'
 
-/** The site's public address: what canonical links and the sitemap point
- * at, whichever host the app is actually served from. frontend/public's
- * robots.txt and sitemap.xml must name the same address —
- * page-meta.test.ts checks. */
-export const SITE_URL = 'https://bibleguessr.uk'
-
 const SITE_NAME = 'BibleGuessr'
 
 export interface PageMeta {
@@ -80,7 +74,9 @@ export function pageMetaOf(route: Route): PageMeta {
 }
 
 /** The address search engines should treat as the page's own — always on
- * the public site, so a copy served from any other host points there. */
-export function canonicalUrlOf(route: Route): string {
-  return urlOf(route, SITE_URL)
+ * the public site (`siteUrl`, from the site configuration — see
+ * docs/web/site-config), so a copy served from any other host points
+ * there. */
+export function canonicalUrlOf(route: Route, siteUrl: string): string {
+  return urlOf(route, siteUrl)
 }

@@ -2,11 +2,20 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { INDEXABLE_ROUTES, SITE_URL, canonicalUrlOf, pageMetaOf } from './page-meta'
+import { siteConfigFrom } from '../site-config/site-config'
+import { INDEXABLE_ROUTES, canonicalUrlOf, pageMetaOf } from './page-meta'
 import { HOME, pathOf, routeFromPath, type Route } from './routes'
 
 const FRONTEND_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const readFrontendFile = (path: string) => readFileSync(join(FRONTEND_DIR, path), 'utf-8')
+
+/** The public address production is configured with — the one search
+ * engines are told about. */
+function productionSiteUrl(): string {
+  const result = siteConfigFrom(JSON.parse(readFrontendFile('public/config/environmentVariables.json')))
+  if (result.kind !== 'valid') throw new Error(result.problem)
+  return result.config.siteUrl
+}
 
 /** Search engines cut descriptions off at roughly this length. */
 const MAX_DESCRIPTION_LENGTH = 160
@@ -55,24 +64,29 @@ describe('page metadata', () => {
     }
   })
 
-  it('points canonical links at the public site', () => {
-    expect(canonicalUrlOf({ kind: 'daily-quiz' })).toBe('https://bibleguessr.uk/social/daily-quiz')
-    expect(canonicalUrlOf(HOME)).toBe('https://bibleguessr.uk/')
+  it('points canonical links at the configured public site', () => {
+    expect(canonicalUrlOf({ kind: 'daily-quiz' }, 'https://bibleguessr.uk')).toBe(
+      'https://bibleguessr.uk/social/daily-quiz',
+    )
+    expect(canonicalUrlOf(HOME, 'https://staging.example')).toBe('https://staging.example/')
   })
 })
 
-// The static files search engines read can't import SITE_URL or the list
-// of pages, so these keep them in step with the code.
+// The static files search engines read can't load the configuration or
+// import the list of pages, so these keep them in step with both.
 describe('files for search engines', () => {
-  it('sitemap.xml lists exactly the indexable pages', () => {
+  it('sitemap.xml lists exactly the indexable pages, on the configured site', () => {
     const sitemap = readFrontendFile('public/sitemap.xml')
     const listed = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+    const siteUrl = productionSiteUrl()
 
-    expect(listed).toEqual(INDEXABLE_ROUTES.map(canonicalUrlOf))
+    expect(listed).toEqual(INDEXABLE_ROUTES.map((route) => canonicalUrlOf(route, siteUrl)))
   })
 
-  it('robots.txt points at the sitemap on the public site', () => {
-    expect(readFrontendFile('public/robots.txt')).toMatch(new RegExp(`^Sitemap: ${SITE_URL}/sitemap\\.xml$`, 'm'))
+  it('robots.txt points at the sitemap on the configured site', () => {
+    expect(readFrontendFile('public/robots.txt')).toMatch(
+      new RegExp(`^Sitemap: ${productionSiteUrl()}/sitemap\\.xml$`, 'm'),
+    )
   })
 
   it("index.html describes the front page, for readers that don't run the app", () => {

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Site configuration — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Reference</span>
+      <h1>Site configuration</h1>
+      <p class="subtitle">
+        Settings that differ between deployments live in JSON files the browser reads at startup — not in the
+        code, and not baked into the build.
+      </p>
+
+      <h2>The files</h2>
+      <p>
+        The frontend reads them with
+        <a href="https://www.npmjs.com/package/site-config-loader">site-config-loader</a>:
+      </p>
+      <ul>
+        <li>
+          <span class="file-ref">frontend/public/config/environmentVariables.json</span> — always read. These are
+          production's values.
+        </li>
+        <li>
+          <code>environmentVariables.&lt;environment&gt;.json</code> next to it — read on top, outside production, if
+          it exists. Its settings win.
+        </li>
+      </ul>
+      <p>
+        The environment is whatever <code>&lt;meta name="environment-name"&gt;</code> says — nginx can inject it, as
+        the server replica does with <code>local</code> — or else follows from the host name: <code>localhost</code> is
+        <code>local</code>, a <code>dev.</code>, <code>test.</code> or <code>staging.</code> host is
+        <code>development</code>, <code>testing</code> or <code>staging</code>, and anything else is
+        <code>production</code>.
+      </p>
+      <p>
+        <span class="file-ref">environmentVariables.local.json</span> holds just <code>{}</code>: local runs use
+        production's values. It exists because the dev server answers a missing file with the app page, which the
+        loader would otherwise warn about on every load.
+      </p>
+
+      <h2>Settings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Production</th>
+            <th>Used for</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>siteUrl</code></td>
+            <td><code>https://bibleguessr.uk</code></td>
+            <td>
+              The site's public address, which canonical links point at (see
+              <a href="../seo/index.html">Search engines</a>). Just the address, with no path.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>How the app reads it</h2>
+      <p>
+        <span class="file-ref">frontend/src/site-config/load-site-config.ts</span> reads the files once, on first use,
+        and shares the result. <span class="file-ref">site-config.ts</span> checks it and turns it into a typed
+        <code>SiteConfig</code>; nothing else sees the raw JSON. Nothing waits for it: the first screen renders
+        straight away, and what depends on a setting picks it up when it arrives. If the files can't be read or a
+        setting is invalid, the problem is logged and the app carries on without it — a page then simply has no
+        canonical link.
+      </p>
+      <p>
+        The package ships no type declarations, so
+        <span class="file-ref">site-config-loader.d.ts</span> declares the part the app uses.
+      </p>
+
+      <h2>Serving and caching</h2>
+      <p>
+        Vite serves <span class="file-ref">frontend/public/config/</span> at <code>/config/</code> and copies it into
+        the build. In the nginx image,
+        <span class="file-ref">server-replica/nginx/includes/static-assets.conf</span> serves <code>/config/</code>
+        from the built files and lets browsers cache it for 47 minutes, so a changed setting can take that long to
+        reach a returning visitor. For a change that must land at once, deploy it under a new file name — the
+        loader takes a custom base name.
+      </p>
+
+      <h2>Adding a setting</h2>
+      <ol>
+        <li>Add it to <code>SiteConfig</code> and check it in <code>siteConfigFrom</code>, with a test.</li>
+        <li>Give production's value in <span class="file-ref">environmentVariables.json</span>.</li>
+        <li>Use it from <code>loadSiteConfig()</code>, without holding up the first screen.</li>
+      </ol>
+
+      <h2>Tests</h2>
+      <ul>
+        <li>
+          <span class="file-ref">frontend/src/site-config/site-config.test.ts</span> — what counts as a valid
+          configuration, and that the one production ships is.
+        </li>
+        <li>
+          <span class="file-ref">frontend/e2e/seo.spec.ts</span> — canonical links follow a different configured
+          address, and a page without a configuration still works.
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

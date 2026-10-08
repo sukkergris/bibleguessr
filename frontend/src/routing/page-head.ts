@@ -22,8 +22,12 @@ function metaNamed(doc: Document, name: string): HTMLMetaElement {
  * a canonical link (a page search engines may list) or `noindex` (a
  * room's own pages). Keeps exactly one of each tag, as search engines
  * expect, however often the page changes.
+ *
+ * The canonical link needs the site's public address (`siteUrl`, from the
+ * site configuration); until that is known — or if it never is — the page
+ * has none.
  */
-export function showPageMeta(route: Route, doc: Document = document) {
+export function showPageMeta(route: Route, siteUrl: string | undefined, doc: Document = document) {
   const meta = pageMetaOf(route)
   doc.title = meta.title
   metaNamed(doc, DESCRIPTION).content = meta.description
@@ -31,8 +35,12 @@ export function showPageMeta(route: Route, doc: Document = document) {
   const canonical = doc.head.querySelector<HTMLLinkElement>(`link[rel="${CANONICAL}"]`)
   if (meta.indexable) {
     doc.head.querySelector(`meta[name="${ROBOTS}"]`)?.remove()
-    const link = canonical ?? doc.head.appendChild(Object.assign(doc.createElement('link'), { rel: CANONICAL }))
-    link.href = canonicalUrlOf(route)
+    if (siteUrl === undefined) {
+      canonical?.remove()
+    } else {
+      const link = canonical ?? doc.head.appendChild(Object.assign(doc.createElement('link'), { rel: CANONICAL }))
+      link.href = canonicalUrlOf(route, siteUrl)
+    }
   } else {
     canonical?.remove()
     metaNamed(doc, ROBOTS).content = NOINDEX
