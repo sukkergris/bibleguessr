@@ -32,6 +32,10 @@ export interface TranslationChoice {
 
 type Mode = 'server' | 'file'
 
+/** Where a player can download a Bible file this picker can read — see
+ * docs/web/local-bible-files. Only linked to: the app never fetches it. */
+const BIBLE_DOWNLOAD_PAGE_URL = 'https://www.jw.org/en/library/bible/'
+
 type FileState =
   | { status: 'idle' }
   | { status: 'picking' }
@@ -357,6 +361,30 @@ export class TranslationSourceSelect extends LitElement {
         />
         <span id="file-picker-hint">Drop a .epub or .zip (RTF export) Bible file here, or click to choose one</span>
       </label>
+      ${this._renderFileHelp()}
+    `
+  }
+
+  // Which files work, and where to get one. Kept in step with the parsers:
+  // the RTF parser only knows the Danish export's chapter headings, and
+  // PDF isn't read at all.
+  private _renderFileHelp() {
+    return html`
+      <div class="file-help">
+        <p>
+          <strong>Where to get a file:</strong> on
+          <a href=${BIBLE_DOWNLOAD_PAGE_URL} target="_blank" rel="noopener noreferrer"
+            >jw.org's Bible page<span class="visually-hidden"> (opens in a new tab)</span></a
+          >, download the EPUB of the 2013 revision. We recommend it over the Study Edition, which is a much larger
+          file.
+        </p>
+        <p>Supported files:</p>
+        <ul>
+          <li><strong>.epub</strong> — an EPUB Bible from jw.org, e.g. the English or Danish edition.</li>
+          <li><strong>.zip</strong> — the Danish RTF export: a zip with one RTF file per Bible book.</li>
+        </ul>
+        <p>PDF files can't be used. Your file is read in this browser and never uploaded.</p>
+      </div>
     `
   }
 
@@ -646,6 +674,30 @@ export class TranslationSourceSelect extends LitElement {
 
     .dropzone input[type='file'] {
       display: none;
+    }
+
+    .file-help {
+      text-align: left;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .file-help p,
+    .file-help ul {
+      margin: 0 0 0.4rem;
+    }
+
+    .file-help ul {
+      padding-left: 1.25rem;
+    }
+
+    .file-help a {
+      color: var(--link);
+    }
+
+    .file-help a:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
 
     progress {

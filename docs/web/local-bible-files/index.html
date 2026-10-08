@@ -24,6 +24,27 @@
         translation (<span class="file-ref">bibles/bibelen-dk</span>) — anything else has to come through this path.
       </p>
 
+      <h2>Where players get a file</h2>
+      <p>
+        Under the dropzone, the picker tells players where to download a file and which files work. It links to
+        <a href="https://www.jw.org/en/library/bible/">jw.org's Bible page</a> (opens in a new tab) and recommends the
+        EPUB of the 2013 revision over the Study Edition, which is a much larger file. The link is only shown: the app
+        never fetches anything from jw.org.
+      </p>
+      <ul>
+        <li><strong>.epub</strong> — EPUB Bibles from jw.org. Checked by hand with the English and Danish editions.</li>
+        <li>
+          <strong>.zip</strong> — only the Danish RTF export. The RTF parser recognizes the Danish chapter headings
+          (<code>Kapitel</code>/<code>Salme</code>), so the English RTF export is rejected ("no recognizable chapters").
+        </li>
+        <li><strong>PDF</strong> — not supported, and the picker doesn't accept it.</li>
+      </ul>
+      <p>
+        If a parser learns a new format or language, update this help text (<code>_renderFileHelp</code> in
+        <span class="file-ref">translation-source-select.ts</span>) and
+        <span class="file-ref">frontend/e2e/bible-file-help.spec.ts</span> as well.
+      </p>
+
       <h2>Two supported export formats</h2>
 
       <div class="card">

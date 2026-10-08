@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "revision": 29,
+  "revision": 30,
   "type": "module",
   "scripts": {
     "dev": "vite",
