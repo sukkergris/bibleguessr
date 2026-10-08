@@ -12,6 +12,7 @@ describe('routes', () => {
     ['/social', { kind: 'social' }],
     ['/social/daily-quiz', { kind: 'daily-quiz' }],
     ['/watch/4821', { kind: 'watch', roomCode: '4821' }],
+    ['/about', { kind: 'about' }],
   ])('reads %s', (path, route) => {
     expect(routeFromPath(path)).toEqual(route)
     // …and every route writes back to the same path.
@@ -33,6 +34,7 @@ describe('routes', () => {
     '/watch',
     '/watch/%E0%A4%A',
     '/Social',
+    '/about/team',
   ])('does not recognize %s', (path) => {
     expect(routeFromPath(path)).toBeUndefined()
   })

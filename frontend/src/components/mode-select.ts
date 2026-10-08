@@ -7,7 +7,7 @@ import { GAME_TYPE_IDS, hintOf, nameOf, type GameTypeId } from '../game-types/re
 // Each is its own entry point (rather than a single "setup" screen with a
 // mode dropdown inside it) so each one's selection can persist
 // independently — see bg-app.ts's savedChoices.
-export type GameMode = { kind: 'singleplayer'; gameType: GameTypeId } | { kind: 'multiplayer' } | { kind: 'social' }
+export type GameMode = { kind: 'singleplayer'; gameType: GameTypeId } | { kind: 'multiplayer' } | { kind: 'social' } | { kind: 'about' }
 
 /**
  * The very first screen: choose a game type. Fires a `mode-selected`
@@ -45,6 +45,13 @@ export class ModeSelect extends LitElement {
           <h2>Social</h2>
           <div class="modes">
             <button type="button" class="secondary" @click=${() => this._select({ kind: 'social' })}>Social</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <h2>About</h2>
+          <div class="modes">
+            <button type="button" class="secondary" @click=${() => this._select({ kind: 'about' })}>About</button>
           </div>
         </div>
       </div>

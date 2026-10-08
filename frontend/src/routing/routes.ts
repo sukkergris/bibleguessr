@@ -21,6 +21,7 @@ export type Route =
   | { kind: 'daily-quiz' }
   /** A room's Congregation spectator board — see docs/web/congregation. */
   | { kind: 'watch'; roomCode: string }
+  | { kind: 'about' }
 
 export const HOME: Route = { kind: 'home' }
 
@@ -29,6 +30,7 @@ const MULTIPLAYER = 'multiplayer'
 const SOCIAL = 'social'
 const DAILY_QUIZ = 'daily-quiz'
 const WATCH = 'watch'
+const ABOUT = 'about'
 
 /** A room code as it may appear in an address: rooms use four digits
  * today, so this only has to keep out anything that isn't a plain code. */
@@ -69,6 +71,8 @@ export function routeFromPath(pathname: string): Route | undefined {
       return second === DAILY_QUIZ ? { kind: 'daily-quiz' } : undefined
     case WATCH:
       return second !== undefined && ROOM_CODE.test(second) ? { kind: 'watch', roomCode: second } : undefined
+    case ABOUT:
+      return second === undefined ? { kind: 'about' } : undefined
     default:
       return undefined
   }
@@ -91,6 +95,8 @@ export function pathOf(route: Route): string {
       return `/${SOCIAL}/${DAILY_QUIZ}`
     case 'watch':
       return `/${WATCH}/${encodeURIComponent(route.roomCode)}`
+    case 'about':
+      return `/${ABOUT}`
   }
 }
 

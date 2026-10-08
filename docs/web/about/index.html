@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>About</h1>
+      <p class="subtitle">
+        A static screen telling players what BibleGuessr is, how their own Bible file stays private, and where the
+        bundled Bible text comes from.
+      </p>
+
+      <h2>What the player sees</h2>
+      <p>
+        The front page's last section, <strong>About</strong>, comes after <a href="../social/index.html">Social</a>.
+        Its <em>About</em> button opens the About screen at <code>/about</code>, with four short parts: the game, the
+        privacy of the player's own Bible file, the Bible text (the public-domain Danish 1933 Bible, credited to Project
+        Runeberg), and the project's MIT license. The usual <em>← Home</em> button returns to the front page.
+      </p>
+
+      <h2>How it fits in</h2>
+      <p>
+        <code>mode-select.ts</code>'s <code>GameMode</code> has an <code>{ kind: 'about' }</code> case, and
+        <code>routes.ts</code> maps it to the <code>/about</code> address (see
+        <a href="../url-routing/index.html">Links and navigation</a>). <code>bg-app.ts</code> renders
+        <code>&lt;bg-about-page&gt;</code> for that address. The page is indexable: it is in
+        <code>INDEXABLE_ROUTES</code> and <span class="file-ref">frontend/public/sitemap.xml</span> (see
+        <a href="../seo/index.html">SEO</a>).
+      </p>
+      <p>
+        The text about Bible translations is a short summary of <span class="file-ref">NOTICE.md</span>. When the
+        bundled translations change, update both.
+      </p>
+
+      <h2>Tests</h2>
+      <p>
+        <span class="file-ref">frontend/e2e/about.spec.ts</span> checks the section's place on the front page, the way
+        in and back out, and opening <code>/about</code> directly. The route and page metadata are covered by
+        <span class="file-ref">frontend/src/routing/routes.test.ts</span> and
+        <span class="file-ref">frontend/src/routing/page-meta.test.ts</span>.
+      </p>
+
+      <footer class="page-footer">
+        Key files: <span class="file-ref">frontend/src/components/about-page.ts</span> ·
+        <span class="file-ref">frontend/src/components/mode-select.ts</span> ·
+        <span class="file-ref">frontend/src/components/bg-app.ts</span>
+      </footer>
+    </main>
+  </body>
+</html>

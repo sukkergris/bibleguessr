@@ -8,7 +8,7 @@ test('the front page has a Social section below Multiplayer', async ({ page }) =
   await page.goto('/')
 
   const headings = page.locator('bg-mode-select').getByRole('heading', { level: 2 })
-  await expect(headings).toHaveText(['Singleplayer', 'Multiplayer', 'Social'])
+  await expect(headings).toHaveText(['Singleplayer', 'Multiplayer', 'Social', 'About'])
   await expect(page.getByRole('button', { name: 'Social' })).toBeVisible()
 })
 

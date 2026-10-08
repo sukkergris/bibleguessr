@@ -19,6 +19,7 @@ import './bug-report'
 import '../social/social-home'
 import type { SocialView } from '../social/social-home'
 import '../congregation/spectator-board'
+import './about-page'
 import { NavigationController } from '../routing/navigation-controller'
 import { HOME, pathOf, urlOf, type Route } from '../routing/routes'
 import type { RoomEnteredDetail } from './bg-room-setup'
@@ -159,13 +160,7 @@ export class BgApp extends LitElement {
 
   private _onModeSelected = (event: CustomEvent<GameMode>) => {
     const mode = event.detail
-    this.navigation.navigate(
-      mode.kind === 'singleplayer'
-        ? { kind: 'singleplayer', gameType: mode.gameType }
-        : mode.kind === 'multiplayer'
-          ? { kind: 'multiplayer' }
-          : { kind: 'social' },
-    )
+    this.navigation.navigate(mode.kind === 'singleplayer' ? { kind: 'singleplayer', gameType: mode.gameType } : { kind: mode.kind })
   }
 
   private _onGameStarted = (event: CustomEvent<GameOptions>) => {
@@ -426,6 +421,8 @@ export class BgApp extends LitElement {
           .submitBibleFileReport=${api.submitBibleFileUploadReport}
           @social-view-requested=${this._onSocialViewRequested}
         ></bg-social-home>`
+      case 'about':
+        return html`<bg-about-page></bg-about-page>`
     }
   }
 

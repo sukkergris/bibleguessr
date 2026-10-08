@@ -28,6 +28,7 @@ export const INDEXABLE_ROUTES: readonly Route[] = [
   { kind: 'multiplayer' },
   { kind: 'social' },
   { kind: 'daily-quiz' },
+  { kind: 'about' },
 ]
 
 const titled = (screen: string) => `${screen} — ${SITE_NAME}`
@@ -69,6 +70,12 @@ export function pageMetaOf(route: Route): PageMeta {
         title: titled(`Leaderboard for room ${route.roomCode}`),
         description: SITE_DESCRIPTION,
         indexable: false,
+      }
+    case 'about':
+      return {
+        title: titled('About'),
+        description: `What ${SITE_NAME} is, how your own Bible file stays on your device, and where the bundled Bible text comes from.`,
+        indexable: true,
       }
   }
 }

@@ -29,6 +29,7 @@ describe('page metadata', () => {
     [{ kind: 'social' }, 'Social — BibleGuessr'],
     [{ kind: 'daily-quiz' }, 'Daily quiz — BibleGuessr'],
     [{ kind: 'watch', roomCode: '4821' }, 'Leaderboard for room 4821 — BibleGuessr'],
+    [{ kind: 'about' }, 'About — BibleGuessr'],
   ])('titles %j as %s', (route, title) => {
     expect(pageMetaOf(route).title).toBe(title)
   })
@@ -57,6 +58,7 @@ describe('page metadata', () => {
       '/multiplayer',
       '/social',
       '/social/daily-quiz',
+      '/about',
     ])
     for (const route of INDEXABLE_ROUTES) {
       expect(pageMetaOf(route).indexable).toBe(true)
