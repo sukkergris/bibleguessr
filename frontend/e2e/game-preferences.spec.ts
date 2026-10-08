@@ -13,8 +13,9 @@ test('the singleplayer round count is restored on the next visit', async ({ page
   await slider.fill('8')
   await expect(page.locator('bg-game-setup .round-count-value')).toHaveText('8')
 
-  // Leave setup entirely and come back.
-  await page.reload()
+  // Leave setup entirely and come back on a new visit. (A reload would
+  // stay on this screen — it has its own address now.)
+  await page.goto('/')
   await page.getByRole('button', { name: 'The Bible' }).click()
 
   await expect(page.locator('bg-game-setup .round-count-value')).toHaveText('8')
@@ -33,7 +34,8 @@ test('multiplayer round count and time limit are restored together', async ({ pa
   await page.getByRole('slider', { name: /Time per verse/ }).fill('45')
   await expect(page.locator('bg-challenge-settings .slider-value').last()).toHaveText('45s')
 
-  await page.reload()
+  // A new visit.
+  await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
   await expect(page.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
   await page.getByPlaceholder('e.g. Alice').fill(`Prefs${Date.now().toString().slice(-6)}b`)

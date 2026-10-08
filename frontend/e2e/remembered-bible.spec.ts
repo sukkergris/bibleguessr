@@ -73,7 +73,7 @@ test('a Bible file chosen in one game type is preselected everywhere, after a re
   await expectFileRestored(page)
 
   // A new visit.
-  await page.reload()
+  await page.goto('/')
   await openSingleplayer(page, 'The Bible')
   await expectFileRestored(page)
 
@@ -104,7 +104,8 @@ test('switching back to a server translation is remembered too', async ({ page }
   await openSingleplayer(page, 'Books')
   await expectServerTranslation(page)
 
-  await page.reload()
+  // A new visit.
+  await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
   await expectServerTranslation(page)
 })

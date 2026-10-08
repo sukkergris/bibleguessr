@@ -17,33 +17,40 @@ import './nerd-panel'
 import './report-abuse'
 import './bug-report'
 import '../social/social-home'
+import type { SocialView } from '../social/social-home'
 import '../congregation/spectator-board'
-import { parseWatchRoute } from '../congregation/watch-route'
+import { NavigationController } from '../routing/navigation-controller'
+import { HOME, pathOf, urlOf, type Route } from '../routing/routes'
+import type { RoomEnteredDetail } from './bg-room-setup'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
-type GamePhase = 'mode-select' | 'setup' | 'playing' | 'gameOver' | 'room-setup' | 'social'
+/** Where a singleplayer game is, within its game type's address (see
+ * routing/routes.ts) — a game in progress has no address of its own, so a
+ * reload goes back to its setup screen. */
+type SingleplayerStage = 'setup' | 'playing' | 'gameOver'
 
 @customElement('bg-app')
 export class BgApp extends LitElement {
+  /** Which screen is showing, kept in step with the address bar — see
+   * docs/web/url-routing. */
+  private navigation = new NavigationController(this)
+
+  /** The path last rendered, to notice when the screen changes — by a
+   * button, a link, or Back/Forward alike (see willUpdate). */
+  private _shownPath = pathOf(this.navigation.route)
+
   @state()
-  private phase: GamePhase = 'mode-select'
+  private singleplayerStage: SingleplayerStage = 'setup'
 
   /** Whether the "Report abuse" view is showing — see
-   * docs/SCRUM/Feature.ReportAbuse.md. Deliberately a flag alongside
-   * `phase` rather than another GamePhase value: reporting can happen from
-   * ANY screen, and this way the screen underneath is remembered, so
+   * docs/SCRUM/Feature.ReportAbuse.md. Deliberately a flag alongside the
+   * route rather than a route of its own: reporting can happen from ANY
+   * screen, and this way the screen underneath is remembered, so
    * canceling returns the player exactly where they were rather than to a
    * default. */
   @state()
   private reportingAbuse = false
-
-  /** The room whose Congregation spectator board this page shows, when it
-   * was opened from a `#/watch/<code>` link — see
-   * congregation/watch-route.ts. Takes over the whole page in place of
-   * the usual screens. */
-  @state()
-  private watchedRoomCode = parseWatchRoute(window.location.hash)
 
   /** Mirrors the report view's in-flight state so the toggle can be
    * disabled while a report is being sent, rather than discarding it. */
@@ -83,11 +90,6 @@ export class BgApp extends LitElement {
   @state()
   private guessConstraint: GuessConstraint = ANY_BOOK
 
-  // Which singleplayer game type (see mode-select.ts) is currently being
-  // set up.
-  @state()
-  private setupGameType: GameTypeId = 'the-bible'
-
   // Each game type's own selection, kept alive across visits to
   // mode-select and back — e.g. picking a handful of books in "Books",
   // backing out to Home, then coming back into "Books" restores that same
@@ -126,17 +128,21 @@ export class BgApp extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     window.addEventListener('keydown', this._onKeydown)
-    window.addEventListener('hashchange', this._onHashChange)
   }
 
   disconnectedCallback() {
     window.removeEventListener('keydown', this._onKeydown)
-    window.removeEventListener('hashchange', this._onHashChange)
     super.disconnectedCallback()
   }
 
-  private _onHashChange = () => {
-    this.watchedRoomCode = parseWatchRoute(window.location.hash)
+  // Whatever moved the app to a different screen — a button here, a link,
+  // or the browser's Back/Forward — any singleplayer game in progress is
+  // left behind, exactly as "← Home" always did.
+  protected willUpdate() {
+    const path = pathOf(this.navigation.route)
+    if (path === this._shownPath) return
+    this._shownPath = path
+    this._resetGame()
   }
 
   // While the "Next verse"/"See results" button is showing, Enter activates
@@ -152,17 +158,14 @@ export class BgApp extends LitElement {
   }
 
   private _onModeSelected = (event: CustomEvent<GameMode>) => {
-    if (event.detail.kind === 'multiplayer') {
-      this.phase = 'room-setup'
-      return
-    }
-    if (event.detail.kind === 'social') {
-      this.phase = 'social'
-      return
-    }
-
-    this.setupGameType = event.detail.gameType
-    this.phase = 'setup'
+    const mode = event.detail
+    this.navigation.navigate(
+      mode.kind === 'singleplayer'
+        ? { kind: 'singleplayer', gameType: mode.gameType }
+        : mode.kind === 'multiplayer'
+          ? { kind: 'multiplayer' }
+          : { kind: 'social' },
+    )
   }
 
   private _onGameStarted = (event: CustomEvent<GameOptions>) => {
@@ -173,7 +176,7 @@ export class BgApp extends LitElement {
     this.guessConstraint = guessConstraintOf(event.detail.choice)
     this.roundIndex = 0
     this.rounds = []
-    this.phase = 'playing'
+    this.singleplayerStage = 'playing'
     void this._loadNextVerse()
   }
 
@@ -221,7 +224,7 @@ export class BgApp extends LitElement {
   private _onNextRound = () => {
     const isLastRound = this.roundIndex + 1 >= this.roundCount
     if (isLastRound) {
-      this.phase = 'gameOver'
+      this.singleplayerStage = 'gameOver'
       this.finishedAt = new Date().toISOString()
       this.verse = undefined
       this.feedback = undefined
@@ -232,15 +235,19 @@ export class BgApp extends LitElement {
   }
 
   private _onPlayAgain = () => {
-    this.phase = 'mode-select'
-    this.rounds = []
+    this.navigation.navigate(HOME)
   }
 
-  // Bails out to the home (mode-select) screen from anywhere — resets the
-  // same in-progress-game state _onPlayAgain does, so leaving mid-game
-  // doesn't leave stale rounds/verse/feedback lying around for next time.
+  // Bails out to the home (mode-select) screen from anywhere. The game
+  // itself is reset by the screen change — see willUpdate.
   private _onGoHome = () => {
-    this.phase = 'mode-select'
+    this.navigation.navigate(HOME)
+  }
+
+  // Leaving a screen leaves any game on it: so stale rounds, verse and
+  // feedback aren't lying around for next time.
+  private _resetGame() {
+    this.singleplayerStage = 'setup'
     this.rounds = []
     this.roundIndex = 0
     this.verse = undefined
@@ -307,7 +314,7 @@ export class BgApp extends LitElement {
   render() {
     return html`
       <bg-connection-status
-        .trackSignalR=${this.phase === 'room-setup' || this.watchedRoomCode !== undefined}
+        .trackSignalR=${this.navigation.route.kind === 'multiplayer' || this.navigation.route.kind === 'watch'}
       ></bg-connection-status>
       <div class="layout">
         <main>
@@ -323,9 +330,7 @@ export class BgApp extends LitElement {
                   @report-closed=${this._onBugClosed}
                   @report-sending-changed=${this._onReportSendingChanged}
                 ></bg-bug-report>`
-              : this.watchedRoomCode !== undefined
-                ? this._renderSpectatorBoard(this.watchedRoomCode)
-                : this._renderCurrentPhase()}
+              : this._renderScreen(this.navigation.route)}
         </main>
         <bg-nerd-panel></bg-nerd-panel>
       </div>
@@ -382,42 +387,85 @@ export class BgApp extends LitElement {
     })
   }
 
-  private _renderSpectatorBoard(roomCode: string) {
-    return html`
-      <a class="home" href="#">← Open BibleGuessr</a>
-      <bg-spectator-board .roomCode=${roomCode}></bg-spectator-board>
-    `
+  private _renderScreen(route: Route) {
+    switch (route.kind) {
+      case 'home':
+        return html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
+      case 'watch':
+        // An ordinary link: the navigation controller turns the click into
+        // an in-page move home.
+        return html`
+          <a class="home" href=${pathOf(HOME)}>← Open BibleGuessr</a>
+          <bg-spectator-board .roomCode=${route.roomCode}></bg-spectator-board>
+        `
+      default:
+        return html`
+          <button type="button" class="home" @click=${this._onGoHome}>← Home</button>
+          ${this._renderArea(route)}
+        `
+    }
   }
 
-  private _renderCurrentPhase() {
-    return html`
-          ${this.phase !== 'mode-select'
-            ? html`<button type="button" class="home" @click=${this._onGoHome}>← Home</button>`
-            : null}
-          ${this.phase === 'mode-select'
-            ? html`<bg-mode-select @mode-selected=${this._onModeSelected}></bg-mode-select>`
-            : this.phase === 'setup'
-              ? html`<bg-game-setup
-                  .gameType=${this.setupGameType}
-                  .savedChoice=${this.savedChoices[this.setupGameType]}
-                  @game-started=${this._onGameStarted}
-                  @game-type-choice-changed=${this._onGameTypeChoiceChanged}
-                ></bg-game-setup>`
-              : this.phase === 'playing'
-                ? this._renderPlaying()
-                : this.phase === 'gameOver'
-                  ? html`<bg-game-results
-                      .rounds=${this.rounds}
-                      .gameTypeName=${nameOf(this.choice.gameType)}
-                      .columns=${sharedColumnsOf(this.choice)}
-                      .maxPointsPerVerse=${maxPointsOf(this.choice)}
-                      .finishedAt=${this.finishedAt}
-                      @play-again=${this._onPlayAgain}
-                    ></bg-game-results>`
-                  : this.phase === 'social'
-                    ? html`<bg-social-home .serverSource=${api} .submitBibleFileReport=${api.submitBibleFileUploadReport}></bg-social-home>`
-                    : html`<bg-room-setup @countdown-danger-changed=${this._onCountdownDangerChanged}></bg-room-setup>`}
-    `
+  private _renderArea(route: Exclude<Route, { kind: 'home' } | { kind: 'watch' }>) {
+    switch (route.kind) {
+      case 'singleplayer':
+        return this._renderSingleplayer(route.gameType)
+      case 'multiplayer':
+        return html`<bg-room-setup
+          .routeRoomCode=${route.roomCode}
+          @room-entered=${this._onRoomEntered}
+          @room-left=${this._onRoomLeft}
+          @countdown-danger-changed=${this._onCountdownDangerChanged}
+        ></bg-room-setup>`
+      case 'social':
+      case 'daily-quiz':
+        return html`<bg-social-home
+          .view=${route.kind === 'daily-quiz' ? 'daily-quiz' : 'home'}
+          .dailyQuizUrl=${urlOf({ kind: 'daily-quiz' }, window.location.origin)}
+          .serverSource=${api}
+          .submitBibleFileReport=${api.submitBibleFileUploadReport}
+          @social-view-requested=${this._onSocialViewRequested}
+        ></bg-social-home>`
+    }
+  }
+
+  private _renderSingleplayer(gameType: GameTypeId) {
+    switch (this.singleplayerStage) {
+      case 'setup':
+        return html`<bg-game-setup
+          .gameType=${gameType}
+          .savedChoice=${this.savedChoices[gameType]}
+          @game-started=${this._onGameStarted}
+          @game-type-choice-changed=${this._onGameTypeChoiceChanged}
+        ></bg-game-setup>`
+      case 'playing':
+        return this._renderPlaying()
+      case 'gameOver':
+        return html`<bg-game-results
+          .rounds=${this.rounds}
+          .gameTypeName=${nameOf(this.choice.gameType)}
+          .columns=${sharedColumnsOf(this.choice)}
+          .maxPointsPerVerse=${maxPointsOf(this.choice)}
+          .finishedAt=${this.finishedAt}
+          .shareUrl=${urlOf({ kind: 'singleplayer', gameType: this.choice.gameType }, window.location.origin)}
+          @play-again=${this._onPlayAgain}
+        ></bg-game-results>`
+    }
+  }
+
+  // Entering a room gives it an address of its own (/multiplayer/<code>)
+  // — something to share, and what Back leaves. World chat has no code,
+  // so it has the plain /multiplayer address.
+  private _onRoomEntered = (event: CustomEvent<RoomEnteredDetail>) => {
+    this.navigation.navigate({ kind: 'multiplayer', roomCode: event.detail.roomCode })
+  }
+
+  private _onRoomLeft = () => {
+    this.navigation.navigate({ kind: 'multiplayer' })
+  }
+
+  private _onSocialViewRequested = (event: CustomEvent<SocialView>) => {
+    this.navigation.navigate(event.detail === 'daily-quiz' ? { kind: 'daily-quiz' } : { kind: 'social' })
   }
 
   /** One control, two actions — see

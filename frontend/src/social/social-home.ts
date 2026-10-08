@@ -1,11 +1,11 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, property, state } from 'lit/decorators.js'
+import { customElement, property } from 'lit/decorators.js'
 import type { SubmitBibleFileReport } from '../bible-sources/server-access'
 import type { VerseSource } from '../shared-kernel/bible'
 import './daily-quiz/daily-quiz-game'
 
 /** Which Social screen is showing. */
-type SocialView = { kind: 'home' } | { kind: 'daily-quiz' }
+export type SocialView = 'home' | 'daily-quiz'
 
 /**
  * The Social area — see docs/web/social. Social is its own standalone
@@ -13,6 +13,12 @@ type SocialView = { kind: 'home' } | { kind: 'daily-quiz' }
  * shared UI and bible sources, never from the game or the multiplayer code (enforced by
  * src/architecture.test.ts). Its first content is the daily quiz — see
  * docs/web/daily-quiz.
+ *
+ * Which screen shows is decided by the app's address (/social or
+ * /social/daily-quiz — see docs/web/url-routing), so the app shell owns it:
+ * this element shows `view` and asks for another with a
+ * `social-view-requested` CustomEvent<SocialView>. That keeps Social free
+ * of the app's routing while its screens still have their own links.
  */
 @customElement('bg-social-home')
 export class SocialHome extends LitElement {
@@ -25,17 +31,29 @@ export class SocialHome extends LitElement {
   @property({ attribute: false })
   submitBibleFileReport?: SubmitBibleFileReport
 
-  @state()
-  private view: SocialView = { kind: 'home' }
+  @property({ attribute: false })
+  view: SocialView = 'home'
+
+  /** The daily quiz's own address, for the link in a shared result — so
+   * whoever follows it lands straight in the quiz. */
+  @property({ attribute: false })
+  dailyQuizUrl?: string
+
+  private request(view: SocialView) {
+    this.dispatchEvent(
+      new CustomEvent<SocialView>('social-view-requested', { detail: view, bubbles: true, composed: true }),
+    )
+  }
 
   render() {
-    switch (this.view.kind) {
+    switch (this.view) {
       case 'daily-quiz':
         return html`
           <bg-daily-quiz
             .serverSource=${this.serverSource}
             .submitBibleFileReport=${this.submitBibleFileReport}
-            @daily-quiz-closed=${() => (this.view = { kind: 'home' })}
+            .shareUrl=${this.dailyQuizUrl}
+            @daily-quiz-closed=${() => this.request('home')}
           ></bg-daily-quiz>
         `
       case 'home':
@@ -44,7 +62,7 @@ export class SocialHome extends LitElement {
             <h1>Social</h1>
             <div class="group">
               <h2>Daily quiz</h2>
-              <button type="button" @click=${() => (this.view = { kind: 'daily-quiz' })}>
+              <button type="button" @click=${() => this.request('daily-quiz')}>
                 Play today's quiz
                 <span class="hint">5 verses from the whole Bible — the same for everyone, new every day at 00:00 UTC</span>
               </button>

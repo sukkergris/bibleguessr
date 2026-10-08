@@ -38,8 +38,12 @@
       <p>
         The app shell only knows how to get there: <code>mode-select.ts</code>'s <code>GameMode</code> has a
         <code>{ kind: 'social' }</code> case, and <code>bg-app.ts</code> renders <code>&lt;bg-social-home&gt;</code>
-        (passing it that server access) for its <code>'social'</code> phase. Inside, Social keeps its own explicit view
-        state (<code>home</code> / <code>daily-quiz</code>).
+        (passing it that server access) for the <code>/social</code> and <code>/social/daily-quiz</code> addresses.
+        Which of Social's two screens shows (<code>SocialView</code>: <code>home</code> / <code>daily-quiz</code>) is
+        decided by the address, so the shell passes it in as <code>view</code>, and Social asks for the other with a
+        <code>social-view-requested</code> event — Social itself never touches the address bar (see
+        <a href="../url-routing/index.html">Links and navigation</a>). The shell also hands it the daily quiz's link,
+        for shared results.
       </p>
 
       <h2>Tests</h2>

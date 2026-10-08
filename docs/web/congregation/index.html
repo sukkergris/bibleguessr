@@ -23,7 +23,9 @@
           limit, and presses <em>Host a Congregation</em>. A lobby opens.
         </li>
         <li>
-          The other players in the room join the lobby, or don't. The host sees who has joined and a link for the
+          The other players in the room join the lobby, or don't. The room's invite link
+          (<code>/multiplayer/&lt;code&gt;</code>, see <a href="../url-routing/index.html">Links and navigation</a>)
+          brings more people in. The host sees who has joined and a link for the
           <a href="spectator-board.html">spectator board</a>.
         </li>
         <li>
@@ -97,7 +99,8 @@
         </li>
         <li>
           <strong>Coming back</strong> — a reloaded page, a phone that was locked — means joining the room again under
-          the same name while still marked disconnected. The newcomer then takes over the old seat: score, this
+          the same name while still marked disconnected. A reload comes back on the room's own join screen with the
+          code and name already filled in, so it is one press of <em>Join</em>. The newcomer then takes over the old seat: score, this
           round's guess and, for the host, the host role (<code>Room.admit</code>,
           <code>GameSession.rebind</code>). Duels keep their old behavior: the stale player is removed and the duel
           forfeited.
@@ -248,8 +251,8 @@
         </li>
         <li>
           Frontend: <span class="file-ref">congregation-state.test.ts</span>,
-          <span class="file-ref">board-announcer.test.ts</span>, <span class="file-ref">watch-route.test.ts</span>
-          and the layer rules in <span class="file-ref">architecture.test.ts</span>.
+          <span class="file-ref">board-announcer.test.ts</span> and the layer rules in
+          <span class="file-ref">architecture.test.ts</span>.
         </li>
         <li>
           End to end: <span class="file-ref">frontend/e2e/congregation.spec.ts</span> — three players and a spectator,

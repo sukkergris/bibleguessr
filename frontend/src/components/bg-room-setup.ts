@@ -1,5 +1,5 @@
-import { LitElement, css, html } from 'lit'
-import { customElement, state } from 'lit/decorators.js'
+import { LitElement, css, html, type PropertyValues } from 'lit'
+import { customElement, property, state } from 'lit/decorators.js'
 import { api } from '../api'
 import { toWire } from '../game-types/registry'
 import {
@@ -38,8 +38,8 @@ import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-na
 import { busyPlayersAre, gameEnded, gameStarted, playerLeft, type RosterBusyState } from '../roster-busy-state'
 import { CongregationController } from '../congregation/congregation-controller'
 import { congregationViewFor, hostBlockedReason, type CongregationView } from '../congregation/congregation-state'
-import { watchUrlFor } from '../congregation/watch-route'
-import { gameUrl } from '../shared-ui/share-or-copy'
+import { urlOf } from '../routing/routes'
+import { shareOrCopy, type ShareOutcome } from '../shared-ui/share-or-copy'
 import '../congregation/congregation-lobby'
 import '../congregation/congregation-game'
 import '../congregation/congregation-results'
@@ -74,6 +74,20 @@ interface ActiveGameOpponent {
   name: string
 }
 
+/** `room-entered`'s detail: the room's code, or undefined for World chat. */
+export interface RoomEnteredDetail {
+  roomCode?: string
+}
+
+/** What sharing a room's invite link says it did — undefined where the
+ * outcome speaks for itself (see shared-ui/share-or-copy.ts). */
+const INVITE_OUTCOME_MESSAGES: Record<ShareOutcome, string | undefined> = {
+  shared: undefined,
+  canceled: undefined,
+  copied: 'Invite link copied.',
+  failed: "The invite link couldn't be shared or copied.",
+}
+
 /**
  * Multiplayer entry point: create a new room or join one by code, then land
  * in a lobby with the joined-players list and a chat panel. Round/scoring
@@ -81,8 +95,24 @@ interface ActiveGameOpponent {
  */
 @customElement('bg-room-setup')
 export class RoomSetup extends LitElement {
+  /** The room code in the address (/multiplayer/<code>), if any — see
+   * docs/web/url-routing. On the create-or-join screen it fills in the code
+   * to join. While in a room, an address that names a different room, or
+   * none, means the player navigated away (Back, say), so the room is
+   * left — the same as "Back to chat selection".
+   *
+   * Fires `room-entered` (RoomEnteredDetail) once the player is in a room
+   * and `room-left` when they leave it with that button, so the app can
+   * keep the address in step. */
+  @property({ attribute: false })
+  routeRoomCode?: string
+
   @state()
   private screen: Screen = { step: 'choose' }
+
+  /** The outcome of sharing this room's invite link, for its status line. */
+  @state()
+  private inviteStatus?: string
 
   @state()
   private roomCodeInput = ''
@@ -272,6 +302,13 @@ export class RoomSetup extends LitElement {
     super.disconnectedCallback()
   }
 
+  protected willUpdate(changed: PropertyValues<this>) {
+    if (!changed.has('routeRoomCode')) return
+    const code = this.routeRoomCode
+    if (this.screen.step === 'in-room' && this.screen.roomCode !== code) this._leaveRoom()
+    if (code !== undefined && this.screen.step !== 'in-room') this.roomCodeInput = code
+  }
+
   render() {
     if (this.screen.step === 'in-room') {
       return this._renderRoom(this.screen.roomCode)
@@ -350,6 +387,16 @@ export class RoomSetup extends LitElement {
               `
             : 'World chat'}
         </h1>
+        ${roomCode
+          ? html`
+              <div class="invite">
+                <button type="button" class="secondary compact" @click=${() => this._onShareInvite(roomCode)}>
+                  Share invite link
+                </button>
+                <p class="invite-status" role="status">${this.inviteStatus ?? ''}</p>
+              </div>
+            `
+          : null}
 
         ${isDisconnected
           ? html`
@@ -466,7 +513,16 @@ export class RoomSetup extends LitElement {
         return html`
           <p role="status">A Congregation is being played in this room.</p>
           ${roomCode
-            ? html`<p><a class="watch-link" href=${watchUrlFor(gameUrl(), roomCode)}>Watch the live leaderboard</a></p>`
+            ? html`<p>
+                <!-- A new tab: following it here would take this player out of the room. -->
+                <a
+                  class="watch-link"
+                  href=${urlOf({ kind: 'watch', roomCode }, window.location.origin)}
+                  target="_blank"
+                  rel="noopener"
+                  >Watch the live leaderboard</a
+                >
+              </p>`
             : null}
           ${this._renderChat(false)}
         `
@@ -733,6 +789,9 @@ export class RoomSetup extends LitElement {
     this.myPlayerId = me.id
     saveRememberedPlayerName(playerName)
     this.screen = { step: 'in-room', roomCode, playerName }
+    this.dispatchEvent(
+      new CustomEvent<RoomEnteredDetail>('room-entered', { detail: { roomCode }, bubbles: true, composed: true }),
+    )
   }
 
   /** Common handling for a play request being resolved (accepted or
@@ -884,6 +943,18 @@ export class RoomSetup extends LitElement {
   // teardown below happens regardless of whether it succeeds, since the
   // player is leaving either way.
   private _onLeaveRoom() {
+    this._leaveRoom()
+    this.dispatchEvent(new CustomEvent('room-left', { bubbles: true, composed: true }))
+  }
+
+  /** Shares (or copies) the link that opens this room's join screen with
+   * its code filled in — see docs/web/url-routing. */
+  private async _onShareInvite(roomCode: string) {
+    const outcome = await shareOrCopy(urlOf({ kind: 'multiplayer', roomCode }, window.location.origin))
+    this.inviteStatus = INVITE_OUTCOME_MESSAGES[outcome]
+  }
+
+  private _leaveRoom() {
     leaveRoom().catch((err) => {
       console.error('[bg-room-setup] failed to notify the server of leaving the room', err)
     })
@@ -921,6 +992,7 @@ export class RoomSetup extends LitElement {
     this.activeGameIds = new Set()
     this.waitingForMatch = false
     this.error = undefined
+    this.inviteStatus = undefined
     this.connectionState = 'connected'
     this.screen = { step: 'choose' }
   }
@@ -939,6 +1011,19 @@ export class RoomSetup extends LitElement {
       margin: 0;
       font-size: 0.85rem;
       opacity: 0.75;
+    }
+
+    .invite {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .invite-status {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--text-muted);
     }
 
     .congregation-host {

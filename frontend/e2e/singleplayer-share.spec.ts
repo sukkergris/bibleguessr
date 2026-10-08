@@ -53,8 +53,8 @@ test('a singleplayer result can be shared: the game, each verse’s marks, when,
   expect(verseLines.length).toBeGreaterThan(0)
   for (const line of verseLines) expect(line).toMatch(MARKS_LINE)
   expect(lines.at(-2)).toMatch(/^Played 2026-10-01 14:3\d UTC$/)
-  // The address the game is served from — it follows the environment.
-  expect(lines.at(-1)).toBe(`${new URL(page.url()).origin}/`)
+  // The game type's own address — it follows the environment.
+  expect(lines.at(-1)).toBe(`${new URL(page.url()).origin}/play/the-bible`)
 
   // No separate title: some apps show it in front of the text, which would
   // repeat the "BibleGuessr" the text already starts with.
@@ -97,5 +97,5 @@ test('without a share menu, a singleplayer result is copied to the clipboard', a
   await page.getByRole('button', { name: 'Share result' }).click()
   await expect(page.locator('bg-game-results').getByRole('status')).toHaveText('Result copied — paste it anywhere.')
   const copied = await page.evaluate(() => navigator.clipboard.readText())
-  expect(copied.split('\n').at(-1)).toBe(`${new URL(page.url()).origin}/`)
+  expect(copied.split('\n').at(-1)).toBe(`${new URL(page.url()).origin}/play/the-bible`)
 })

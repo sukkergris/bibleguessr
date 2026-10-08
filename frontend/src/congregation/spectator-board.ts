@@ -12,8 +12,8 @@ const COUNTDOWN_TICK_MS = 250
 
 /**
  * The live Congregation leaderboard for a projector or TV — opened by
- * anyone with the `#/watch/<code>` link, no name and no join (see
- * docs/web/congregation and watch-route.ts).
+ * anyone with the `/watch/<code>` link, no name and no join (see
+ * docs/web/congregation and routing/routes.ts).
  *
  * Shows only what the server's LeaderboardSnapshot carries: names,
  * scores, who has guessed, and — once a round is scored — its reference.

@@ -59,6 +59,12 @@ export class DailyQuizGame extends LitElement {
   @property({ attribute: false })
   submitBibleFileReport?: SubmitBibleFileReport
 
+  /** The link a shared result ends with — the quiz's own address, so
+   * whoever follows it lands straight in the quiz. The site's address
+   * when not given. */
+  @property({ attribute: false })
+  shareUrl?: string
+
   @state()
   private session: DailyQuizSession = CHOOSING_BIBLE
 
@@ -138,7 +144,7 @@ export class DailyQuizGame extends LitElement {
     if (session.kind !== 'finished') return
     const text = shareText(
       { quizDate: session.quiz.date, rounds: session.rounds, finishedAt: session.finishedAt },
-      gameUrl(),
+      this.shareUrl ?? gameUrl(),
     )
     const outcome = await shareOrCopy(text)
     if (outcome !== 'canceled') this.shareStatus = SHARE_OUTCOME_MESSAGES[outcome]

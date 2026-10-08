@@ -39,7 +39,7 @@ const CONTRACT_FILE = join(GAME_TYPES_DIR, 'game-type-definition')
 const REGISTRY_FILE = join(GAME_TYPES_DIR, 'registry')
 const SOURCE_EXTENSION = '.ts'
 /** Everything the spectator board is built from. */
-const SPECTATOR_FILES = ['spectator-board', 'leaderboard-table', 'board-announcer', 'watch-route'].map(
+const SPECTATOR_FILES = ['spectator-board', 'leaderboard-table', 'board-announcer'].map(
   (name) => join(CONGREGATION_DIR, `${name}${SOURCE_EXTENSION}`),
 )
 

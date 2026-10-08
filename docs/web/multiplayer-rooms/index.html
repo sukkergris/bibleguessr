@@ -187,6 +187,11 @@
         <code>players</code>/<code>messages</code> in as properties and fires plain <code>CustomEvent</code>s out
         (<code>chat-submit</code>, <code>player-selected</code>).
       </p>
+      <p>
+        A room has its own address, <code>/multiplayer/&lt;code&gt;</code>: entering a room moves the address there,
+        <em>Share invite link</em> shares it, and opening it fills in the code on the join screen. Back leaves the
+        room. See <a href="../url-routing/index.html">Links and navigation</a>.
+      </p>
       <div class="callout">
         <span class="callout-title">Connection race, already handled</span>
         <p>

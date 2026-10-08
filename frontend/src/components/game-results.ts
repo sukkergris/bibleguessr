@@ -35,6 +35,12 @@ export class GameResults extends LitElement {
   @property({ type: String })
   finishedAt?: string
 
+  /** The link a shared result ends with — the game type's own address, so
+   * whoever follows it can play the same game. The site's address when not
+   * given. */
+  @property({ attribute: false })
+  shareUrl?: string
+
   /** What sharing last did, for the status line — undefined until shared. */
   @state()
   private shareStatus?: string
@@ -95,7 +101,7 @@ export class GameResults extends LitElement {
       [`BibleGuessr · ${this.gameTypeName}`, `${this.totalScore} points`],
       this.rounds.map((round) => ({ kind: 'answered', verse: round.verse, guess: round.guess, points: round.points })),
       this.finishedAt ?? new Date().toISOString(),
-      gameUrl(),
+      this.shareUrl ?? gameUrl(),
       this.columns,
     )
     const outcome = await shareOrCopy(text)

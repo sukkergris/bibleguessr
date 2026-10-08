@@ -91,9 +91,9 @@ test('a browser remembers the player name across visits', async ({ page }) => {
   await page.getByRole('button', { name: 'Join World chat' }).click()
   await expect(page.getByRole('heading', { name: 'World chat' })).toBeVisible()
 
-  // Reload lands back on the mode-select screen — go to Multiplayer again
-  // and confirm the name survived in this browser's localStorage.
-  await page.reload()
+  // A new visit — go to Multiplayer again and confirm the name survived in
+  // this browser's localStorage.
+  await page.goto('/')
   await page.getByRole('button', { name: 'Multiplayer' }).click()
   await expect(page.getByPlaceholder('e.g. Alice')).toHaveValue(name)
 })

@@ -88,7 +88,7 @@ test('three players play a Congregation while a spectator watches without seeing
     const spectatorFrames: string[] = []
     spectator.on('websocket', (ws) => ws.on('framereceived', (frame) => spectatorFrames.push(String(frame.payload))))
 
-    await spectator.goto(`/#/watch/${room.code}`)
+    await spectator.goto(`/watch/${room.code}`)
     await expect(spectator.getByText('No Congregation yet.')).toBeVisible()
 
     await openLobby(room.host)
@@ -262,10 +262,15 @@ test('a player who reloads mid-game gets their seat and score back', async ({ br
     await room.host.getByRole('button', { name: 'Start the game' }).click()
     await expect(ben.getByText(`Verse 1 of ${ROUNDS}`)).toBeVisible()
 
-    // A reload drops the connection; rejoining under the same name takes
-    // the seat back rather than counting as a new player.
+    // A reload drops the connection. The page comes back on the room's own
+    // join screen, with the code and the remembered name filled in, and
+    // rejoining under the same name takes the seat back rather than
+    // counting as a new player.
     await ben.reload()
-    await joinRoom(ben, room.names[1], room.code)
+    await expect(ben.getByPlaceholder('Room code')).toHaveValue(room.code)
+    await expect(ben.getByPlaceholder('e.g. Alice')).toHaveValue(room.names[1])
+    await expect(ben.getByRole('combobox', { name: 'Translation' })).not.toHaveValue('')
+    await ben.getByRole('button', { name: 'Join', exact: true }).click()
 
     await expect(ben.getByText(/Verse \d of 3/)).toBeVisible()
     await expect(ben.locator('bg-leaderboard-table tbody tr', { hasText: '(you)' })).toHaveCount(1)
@@ -294,7 +299,7 @@ test('while a Congregation has the room, nobody else can start a duel', async ({
     await expect(dan.getByText('A Congregation is being played in this room.')).toBeVisible()
     await expect(dan.getByRole('link', { name: 'Watch the live leaderboard' })).toHaveAttribute(
       'href',
-      new RegExp(`#/watch/${room.code}$`),
+      new RegExp(`/watch/${room.code}$`),
     )
   } finally {
     for (const context of room.contexts) await context.close()
@@ -331,7 +336,7 @@ test('the Congregation screens have no unlabeled controls', async ({ browser }) 
     await expect(ann.getByText(`Verse 1 of ${ROUNDS}`)).toBeVisible()
     expect(await auditA11y(ann)).toEqual([])
 
-    await spectator.goto(`/#/watch/${room.code}`)
+    await spectator.goto(`/watch/${room.code}`)
     await expect(spectator.getByRole('table', { name: 'Leaderboard' })).toBeVisible()
     expect(await auditA11y(spectator)).toEqual([])
   } finally {

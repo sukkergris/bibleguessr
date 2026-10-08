@@ -18,11 +18,11 @@
 
       <h2>Opening it</h2>
       <p>
-        The link is <span class="pill">https://&lt;site&gt;/#/watch/&lt;room code&gt;</span>. The host sees it in the
-        lobby, and players who aren't taking part get a <em>Watch the live leaderboard</em> link while the game runs. It
-        is a hash route (<span class="file-ref">frontend/src/congregation/watch-route.ts</span>), so the web server
-        needs nothing special: the page loads as usual, <code>bg-app</code> reads the room code from the hash and shows
-        the board in place of the usual screens.
+        The link is <span class="pill">https://&lt;site&gt;/watch/&lt;room code&gt;</span>. The host sees it in the
+        lobby, and players who aren't taking part get a <em>Watch the live leaderboard</em> link while the game runs —
+        opened in a new tab, so following it doesn't take them out of the room. It is one of the app's ordinary
+        addresses (see <a href="../url-routing/index.html">Links and navigation</a>): <code>bg-app</code> shows the
+        board in place of the usual screens, with an <em>← Open BibleGuessr</em> link back to the front page.
       </p>
       <p>
         The board follows the room through its whole life: "No Congregation yet", the lobby filling up, the game, and

@@ -3,12 +3,21 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { describeWire } from '../game-types/registry'
 import { cancelCongregation, joinCongregation, leaveCongregation, startCongregation } from '../signalr-client'
 import { buttonStyles } from '../shared-ui/button-styles'
-import { SHARE_OUTCOME_MESSAGES, gameUrl, shareOrCopy } from '../shared-ui/share-or-copy'
+import { shareOrCopy, type ShareOutcome } from '../shared-ui/share-or-copy'
 import { parseTimeSpanMs } from '../timer'
 import type { CongregationLobby, CongregationRules, VerseSource } from '../types'
-import { watchUrlFor } from './watch-route'
+import { urlOf } from '../routing/routes'
 
 const MS_PER_SECOND = 1000
+
+/** What sharing the board's link says it did — undefined where the outcome
+ * speaks for itself (see shared-ui/share-or-copy.ts). */
+const LINK_OUTCOME_MESSAGES: Record<ShareOutcome, string | undefined> = {
+  shared: undefined,
+  canceled: undefined,
+  copied: 'Link copied.',
+  failed: "The link couldn't be shared or copied.",
+}
 
 /**
  * An open Congregation lobby, as each player in the room sees it — see
@@ -83,7 +92,7 @@ export class CongregationLobbyView extends LitElement {
 
   render() {
     const seconds = Math.round(parseTimeSpanMs(this.lobby.roundTimeLimit) / MS_PER_SECOND)
-    const watchUrl = watchUrlFor(gameUrl(), this.roomCode)
+    const watchUrl = urlOf({ kind: 'watch', roomCode: this.roomCode }, window.location.origin)
 
     return html`
       <section class="lobby" aria-labelledby="lobby-title">
@@ -191,7 +200,7 @@ export class CongregationLobbyView extends LitElement {
 
   private async onShareLink(url: string) {
     const outcome = await shareOrCopy(url)
-    this.linkStatus = outcome === 'copied' ? 'Link copied.' : SHARE_OUTCOME_MESSAGES[outcome]
+    this.linkStatus = LINK_OUTCOME_MESSAGES[outcome]
   }
 
   static styles = [

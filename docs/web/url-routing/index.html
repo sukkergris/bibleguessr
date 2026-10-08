@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Links and navigation — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Links and navigation</h1>
+      <p class="subtitle">
+        Every screen has its own address, so a shared link leads straight to it, a reload stays put, and the
+        browser's Back and Forward buttons move between screens.
+      </p>
+
+      <h2>The addresses</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>Screen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/</code></td>
+            <td>The front page.</td>
+          </tr>
+          <tr>
+            <td><code>/play/the-bible</code>, <code>/play/books</code>, <code>/play/chapters</code></td>
+            <td>A singleplayer game type's setup screen.</td>
+          </tr>
+          <tr>
+            <td><code>/multiplayer</code></td>
+            <td>Create or join a room. Also World chat, which has no code of its own.</td>
+          </tr>
+          <tr>
+            <td><code>/multiplayer/&lt;room code&gt;</code></td>
+            <td>The join screen with that code filled in — and the address while you're in that room.</td>
+          </tr>
+          <tr>
+            <td><code>/social</code></td>
+            <td>Social.</td>
+          </tr>
+          <tr>
+            <td><code>/social/daily-quiz</code></td>
+            <td>Today's daily quiz.</td>
+          </tr>
+          <tr>
+            <td><code>/watch/&lt;room code&gt;</code></td>
+            <td>The room's <a href="../congregation/spectator-board.html">spectator board</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        A game in progress has no address of its own: a reload during a singleplayer game goes back to that game
+        type's setup screen. An address the app doesn't know shows the front page, and the address bar is corrected
+        to <code>/</code>.
+      </p>
+
+      <h2>What links lead where</h2>
+      <ul>
+        <li>A shared daily quiz result ends with <code>/social/daily-quiz</code> — whoever follows it can play today's quiz.</li>
+        <li>A shared singleplayer result ends with its game type, e.g. <code>/play/books</code>.</li>
+        <li>
+          In a room, <em>Share invite link</em> shares <code>/multiplayer/&lt;code&gt;</code>. The link fills in the
+          code; the visitor still picks their Bible and name (both remembered from earlier visits) and presses
+          <em>Join</em>. Nobody joins a room just by opening a link.
+        </li>
+        <li>The Congregation lobby offers <code>/watch/&lt;code&gt;</code> for a projector.</li>
+      </ul>
+
+      <h2>Back, Forward and reload</h2>
+      <p>
+        Every move between screens — a button, a link, <em>← Home</em> — adds a history entry. Back and Forward show
+        whatever screen the address then names, and leave the current one exactly as its own buttons would: leaving
+        a singleplayer screen drops the game in progress, and leaving a room's address leaves the room, the same as
+        <em>Back to chat selection</em>. Coming Forward to a room's address offers the room again; it doesn't rejoin
+        it.
+      </p>
+      <p>
+        A reload stays on the same address. In a room, that means the join screen with the code — and, for a
+        Congregation player, rejoining under the same name takes back their seat (see
+        <a href="../congregation/index.html">Congregation</a>).
+      </p>
+
+      <h2>Page titles</h2>
+      <p>
+        Each screen sets the page title, e.g. "Daily quiz — BibleGuessr" or "Room 4821 — BibleGuessr". That is what
+        a screen reader announces after a move, and what the Back button's history menu lists.
+      </p>
+
+      <h2>The web server must fall back to the app</h2>
+      <p>
+        The addresses are real paths, not <code>#</code> fragments, so the browser asks the server for
+        <code>/social/daily-quiz</code> itself. The server must answer every path that isn't a file, the API or the
+        hub with <code>index.html</code>, and the app takes it from there.
+      </p>
+      <ul>
+        <li>
+          <strong>Vite</strong> — <code>vite dev</code> and <code>vite preview</code> already do this, and the
+          <a href="../request-routing/index.html">server replica</a> proxies everything else to Vite.
+        </li>
+        <li>
+          <strong>nginx serving the built files</strong> — the location that serves the frontend needs a fallback:
+          <pre><code>location / {
+    root /usr/share/nginx/html;
+    try_files $uri $uri/ /index.html;
+}</code></pre>
+          The built page refers to its scripts and styles by absolute paths (<code>/assets/…</code>), so it works at
+          any depth.
+        </li>
+      </ul>
+      <div class="callout limitation">
+        <span class="callout-title">Check production before relying on links</span>
+        <p>
+          Production's frontend serving config isn't in this repository. Until it falls back to
+          <code>index.html</code>, a shared deep link answers 404 there, while the front page keeps working.
+        </p>
+      </div>
+
+      <h2>Implementation</h2>
+      <p>
+        <span class="file-ref">frontend/src/routing/routes.ts</span> is the one place that knows the addresses:
+        <code>Route</code> (a union with one case per screen), <code>routeFromPath</code>, its inverse
+        <code>pathOf</code>, <code>urlOf</code> for full links, and <code>titleOf</code>. All pure and unit tested.
+      </p>
+      <p>
+        <span class="file-ref">frontend/src/routing/navigation-controller.ts</span> is a Lit reactive controller
+        owned by <code>&lt;bg-app&gt;</code>. It reads the address on load, adds history entries in
+        <code>navigate()</code>, follows <code>popstate</code>, sets the title, and turns a plain click on an
+        ordinary <code>&lt;a&gt;</code> to one of the app's own addresses into an in-page move — so links can be real
+        links. Links with a <code>target</code>, a modifier key or a middle-click are left to the browser.
+      </p>
+      <p>
+        <code>&lt;bg-app&gt;</code> renders the screen for the current route. A singleplayer game's own stage
+        (setup, playing, results) lives beside it, and any change of route resets it. Areas with screens of their
+        own stay unaware of addresses:
+      </p>
+      <ul>
+        <li>
+          <code>&lt;bg-social-home&gt;</code> shows the <code>view</code> it is given and asks for another with
+          <code>social-view-requested</code>, which keeps Social free of the app shell (see
+          <a href="../social/index.html">Social</a>). It is handed the daily quiz's link for shared results.
+        </li>
+        <li>
+          <code>&lt;bg-room-setup&gt;</code> takes the address's room code as <code>routeRoomCode</code> and reports
+          <code>room-entered</code> and <code>room-left</code>.
+        </li>
+      </ul>
+
+      <h2>Adding an address</h2>
+      <ol>
+        <li>Add a case to <code>Route</code> in <span class="file-ref">routes.ts</span>.</li>
+        <li>
+          The compiler then points at <code>pathOf</code>, <code>titleOf</code> and <code>&lt;bg-app&gt;</code>'s
+          <code>_renderScreen</code>. Add the path to <code>routeFromPath</code> yourself — and a row to
+          <span class="file-ref">routes.test.ts</span>, which checks that every route reads back from its own path.
+        </li>
+        <li>Navigate to it with <code>navigate()</code>, or link to it with an ordinary <code>&lt;a&gt;</code>.</li>
+      </ol>
+
+      <h2>Tests</h2>
+      <ul>
+        <li><span class="file-ref">frontend/src/routing/routes.test.ts</span> — every address both ways, stray slashes, unknown addresses, titles.</li>
+        <li>
+          <span class="file-ref">frontend/e2e/url-navigation.spec.ts</span> — a daily quiz link, Back and Forward,
+          game type addresses, unknown addresses, in-page links, and room links: the invite link, joining from it, Back
+          leaving the room.
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

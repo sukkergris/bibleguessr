@@ -255,8 +255,9 @@ test('the result can be shared through the device’s share menu, with date and 
   expect(text).toContain('10 points')
   // Which parts were right: only verse 1's book.
   expect(text).toContain('Book · Chapter · Verse\n✅ ❌ ❌ 10\n❌ ❌ ❌ 0\n❌ ❌ ❌ 0\n❌ ❌ ❌ 0\n❌ ❌ ❌ 0')
-  // Always ends with the link — the address the game is served from.
-  expect(text?.split('\n').at(-1)).toBe(`${new URL(page.url()).origin}/`)
+  // Always ends with the link — straight to the daily quiz, on the address
+  // the game is served from.
+  expect(text?.split('\n').at(-1)).toBe(`${new URL(page.url()).origin}/social/daily-quiz`)
   expect(text).toMatch(/Played 2026-10-01 14:3\d UTC/)
   // No spoilers for anyone who hasn't played yet.
   expect(text).not.toContain('Rut')
