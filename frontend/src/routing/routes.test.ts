@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOME, pathOf, routeFromPath, titleOf, urlOf, type Route } from './routes'
+import { HOME, pathOf, routeFromPath, urlOf, type Route } from './routes'
 
 describe('routes', () => {
   it.each<[string, Route]>([
@@ -42,17 +42,5 @@ describe('routes', () => {
       'https://bibleguessr.example/social/daily-quiz',
     )
     expect(urlOf(HOME, 'http://localhost:5173/')).toBe('http://localhost:5173/')
-  })
-
-  it.each<[Route, string]>([
-    [{ kind: 'home' }, 'BibleGuessr'],
-    [{ kind: 'singleplayer', gameType: 'books' }, 'Books — BibleGuessr'],
-    [{ kind: 'multiplayer' }, 'Multiplayer — BibleGuessr'],
-    [{ kind: 'multiplayer', roomCode: '4821' }, 'Room 4821 — BibleGuessr'],
-    [{ kind: 'social' }, 'Social — BibleGuessr'],
-    [{ kind: 'daily-quiz' }, 'Daily quiz — BibleGuessr'],
-    [{ kind: 'watch', roomCode: '4821' }, 'Leaderboard for room 4821 — BibleGuessr'],
-  ])('titles %j as %s', (route, title) => {
-    expect(titleOf(route)).toBe(title)
   })
 })

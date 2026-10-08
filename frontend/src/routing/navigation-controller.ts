@@ -1,5 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from 'lit'
-import { HOME, pathOf, routeFromPath, titleOf, type Route } from './routes'
+import { showPageMeta } from './page-head'
+import { HOME, pathOf, routeFromPath, type Route } from './routes'
 
 /** The main mouse button — anything else (middle-click, …) keeps the
  * browser's own behavior, such as opening a new tab. */
@@ -18,7 +19,8 @@ const PRIMARY_BUTTON = 0
  * - A click on an ordinary link to one of the app's own addresses is
  *   handled in the page instead of reloading it.
  *
- * Every change also sets the page title (see routes.ts's titleOf).
+ * Every change also sets the page's title, description and search-engine
+ * tags (see page-head.ts).
  */
 export class NavigationController implements ReactiveController {
   route: Route
@@ -30,7 +32,7 @@ export class NavigationController implements ReactiveController {
     const route = routeFromPath(window.location.pathname)
     this.route = route ?? HOME
     if (!route) window.history.replaceState(null, '', pathOf(HOME))
-    document.title = titleOf(this.route)
+    showPageMeta(this.route)
     host.addController(this)
   }
 
@@ -54,7 +56,7 @@ export class NavigationController implements ReactiveController {
 
   private show(route: Route) {
     this.route = route
-    document.title = titleOf(route)
+    showPageMeta(route)
     this.host.requestUpdate()
   }
 

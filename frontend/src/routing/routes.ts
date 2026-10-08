@@ -8,7 +8,7 @@
  * docs/web/url-routing).
  */
 
-import { GAME_TYPE_IDS, nameOf, type GameTypeId } from '../game-types/registry'
+import { GAME_TYPE_IDS, type GameTypeId } from '../game-types/registry'
 
 export type Route =
   | { kind: 'home' }
@@ -29,7 +29,6 @@ const MULTIPLAYER = 'multiplayer'
 const SOCIAL = 'social'
 const DAILY_QUIZ = 'daily-quiz'
 const WATCH = 'watch'
-const SITE_NAME = 'BibleGuessr'
 
 /** A room code as it may appear in an address: rooms use four digits
  * today, so this only has to keep out anything that isn't a plain code. */
@@ -99,26 +98,4 @@ export function pathOf(route: Route): string {
  * window.location.origin) — what a shared result or invite points at. */
 export function urlOf(route: Route, origin: string): string {
   return `${origin.replace(/\/+$/, '')}${pathOf(route)}`
-}
-
-/** The page title while `route` is showing — what a screen reader
- * announces on arrival and the Back button's history menu lists. */
-export function titleOf(route: Route): string {
-  const screen = (() => {
-    switch (route.kind) {
-      case 'home':
-        return undefined
-      case 'singleplayer':
-        return nameOf(route.gameType)
-      case 'multiplayer':
-        return route.roomCode === undefined ? 'Multiplayer' : `Room ${route.roomCode}`
-      case 'social':
-        return 'Social'
-      case 'daily-quiz':
-        return 'Daily quiz'
-      case 'watch':
-        return `Leaderboard for room ${route.roomCode}`
-    }
-  })()
-  return screen === undefined ? SITE_NAME : `${screen} — ${SITE_NAME}`
 }

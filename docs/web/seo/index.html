@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Search engines — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Search engines</h1>
+      <p class="subtitle">
+        The basics that let search engines find, understand and list BibleGuessr's pages: robots.txt, a sitemap,
+        and a title, description and canonical address for every page.
+      </p>
+
+      <h2>What is in place</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Piece</th>
+            <th>Where</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/robots.txt</code></td>
+            <td><span class="file-ref">frontend/public/robots.txt</span></td>
+            <td>
+              Lets crawlers in everywhere except <code>/admin/</code> and <code>/cdn-cgi/</code>, and names the
+              sitemap. <code>/api/</code> is deliberately not blocked: the app fetches it to build each page, and
+              Google builds pages the way a browser does.
+            </td>
+          </tr>
+          <tr>
+            <td><code>/sitemap.xml</code></td>
+            <td><span class="file-ref">frontend/public/sitemap.xml</span></td>
+            <td>
+              Every page search engines should know about: the front page, each game type, Multiplayer, Social and
+              the daily quiz. No <code>lastmod</code>: a static file can't know when a page changed, and a wrong date
+              is worse than none.
+            </td>
+          </tr>
+          <tr>
+            <td>Each page's <code>&lt;head&gt;</code></td>
+            <td><span class="file-ref">frontend/src/routing/page-meta.ts</span>, <span class="file-ref">page-head.ts</span></td>
+            <td>
+              The title, a description of its own, and a canonical link to its address on the public site — or, for a
+              room's pages (<code>/multiplayer/&lt;code&gt;</code>, <code>/watch/&lt;code&gt;</code>), which only
+              exist as long as the room, <code>noindex</code> and no canonical link.
+            </td>
+          </tr>
+          <tr>
+            <td>Link previews</td>
+            <td><span class="file-ref">frontend/index.html</span></td>
+            <td>
+              A description and Open Graph tags for readers that don't run the app: chat apps and social networks
+              building a preview of a shared link. They describe the site as a whole.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>One public address</h2>
+      <p>
+        Canonical links always point at <code>https://bibleguessr.uk</code> — <code>SITE_URL</code> in
+        <span class="file-ref">page-meta.ts</span> — whichever host served the page, so a copy on another host (www,
+        a test server, the local replica) points search engines at the real one. robots.txt and sitemap.xml are static
+        files and can't import it, so <span class="file-ref">page-meta.test.ts</span> checks that they, and the
+        description in <span class="file-ref">index.html</span>, agree with the code. Changing the domain means
+        changing all of them; the test says which.
+      </p>
+
+      <h2>Pages built by the app</h2>
+      <p>
+        The server sends the same <code>index.html</code> for every address, and the app builds the page — including
+        its head — in the browser (see <a href="../url-routing/index.html">Links and navigation</a>). Google runs the
+        app before indexing, so it sees each page's own title, description and canonical link. Following Google's
+        advice for tags added by JavaScript, the app keeps exactly one canonical link and one description however
+        often the page changes, and <code>index.html</code> itself has no canonical link that could contradict it.
+      </p>
+      <p>
+        Readers that don't run JavaScript — link previews in chat apps, some smaller search engines — only ever see
+        <code>index.html</code>'s site-wide tags.
+      </p>
+
+      <h2>Serving the files</h2>
+      <p>
+        Vite serves <span class="file-ref">frontend/public</span> at the site root in development and copies it into
+        the build. In the nginx image,
+        <span class="file-ref">server-replica/nginx/includes/static-assets.conf</span> serves <code>/robots.txt</code>
+        and <code>/sitemap.xml</code> from the built files, the sitemap with <code>Cache-Control: no-cache</code> so a
+        new page list is picked up at once. (The nginx template used to send <code>/sitemap.xml</code> to the backend,
+        which has never served one.)
+      </p>
+
+      <h2>Adding a page</h2>
+      <ol>
+        <li>Give it an address — see <a href="../url-routing/index.html">Links and navigation</a>.</li>
+        <li>Give it a title and description in <code>pageMetaOf</code>; the compiler points there.</li>
+        <li>
+          If search engines should list it, add it to <code>INDEXABLE_ROUTES</code> and a <code>&lt;url&gt;</code> to
+          sitemap.xml — <span class="file-ref">page-meta.test.ts</span> fails until both agree.
+        </li>
+      </ol>
+
+      <h2>After deploying</h2>
+      <ul>
+        <li>
+          Make sure production answers every app address with <code>index.html</code> (see
+          <a href="../url-routing/index.html">Links and navigation</a>) — otherwise crawlers get 404s for every page in
+          the sitemap but the front page.
+        </li>
+        <li>
+          Verify the site in Google Search Console and Bing Webmaster Tools, and submit
+          <code>https://bibleguessr.uk/sitemap.xml</code>. <span class="file-ref">frontend/public/BingSiteAuth.xml</span>
+          still holds a placeholder instead of Bing's verification code.
+        </li>
+      </ul>
+
+      <h2>Not done yet</h2>
+      <ul>
+        <li><strong>A preview image.</strong> Shared links show no picture; that takes an <code>og:image</code> of about 1200×630 pixels.</li>
+        <li>
+          <strong>Previews per page.</strong> A shared daily quiz link previews as the site as a whole, because preview
+          readers don't run the app. Page-specific previews need the server to put each page's tags in the HTML it
+          sends (prerendering; the nginx config has unused prerender hooks from its template).
+        </li>
+        <li><strong>Structured data</strong> (JSON-LD), e.g. describing the site and the game.</li>
+        <li>
+          <strong>The page's language.</strong> <code>index.html</code> says <code>lang="da"</code> while the interface
+          is English. The bundled Bible's verses are Danish, though, and screen readers choose their voice from
+          <code>lang</code>, so changing it needs the verse text marked with its own language at the same time.
+        </li>
+        <li>
+          <strong>One host.</strong> If both <code>www.bibleguessr.uk</code> and <code>bibleguessr.uk</code> serve the
+          site, the canonical links keep search results together, but a redirect to one host is cleaner.
+        </li>
+      </ul>
+
+      <h2>Tests</h2>
+      <ul>
+        <li>
+          <span class="file-ref">frontend/src/routing/page-meta.test.ts</span> — titles, descriptions, which pages are
+          listed, canonical addresses, and that robots.txt, sitemap.xml and index.html agree with the code.
+        </li>
+        <li>
+          <span class="file-ref">frontend/e2e/seo.spec.ts</span> — each page's head as the app leaves it, rooms kept
+          out of search results, every sitemap page opening as itself, and robots.txt.
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

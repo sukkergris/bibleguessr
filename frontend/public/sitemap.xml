@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Every page search engines should know about — see docs/web/seo. Kept
+     in step with frontend/src/routing/page-meta.ts by page-meta.test.ts. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://bibleguessr.uk/</loc></url>
+  <url><loc>https://bibleguessr.uk/play/the-bible</loc></url>
+  <url><loc>https://bibleguessr.uk/play/books</loc></url>
+  <url><loc>https://bibleguessr.uk/play/chapters</loc></url>
+  <url><loc>https://bibleguessr.uk/multiplayer</loc></url>
+  <url><loc>https://bibleguessr.uk/social</loc></url>
+  <url><loc>https://bibleguessr.uk/social/daily-quiz</loc></url>
+</urlset>

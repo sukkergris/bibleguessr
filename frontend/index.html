@@ -3,10 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="author" href="/humans.txt" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- content is injected at build time from package.json — do not edit -->
     <meta name="application-revision" content="0" />
     <title>BibleGuessr</title>
+    <!-- For readers that don't run the app: search engines see this until
+         the app sets each page's own (see docs/web/seo), and link previews
+         in chat apps only ever see this. -->
+    <meta name="description" content="Guess where a Bible verse comes from: the book, the chapter and the verse. Play alone, live with friends, or take the daily quiz." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BibleGuessr" />
+    <meta property="og:title" content="BibleGuessr" />
+    <meta property="og:description" content="Guess where a Bible verse comes from: the book, the chapter and the verse. Play alone, live with friends, or take the daily quiz." />
+    <meta name="twitter:card" content="summary" />
     <link rel="stylesheet" href="./src/index.css" />
     <script type="module" src="/src/main.ts"></script>
   </head>

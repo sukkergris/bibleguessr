@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /cdn-cgi/
+
+Sitemap: https://bibleguessr.uk/sitemap.xml

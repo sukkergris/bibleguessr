@@ -1,0 +1,20 @@
+/* TEAM */
+  Creator & Developer: Theodor Heiselberg
+  Contact: sukkerfrit [at] gmail.com
+  GitHub: https://github.com/sukkergris
+  Location: Denmark
+
+/* THANKS */
+  Søren Hornstrup & Project Runeberg (electronic edition of the 1933 Danish Bible)
+  Det Danske Bibelselskab
+  Open-source communities behind Lit, F#, and .NET
+
+/* SITE */
+  Last update: 2026/10/08
+  Standards: HTML5, CSS3, TypeScript
+  Components: Lit, @microsoft/signalr, fflate
+  Backend: .NET 10, ASP.NET Core, F#
+  Tooling: Vite, Vitest, Playwright, Task, Docker, Nginx
+  Language: English / Danish
+  Doctype: HTML5
+

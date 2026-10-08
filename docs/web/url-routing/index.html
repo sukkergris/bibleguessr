@@ -90,7 +90,8 @@
       <h2>Page titles</h2>
       <p>
         Each screen sets the page title, e.g. "Daily quiz — BibleGuessr" or "Room 4821 — BibleGuessr". That is what
-        a screen reader announces after a move, and what the Back button's history menu lists.
+        a screen reader announces after a move, and what the Back button's history menu lists. It sets its
+        description and search-engine tags at the same time — see <a href="../seo/index.html">Search engines</a>.
       </p>
 
       <h2>The web server must fall back to the app</h2>
@@ -126,12 +127,15 @@
       <p>
         <span class="file-ref">frontend/src/routing/routes.ts</span> is the one place that knows the addresses:
         <code>Route</code> (a union with one case per screen), <code>routeFromPath</code>, its inverse
-        <code>pathOf</code>, <code>urlOf</code> for full links, and <code>titleOf</code>. All pure and unit tested.
+        <code>pathOf</code>, and <code>urlOf</code> for full links. All pure and unit tested. What each address
+        tells browsers and search engines — its title, description, and whether it is listed — is in
+        <span class="file-ref">page-meta.ts</span> (see <a href="../seo/index.html">Search engines</a>).
       </p>
       <p>
         <span class="file-ref">frontend/src/routing/navigation-controller.ts</span> is a Lit reactive controller
         owned by <code>&lt;bg-app&gt;</code>. It reads the address on load, adds history entries in
-        <code>navigate()</code>, follows <code>popstate</code>, sets the title, and turns a plain click on an
+        <code>navigate()</code>, follows <code>popstate</code>, writes the page's metadata into the head
+        (<span class="file-ref">page-head.ts</span>), and turns a plain click on an
         ordinary <code>&lt;a&gt;</code> to one of the app's own addresses into an in-page move — so links can be real
         links. Links with a <code>target</code>, a modifier key or a middle-click are left to the browser.
       </p>
@@ -156,16 +160,20 @@
       <ol>
         <li>Add a case to <code>Route</code> in <span class="file-ref">routes.ts</span>.</li>
         <li>
-          The compiler then points at <code>pathOf</code>, <code>titleOf</code> and <code>&lt;bg-app&gt;</code>'s
+          The compiler then points at <code>pathOf</code>, <code>pageMetaOf</code> and <code>&lt;bg-app&gt;</code>'s
           <code>_renderScreen</code>. Add the path to <code>routeFromPath</code> yourself — and a row to
           <span class="file-ref">routes.test.ts</span>, which checks that every route reads back from its own path.
         </li>
         <li>Navigate to it with <code>navigate()</code>, or link to it with an ordinary <code>&lt;a&gt;</code>.</li>
+        <li>
+          If search engines should list it, add it to the sitemap too — see
+          <a href="../seo/index.html">Search engines</a>.
+        </li>
       </ol>
 
       <h2>Tests</h2>
       <ul>
-        <li><span class="file-ref">frontend/src/routing/routes.test.ts</span> — every address both ways, stray slashes, unknown addresses, titles.</li>
+        <li><span class="file-ref">frontend/src/routing/routes.test.ts</span> — every address both ways, stray slashes, unknown addresses.</li>
         <li>
           <span class="file-ref">frontend/e2e/url-navigation.spec.ts</span> — a daily quiz link, Back and Forward,
           game type addresses, unknown addresses, in-page links, and room links: the invite link, joining from it, Back
