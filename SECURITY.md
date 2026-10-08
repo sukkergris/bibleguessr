@@ -11,7 +11,8 @@ Please include, as far as you are able:
 - What the issue is and roughly how severe you think it is.
 - Steps to reproduce it, or a proof of concept.
 - The affected version — the release (e.g. `v0.0.1`), or the frontend and
-  backend revisions shown in the app's Nerd panel (Ctrl+Shift+N).
+  backend revisions shown in the app's Nerd panel (Alt+Shift+N, or the
+  Nerd panel button in the connection menu).
 
 This is a hobby project maintained by one person, so please do not expect
 an enterprise response time. I will confirm receipt when I can, and keep

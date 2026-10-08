@@ -1,8 +1,10 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, property, state } from 'lit/decorators.js'
+import { customElement, property, query, state } from 'lit/decorators.js'
 import { api } from '../api'
+import { requestNerdPanelOpen } from '../nerd-panel-control'
 import { healthText, serverHealth, type ServerHealthSnapshot } from '../server-health'
 import { getGameHubConnection, onConnectionStateChange, type ConnectionState } from '../signalr-client'
+import { buttonStyles } from '../shared-ui/button-styles'
 
 /** One line in the details panel.
  *
@@ -29,6 +31,9 @@ interface ConnectionRow {
  * in the app, at a glance, without needing to reach for the Network/Console
  * tabs every time. Collapsed to a small dot by default; expands to the
  * detail on click.
+ *
+ * The details end with a Nerd panel button: the panel's only way in that
+ * doesn't need a keyboard — see docs/web/connection-status.
  */
 @customElement('bg-connection-status')
 export class ConnectionStatus extends LitElement {
@@ -50,6 +55,9 @@ export class ConnectionStatus extends LitElement {
 
   @state()
   private expanded = false
+
+  @query('.dot')
+  private _dot!: HTMLButtonElement
 
   private _unsubscribeConnectionState?: () => void
   private _unsubscribeHealth?: () => void
@@ -198,6 +206,13 @@ export class ConnectionStatus extends LitElement {
     return pending?.summary ?? 'Connected'
   }
 
+  /** Closes these details — they would cover the top of the panel — and
+   * opens the nerd panel, with focus going back to the dot when it closes. */
+  private _openNerdPanel = () => {
+    this.expanded = false
+    requestNerdPanelOpen({ returnFocusTo: this._dot })
+  }
+
   render() {
     return html`
       <button
@@ -239,6 +254,8 @@ export class ConnectionStatus extends LitElement {
                 </p>
               `
             : null}
+
+        <button type="button" class="secondary compact nerd-panel" @click=${this._openNerdPanel}>Nerd panel</button>
       </div>
     `
   }
@@ -268,7 +285,9 @@ export class ConnectionStatus extends LitElement {
     `
   }
 
-  static styles = css`
+  static styles = [
+    buttonStyles,
+    css`
     :host {
       position: fixed;
       top: 0.75rem;
@@ -424,7 +443,14 @@ export class ConnectionStatus extends LitElement {
       padding: 0.1rem 0.3rem;
       border-radius: 4px;
     }
-  `
+
+    .nerd-panel {
+      display: block;
+      width: 100%;
+      margin-top: 0.75rem;
+    }
+  `,
+  ]
 }
 
 declare global {

@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test'
 
 async function openNerdPanel(page: import('@playwright/test').Page) {
   await page.goto('/')
-  await page.keyboard.press('Control+Shift+KeyN')
+  await page.keyboard.press('Alt+Shift+KeyN')
   await expect(page.getByRole('heading', { name: 'Nerd stuff' })).toBeVisible()
 }
 

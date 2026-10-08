@@ -19,9 +19,11 @@
       <h2>What the player sees</h2>
       <p>
         The front page's last section, <strong>About</strong>, comes after <a href="../social/index.html">Social</a>.
-        Its <em>About</em> button opens the About screen at <code>/about</code>, with four short parts: the game, the
+        Its <em>About</em> button opens the About screen at <code>/about</code>, with five short parts: the game, the
         privacy of the player's own Bible file, the Bible text (the public-domain Danish 1933 Bible, credited to Project
-        Runeberg), and the project's MIT license. The usual <em>← Home</em> button returns to the front page.
+        Runeberg), the project's MIT license, and <em>Nerd stuff</em> — how to open the nerd panel: the
+        connection menu's <em>Nerd panel</em> button, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> (see
+        <a href="../keyboard-shortcuts/index.html">Keyboard shortcuts</a>). The usual <em>← Home</em> button returns to the front page.
       </p>
 
       <h2>How it fits in</h2>
@@ -38,10 +40,17 @@
         bundled translations change, update both.
       </p>
 
+      <p>
+        The <em>Nerd stuff</em> section is where a player learns the nerd panel exists. It renders the shortcut from
+        <code>NERD_PANEL_SHORTCUT_KEYS</code> in <span class="file-ref">frontend/src/nerd-panel-control.ts</span>, so
+        a new shortcut shows up here by itself; the sentence about the Option key on a Mac assumes it uses Alt.
+      </p>
+
       <h2>Tests</h2>
       <p>
         <span class="file-ref">frontend/e2e/about.spec.ts</span> checks the section's place on the front page, the way
-        in and back out, and opening <code>/about</code> directly. The route and page metadata are covered by
+        in and back out, opening <code>/about</code> directly, and that the <em>Nerd stuff</em> section names the
+        shortcut and the Nerd panel button, and the shortcut opens the panel from there. The route and page metadata are covered by
         <span class="file-ref">frontend/src/routing/routes.test.ts</span> and
         <span class="file-ref">frontend/src/routing/page-meta.test.ts</span>.
       </p>

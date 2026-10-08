@@ -1,12 +1,14 @@
 import { LitElement, css, html } from 'lit'
 import { customElement } from 'lit/decorators.js'
+import { NERD_PANEL_SHORTCUT_KEYS } from '../nerd-panel-control'
 
 const PROJECT_RUNEBERG_URL = 'https://runeberg.org/'
 
 /**
  * The About screen — see docs/web/about. Static text about the game, how
  * the player's own Bible file is kept private, and where the bundled Bible
- * text comes from (the full picture is in NOTICE.md).
+ * text comes from (the full picture is in NOTICE.md), and how to open the
+ * nerd panel.
  */
 @customElement('bg-about-page')
 export class AboutPage extends LitElement {
@@ -48,6 +50,19 @@ export class AboutPage extends LitElement {
         <section aria-labelledby="about-source">
           <h2 id="about-source">Open source</h2>
           <p>BibleGuessr's source code is released under the MIT license.</p>
+        </section>
+
+        <section aria-labelledby="about-nerd">
+          <h2 id="about-nerd">Nerd stuff</h2>
+          <p>
+            Curious what is going on behind the scenes? The nerd panel shows whether the server is up, which version of
+            the app you are running, the list of famous verses the game draws from, and the appearance setting.
+          </p>
+          <p>
+            To open it, tap the small dot in the top-right corner and choose <strong>Nerd panel</strong>. With a
+            keyboard, press ${NERD_PANEL_SHORTCUT_KEYS.map((key, i) => html`${i > 0 ? ' + ' : ''}<kbd>${key}</kbd>`)}
+            (on a Mac, Alt is the Option key). Press the same keys again, or use the panel's Close button, to hide it.
+          </p>
         </section>
       </article>
     `
@@ -92,6 +107,20 @@ export class AboutPage extends LitElement {
 
     a {
       color: var(--link);
+    }
+
+    /* Matches the nerd panel's own shortcut guide. */
+    kbd {
+      display: inline-block;
+      min-width: 1.6em;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85em;
+      padding: 0.1rem 0.4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
     }
 
     a:focus-visible {

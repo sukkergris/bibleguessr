@@ -20,6 +20,12 @@
         Clicking the dot opens a small <strong>Connection status</strong> panel. The heading also names the group for
         assistive technology, so the rows are announced as belonging to something rather than read bare.
       </p>
+      <p>
+        The panel ends with a <strong>Nerd panel</strong> button — the nerd panel's way in that needs no keyboard (see
+        <a href="../keyboard-shortcuts/index.html">Keyboard shortcuts</a>). It closes the connection panel, which
+        would otherwise cover the top of the nerd panel, and moves focus to the nerd panel's heading. Closing the nerd
+        panel puts focus back on the dot.
+      </p>
 
       <h2>Three independent signals</h2>
       <p>
@@ -116,7 +122,7 @@
 
       <h2 id="one-check">One check, two places</h2>
       <p>
-        The indicator and the nerd panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) show the same
+        The indicator and the nerd panel (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>) show the same
         <code>/api/healthz</code> check. <span class="file-ref">frontend/src/server-health.ts</span> owns it: the
         fetch, the 5-second timeout, the adaptive interval and the countdown. Both components subscribe to
         <code>serverHealth</code>. The server gets one request per check, and both places show the same result in the
@@ -172,7 +178,8 @@
       <p>
         Prompt reaction, accessible status text and recovery are covered by
         <span class="file-ref">frontend/e2e/connection-status.spec.ts</span>, verified by removing both fixes and
-        confirming all three tests fail.
+        confirming all three tests fail. The Nerd panel button, including where focus goes, is covered by
+        <span class="file-ref">frontend/e2e/nerd-panel-connection-menu.spec.ts</span>.
       </p>
     </main>
   </body>

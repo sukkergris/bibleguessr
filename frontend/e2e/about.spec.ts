@@ -29,3 +29,17 @@ test('About opens straight from its link', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'About' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Your own Bible stays with you' })).toBeVisible()
 })
+
+test('About tells players how to open the nerd panel, and the shortcut works from there', async ({ page }) => {
+  await page.goto('/about')
+
+  const nerdStuff = page.getByRole('region', { name: 'Nerd stuff' })
+  await expect(nerdStuff).toContainText('Alt')
+  await expect(nerdStuff).toContainText('Shift')
+  await expect(nerdStuff).toContainText('N')
+  // The way in that needs no keyboard.
+  await expect(nerdStuff).toContainText('Nerd panel')
+
+  await page.keyboard.press('Alt+Shift+KeyN')
+  await expect(page.locator('bg-nerd-panel').getByRole('heading', { name: 'Nerd stuff' })).toBeVisible()
+})

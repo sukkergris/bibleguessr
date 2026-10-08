@@ -10,7 +10,7 @@ const UNHEALTHY_INTERVAL_SECONDS = 3
 
 async function openNerdPanel(page: Page) {
   await page.goto('/')
-  await page.keyboard.press('Control+Shift+KeyN')
+  await page.keyboard.press('Alt+Shift+KeyN')
   await expect(page.getByRole('heading', { name: 'Nerd stuff' })).toBeVisible()
 }
 

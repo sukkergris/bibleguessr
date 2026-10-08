@@ -1,28 +1,43 @@
 import { LitElement, css, html } from 'lit'
-import { customElement, state } from 'lit/decorators.js'
+import { customElement, query, state } from 'lit/decorators.js'
 import './theme-select'
 import { api } from '../api';
 import { buildInfoText, type BuildInfoState } from './build-info';
 import { groupByBook, needsLoading, type FamousVersesState } from './famous-verses';
 import { healthText, nextCheckText, serverHealth, type ServerHealthSnapshot } from '../server-health';
+import {
+  NERD_PANEL_SHORTCUT_KEYS,
+  NERD_PANEL_SHORTCUT_TEXT,
+  isNerdPanelShortcut,
+  onNerdPanelOpenRequest,
+  type NerdPanelOpenRequest,
+} from '../nerd-panel-control';
+
+/** The focused element, looking inside shadow roots — document.activeElement
+ * only reports the outermost host. */
+function deepActiveElement(): HTMLElement | undefined {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active instanceof HTMLElement ? active : undefined;
+}
 
 /**
- * A debug drawer along the right edge, toggled with Ctrl+Shift+N — the
- * shell for whatever "nerd stuff" ends up living here (connection
- * diagnostics, an event log, etc.). Empty for now; widgets get slotted in
- * as they're built.
+ * A debug drawer along the right edge, toggled with Alt+Shift+N or opened
+ * from the connection menu's Nerd panel button (see nerd-panel-control.ts)
+ * — the shell for whatever "nerd stuff" ends up living here (connection
+ * diagnostics, an event log, etc.).
  *
  * Takes real layout space rather than floating over the page: bg-app.ts
  * renders this as a flex sibling of <main>, so opening it narrows the main
  * column instead of covering part of it — the width transition below is
  * what makes that widen/narrow read as a slide rather than a jump cut.
  *
- * Note: Ctrl+Shift+N is "new incognito window" in some browsers (Chrome).
- * preventDefault() on the keydown stops the browser handling it *while
- * this page has focus*, so the shortcut works here — but a browser that
- * intercepts the chord at a level above the page (some do, for this
- * specific one) may still win. If that turns out to bite in practice, the
- * fix is picking a different chord, not fighting the browser further.
+ * The shortcut used to be Ctrl+Shift+N, until it turned out Chrome and
+ * Edge on Windows open a private window on it before the page sees the
+ * keys — see nerd-panel-control.ts for why Alt+Shift+N.
+ *
+ * Closed, the panel is inert as well as aria-hidden: it is only narrowed
+ * to nothing, so without inert its controls would still take Tab stops.
  */
 @customElement('bg-nerd-panel')
 export class NerdPanel extends LitElement {
@@ -49,6 +64,19 @@ export class NerdPanel extends LitElement {
   private health: ServerHealthSnapshot = { check: { status: 'checking' }, secondsToNextCheck: 0 };
 
   private _unsubscribeHealth?: () => void;
+  private _unsubscribeOpenRequests?: () => void;
+
+  /** Where focus was when the panel opened, and goes back to when it
+   * closes with focus inside it — otherwise focus would be left on a
+   * control that just turned inert. */
+  private _returnFocusTo?: HTMLElement;
+
+  /** Set by an open request, which moves focus into the panel once it has
+   * rendered open. */
+  private _focusOnOpen = false;
+
+  @query('h2')
+  private _heading!: HTMLHeadingElement;
 
   connectedCallback() {
     super.connectedCallback();
@@ -56,22 +84,23 @@ export class NerdPanel extends LitElement {
     void this._loadRevisions();
     void this._loadBuildInfo();
     this._unsubscribeHealth = serverHealth.subscribe((health) => (this.health = health));
+    this._unsubscribeOpenRequests = onNerdPanelOpenRequest(this._onOpenRequest);
 
     // Deliberate, permanent console hint — keep this even when trimming
-    // other logging elsewhere. The nerd panel has no visible on-page
-    // affordance (no button, no menu entry), so the console is the only
-    // place a developer/tester learns the shortcut exists at all.
-    console.log('[bg-nerd-panel] Open the nerd panel with Ctrl+Shift+N');
+    // other logging elsewhere. Besides this hint, only the About page's
+    // "Nerd stuff" section tells anyone the shortcut exists.
+    console.log(`[bg-nerd-panel] Open the nerd panel with ${NERD_PANEL_SHORTCUT_TEXT}`);
   }
 
   disconnectedCallback() {
     window.removeEventListener('keydown', this._onKeydown);
     this._unsubscribeHealth?.();
+    this._unsubscribeOpenRequests?.();
     super.disconnectedCallback();
   }
 
   private _onKeydown = (e: KeyboardEvent) => {
-    if (!(e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n')) return;
+    if (!isNerdPanelShortcut(e)) return;
     // Never while the player is typing: a global chord that fires inside a
     // text field interrupts ordinary input, which is exactly what
     // docs/SCRUM/TODO/Feature.ShortcutDescriptions.md forbids. Checked
@@ -79,8 +108,26 @@ export class NerdPanel extends LitElement {
     // shadow root, where document.activeElement only reports the host.
     if (this._isTypingTarget(e)) return;
     e.preventDefault();
-    this.open = !this.open;
+    if (this.open) this._close();
+    else this._open(deepActiveElement());
   };
+
+  private _onOpenRequest = (request: NerdPanelOpenRequest) => {
+    this._focusOnOpen = true;
+    this._open(request.returnFocusTo);
+  };
+
+  private _open(returnFocusTo: HTMLElement | undefined) {
+    this._returnFocusTo = returnFocusTo;
+    this.open = true;
+  }
+
+  private _close() {
+    const focusWasInside = this.shadowRoot?.activeElement != null;
+    this.open = false;
+    if (focusWasInside && this._returnFocusTo?.isConnected) this._returnFocusTo.focus();
+    this._returnFocusTo = undefined;
+  }
 
   /** Whether this key event originated in something the player types into. */
   private _isTypingTarget(e: KeyboardEvent): boolean {
@@ -169,17 +216,24 @@ export class NerdPanel extends LitElement {
     if (changedProperties.has('open')) {
       this.toggleAttribute('data-open', this.open);
     }
+    if (this.open && this._focusOnOpen) {
+      this._focusOnOpen = false;
+      this._heading.focus();
+    }
   }
 
   render() {
     return html`
-      <div class="panel" aria-hidden=${!this.open}>
+      <div class="panel" aria-hidden=${!this.open} ?inert=${!this.open}>
         <header>
-          <h2>Nerd stuff</h2>
+          <!-- tabindex="-1": an open request from the connection menu
+               moves focus here, so the panel's name is the first thing
+               read out. Not a Tab stop. -->
+          <h2 tabindex="-1">Nerd stuff</h2>
           <button
             type="button"
             class="close"
-            @click=${() => (this.open = false)}
+            @click=${() => this._close()}
             aria-label="Close"
           >
             ✕
@@ -195,13 +249,12 @@ export class NerdPanel extends LitElement {
             <h3 id="shortcuts-heading">Keyboard shortcuts</h3>
             <dl>
               <div>
-                <dt><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd></dt>
+                <dt>${NERD_PANEL_SHORTCUT_KEYS.map((key, i) => html`${i > 0 ? ' + ' : ''}<kbd>${key}</kbd>`)}</dt>
                 <dd>
-                  Show or hide this panel. Hold all three keys together.
+                  Show or hide this panel. Hold all three keys together. On a Mac, Alt is the Option key.
                   <p class="caveat">
-                    Some browsers reserve this combination for a new private or incognito window and never pass it to
-                    the page. Where that happens, use the panel's Close button — the shortcut is a convenience, not
-                    the only way in or out.
+                    The shortcut is a convenience, not the only way in or out: the connection menu (the dot in the
+                    top-right corner) has a Nerd panel button, and the panel has a Close button.
                   </p>
                 </dd>
               </div>
@@ -377,6 +430,11 @@ export class NerdPanel extends LitElement {
     h2 {
       font-size: 1rem;
       margin: 0;
+    }
+
+    h2:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
 
     .close {

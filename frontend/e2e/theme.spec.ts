@@ -9,7 +9,7 @@ const resolvedTheme = (page: Page) =>
   page.evaluate(() => document.documentElement.getAttribute('data-theme'))
 
 async function openThemeControl(page: Page) {
-  await page.keyboard.press('Control+Shift+KeyN')
+  await page.keyboard.press('Alt+Shift+KeyN')
   await expect(page.getByRole('heading', { name: 'Nerd stuff' })).toBeVisible()
 }
 
@@ -159,7 +159,7 @@ test('surfaces keep readable contrast in dark mode', async ({ browser }) => {
 
   try {
     await page.goto('/')
-    await page.keyboard.press('Control+Shift+KeyN')
+    await page.keyboard.press('Alt+Shift+KeyN')
     await expect(page.getByRole('heading', { name: 'Nerd stuff' })).toBeVisible()
 
     const samples = await page.evaluate(() => {
