@@ -53,6 +53,7 @@ install time, and each retains its own license.
 | [Lit](https://lit.dev) | BSD-3-Clause |
 | [@microsoft/signalr](https://github.com/dotnet/aspnetcore) | MIT |
 | [fflate](https://github.com/101arrowz/fflate) | MIT |
+| [site-config-loader](https://github.com/sukkergris/site-config-loader) | Unlicense (public domain) |
 | [TypeScript](https://www.typescriptlang.org/) | Apache-2.0 |
 | [Vite](https://vite.dev) | MIT |
 | [Vitest](https://vitest.dev) | MIT |
