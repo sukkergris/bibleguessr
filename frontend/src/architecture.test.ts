@@ -14,6 +14,11 @@
 //                   app reaches game types only through registry.ts.
 //   social/         a standalone area: imports only itself, the shared
 //                   kernel, shared UI and bible sources.
+//   congregation/   the group multiplayer mode: never imports the app's
+//                   other screens (components/) or Social. Its spectator
+//                   board — open to anyone with the link — can't even
+//                   reach verse text: it imports no Bible source and no
+//                   verse card (see docs/web/congregation).
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
@@ -26,9 +31,17 @@ const SHARED_UI_DIR = join(SRC_DIR, 'shared-ui')
 const BIBLE_SOURCES_DIR = join(SRC_DIR, 'bible-sources')
 const GAME_TYPES_DIR = join(SRC_DIR, 'game-types')
 const SOCIAL_DIR = join(SRC_DIR, 'social')
+const CONGREGATION_DIR = join(SRC_DIR, 'congregation')
+const COMPONENTS_DIR = join(SRC_DIR, 'components')
+const VERSE_CARD_FILE = join(SHARED_UI_DIR, 'verse-card')
+const GUESS_FORM_FILE = join(SHARED_UI_DIR, 'guess-form')
 const CONTRACT_FILE = join(GAME_TYPES_DIR, 'game-type-definition')
 const REGISTRY_FILE = join(GAME_TYPES_DIR, 'registry')
 const SOURCE_EXTENSION = '.ts'
+/** Everything the spectator board is built from. */
+const SPECTATOR_FILES = ['spectator-board', 'leaderboard-table', 'board-announcer', 'watch-route'].map(
+  (name) => join(CONGREGATION_DIR, `${name}${SOURCE_EXTENSION}`),
+)
 
 const IMPORT_SPECIFIER = /(?:^|\s)(?:import|export)\s(?:[^'"]*?\sfrom\s*)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g
 
@@ -71,6 +84,7 @@ describe('layer boundaries', () => {
     expect(sourceFilesUnder(SHARED_UI_DIR).length).toBeGreaterThan(0)
     expect(sourceFilesUnder(BIBLE_SOURCES_DIR).length).toBeGreaterThan(0)
     expect(sourceFilesUnder(SOCIAL_DIR).length).toBeGreaterThan(0)
+    expect(sourceFilesUnder(CONGREGATION_DIR)).toEqual(expect.arrayContaining(SPECTATOR_FILES))
     expect(gameTypeFolders.map((folder) => relative(GAME_TYPES_DIR, folder)).sort()).toEqual(
       expect.arrayContaining(['books', 'chapters', 'the-bible']),
     )
@@ -112,6 +126,20 @@ describe('layer boundaries', () => {
       isInside(t, SHARED_UI_DIR) ||
       isInside(t, BIBLE_SOURCES_DIR)
     expect(violations(sourceFilesUnder(SOCIAL_DIR), allowed)).toEqual([])
+  })
+
+  it('the Congregation never imports the other screens or Social', () => {
+    const allowed: Rule = (t) => !isInside(t, COMPONENTS_DIR) && !isInside(t, SOCIAL_DIR)
+    expect(violations(sourceFilesUnder(CONGREGATION_DIR), allowed)).toEqual([])
+  })
+
+  it('the spectator board cannot reach verse text', () => {
+    const allowed: Rule = (t) =>
+      !isInside(t, BIBLE_SOURCES_DIR) &&
+      t !== VERSE_CARD_FILE &&
+      t !== GUESS_FORM_FILE &&
+      (!isInside(t, CONGREGATION_DIR) || SPECTATOR_FILES.includes(t + SOURCE_EXTENSION))
+    expect(violations(SPECTATOR_FILES, allowed)).toEqual([])
   })
 })
 

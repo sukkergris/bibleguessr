@@ -36,6 +36,15 @@
         A failed request is exposed with <code>role="alert"</code> and leaves the confirmation action available for retry.
       </p>
 
+      <h2>In a Congregation</h2>
+      <p>
+        A <a href="../congregation/index.html">Congregation</a> has <strong>Leave the game</strong> instead, with the
+        same dialog behavior (Stay is focused, Escape and the backdrop close it, focus returns to the trigger). Leaving
+        doesn't end the game for anyone else: the server marks the player as departed, keeps their score on the
+        leaderboard and stops waiting for their guesses. The same <code>ForfeitGame</code> hub method serves both — it
+        branches on the session's <code>Format</code>.
+      </p>
+
       <h2>Implementation</h2>
       <p>
         <span class="file-ref">frontend/src/components/multiplayer-game.ts</span> owns the dialog state, focus

@@ -84,7 +84,7 @@ let prepareJoin (name: string) (room: Room) : Result&lt;Room, unit&gt; =
         <code>prepareJoin</code> calls the same helper with a one-element set (the single stale player whose name
         collided). Both call sites get identical guarantees for free: the removed player is dropped from
         <code>Players</code> and <code>DisconnectedPlayers</code>, any play request naming them (sent or received)
-        is dropped from <code>PendingRequests</code>, and if they were part of the room's <code>ActiveGame</code>
+        is dropped from <code>PendingRequests</code>, and if they were part of the room's <code>Activity</code>
         that game ends too — with the surviving opponent's id returned so the caller can broadcast
         <code>GameOver(Forfeited)</code> for them, exactly as if the grace-period sweep had caught them.
       </p>
@@ -137,7 +137,7 @@ let prepareJoin (name: string) (room: Room) : Result&lt;Room, unit&gt; =
           On <code>Ok preparedRoom</code>: if a stale player was actually removed (detected by comparing
           <code>preparedRoom.Players.Length</code> against the original room's), the hub broadcasts
           <code>PlayerLeftEvent</code> for that player to the whole room group — and, if they were part of an
-          <code>ActiveGame</code>, also broadcasts <code>GameOverEvent</code> naming the surviving opponent with
+          <code>Activity</code>, also broadcasts <code>GameOverEvent</code> naming the surviving opponent with
           reason <code>Forfeited</code> — the same two broadcasts <code>PlayerCleanupService</code>'s periodic sweep
           sends for exactly this situation. Only then does the new <code>Player</code> get created, added, and the
           usual <code>PlayerJoined</code>/<code>ChatHistory</code>/<code>RoomPlayers</code> sequence proceed.

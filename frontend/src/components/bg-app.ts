@@ -17,6 +17,8 @@ import './nerd-panel'
 import './report-abuse'
 import './bug-report'
 import '../social/social-home'
+import '../congregation/spectator-board'
+import { parseWatchRoute } from '../congregation/watch-route'
 
 type Feedback = { points: number; verse: Verse; guess: Guess } | undefined
 
@@ -35,6 +37,13 @@ export class BgApp extends LitElement {
    * default. */
   @state()
   private reportingAbuse = false
+
+  /** The room whose Congregation spectator board this page shows, when it
+   * was opened from a `#/watch/<code>` link — see
+   * congregation/watch-route.ts. Takes over the whole page in place of
+   * the usual screens. */
+  @state()
+  private watchedRoomCode = parseWatchRoute(window.location.hash)
 
   /** Mirrors the report view's in-flight state so the toggle can be
    * disabled while a report is being sent, rather than discarding it. */
@@ -117,11 +126,17 @@ export class BgApp extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     window.addEventListener('keydown', this._onKeydown)
+    window.addEventListener('hashchange', this._onHashChange)
   }
 
   disconnectedCallback() {
     window.removeEventListener('keydown', this._onKeydown)
+    window.removeEventListener('hashchange', this._onHashChange)
     super.disconnectedCallback()
+  }
+
+  private _onHashChange = () => {
+    this.watchedRoomCode = parseWatchRoute(window.location.hash)
   }
 
   // While the "Next verse"/"See results" button is showing, Enter activates
@@ -291,7 +306,9 @@ export class BgApp extends LitElement {
 
   render() {
     return html`
-      <bg-connection-status .trackSignalR=${this.phase === 'room-setup'}></bg-connection-status>
+      <bg-connection-status
+        .trackSignalR=${this.phase === 'room-setup' || this.watchedRoomCode !== undefined}
+      ></bg-connection-status>
       <div class="layout">
         <main>
           ${this.reportingAbuse
@@ -306,7 +323,9 @@ export class BgApp extends LitElement {
                   @report-closed=${this._onBugClosed}
                   @report-sending-changed=${this._onReportSendingChanged}
                 ></bg-bug-report>`
-              : this._renderCurrentPhase()}
+              : this.watchedRoomCode !== undefined
+                ? this._renderSpectatorBoard(this.watchedRoomCode)
+                : this._renderCurrentPhase()}
         </main>
         <bg-nerd-panel></bg-nerd-panel>
       </div>
@@ -361,6 +380,13 @@ export class BgApp extends LitElement {
     this.updateComplete.then(() => {
       if (trigger?.isConnected) trigger.focus()
     })
+  }
+
+  private _renderSpectatorBoard(roomCode: string) {
+    return html`
+      <a class="home" href="#">← Open BibleGuessr</a>
+      <bg-spectator-board .roomCode=${roomCode}></bg-spectator-board>
+    `
   }
 
   private _renderCurrentPhase() {
@@ -603,6 +629,17 @@ export class BgApp extends LitElement {
       color: var(--text-muted);
       font-size: 0.85rem;
       cursor: pointer;
+    }
+
+    /* The spectator board's way back is a link, not a button. */
+    a.home {
+      width: fit-content;
+      text-decoration: none;
+    }
+
+    a.home:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
 
 

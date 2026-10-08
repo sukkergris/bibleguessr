@@ -150,5 +150,5 @@ let ``prepareJoin ends the stale player's active game, freeing their opponent`` 
     let room = Room.markDisconnected stale.Id DateTimeOffset.UtcNow room
 
     match Room.prepareJoin "Alice" room with
-    | Ok updated -> Assert.True(updated.ActiveGame.IsNone)
+    | Ok updated -> Assert.Empty(Room.games updated)
     | Error () -> failwith "expected Ok"

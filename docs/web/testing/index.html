@@ -115,6 +115,15 @@ task frontend:test-e2e  # end-to-end tests (Playwright)</code></pre>
             </td>
           </tr>
           <tr>
+            <td><code>congregation.spec.ts</code></td>
+            <td>
+              Three players and a spectator play a whole Congregation; the spectator's WebSocket frames hold no verse
+              reference before the reveal. Also: leaving mid-game, the timer, reloading mid-game, the room blocked for
+              duels, and an accessibility audit. Start the backend with <code>Congregation__RevealSeconds=2</code> to
+              keep it quick.
+            </td>
+          </tr>
+          <tr>
             <td><code>player-presence.spec.ts</code></td>
             <td>
               Closing one context flips the other player's status dot live; a name survives a page reload. Does

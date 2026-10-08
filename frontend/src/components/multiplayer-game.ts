@@ -265,8 +265,6 @@ export class MultiplayerGame extends LitElement {
     | {
         kind: 'gameOver';
         scores: Record<string, number>;
-        playerA: string;
-        playerB: string;
         reason: GameOverReason;
       };
   private _revealHoldTimeout?: ReturnType<typeof setTimeout>;
@@ -311,7 +309,7 @@ export class MultiplayerGame extends LitElement {
       this._holdReveal();
     });
     this._unsubscribeGameOver = onGameOver(
-      (gameId, scores, playerA, playerB, reason) => {
+      (gameId, scores, _participants, reason) => {
         // Match on the game's OWN id, not on the player pair: the same
         // two players can finish a game and immediately start another,
         // and the finished game's event still names that pair — which
@@ -335,13 +333,11 @@ export class MultiplayerGame extends LitElement {
           this._pendingAfterReveal = {
             kind: 'gameOver',
             scores,
-            playerA,
-            playerB,
             reason,
           };
           return;
         }
-        this._onGameOver(scores, playerA, playerB, reason);
+        this._onGameOver(scores, reason);
       }
     );
     this._unsubscribePlayerDisconnected = onPlayerDisconnected((playerId) => {
@@ -372,12 +368,7 @@ export class MultiplayerGame extends LitElement {
       if (pending.kind === 'roundStarted')
         this._applyRoundStarted(pending.session);
       else
-        this._onGameOver(
-          pending.scores,
-          pending.playerA,
-          pending.playerB,
-          pending.reason
-        );
+        this._onGameOver(pending.scores, pending.reason);
     }, REVEAL_HOLD_MS);
   }
 
@@ -460,23 +451,21 @@ export class MultiplayerGame extends LitElement {
     if (isFirstRound) this._resolveGuessConstraint(session.gameType);
   }
 
-  // Whether `session`/`(playerA, playerB)` belongs to MY game with
-  // opponentId — see the room-wide-broadcast filtering note in
-  // connectedCallback above. Order-independent since either player could
-  // be PlayerA or PlayerB depending on who was the challenger.
+  // Whether `session` is MY duel with opponentId — see the
+  // room-wide-broadcast filtering note in connectedCallback above.
+  // Order-independent since either player could come first depending on
+  // who was the challenger. A Congregation's session is never this
+  // component's, even when both of us are playing in it.
   private _isMySession(session: GameSession): boolean {
-    return this._isMyGame(session.playerA, session.playerB);
-  }
-
-  private _isMyGame(playerA: string, playerB: string): boolean {
-    const pair = new Set([playerA, playerB]);
-    return pair.has(this.myPlayerId) && pair.has(this.opponentId);
+    if (session.format.Case !== 'Duel') return false;
+    const players = new Set(session.participants);
+    return players.has(this.myPlayerId) && players.has(this.opponentId);
   }
 
   /** Whether `gameId` is the game this component is actually playing —
    * see game-identity.ts, where the rule and its rationale live (and
    * where it's unit-tested). Replaces the weaker player-pair check
-   * (_isMyGame) for game-over specifically. */
+   * (_isMySession) for game-over specifically. */
   private _isMyGameInstance(gameId: string): boolean {
     return isSameGame(this.session?.gameId, gameId);
   }
@@ -503,14 +492,7 @@ export class MultiplayerGame extends LitElement {
     ];
   }
 
-  private _onGameOver(
-    scores: Record<string, number>,
-    playerA: string,
-    playerB: string,
-    reason: GameOverReason
-  ) {
-    void playerA;
-    void playerB;
+  private _onGameOver(scores: Record<string, number>, reason: GameOverReason) {
     const myScore = scores[this.myPlayerId] ?? 0;
     const opponentScore = scores[this.opponentId] ?? 0;
 
@@ -520,7 +502,7 @@ export class MultiplayerGame extends LitElement {
       myScore,
       opponentScore,
       reason:
-        reason.Case === 'Completed'
+        reason.Case !== 'Forfeited'
           ? { kind: 'completed' }
           : {
               kind: 'forfeited',

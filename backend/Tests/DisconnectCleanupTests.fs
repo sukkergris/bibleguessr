@@ -230,7 +230,7 @@ let ``cancelPendingRequestsFor leaves unrelated requests untouched and keeps the
     Assert.Contains(disconnecting, updated.Players)
 
 [<Fact>]
-let ``cancelPendingRequestsFor does not touch ActiveGame`` () =
+let ``cancelPendingRequestsFor does not touch the room's games`` () =
     let disconnecting = makePlayer "Alice"
     let opponent = makePlayer "Bob"
     let verse: VerseReference = { Book = "Genesis"; BookNumber = 1; Chapter = 1; VerseNumber = 1 }
@@ -254,7 +254,7 @@ let ``cancelPendingRequestsFor does not touch ActiveGame`` () =
     let updated, canceled = Room.cancelPendingRequestsFor disconnecting.Id room
 
     Assert.Empty(canceled)
-    Assert.True(updated.ActiveGame.IsSome)
+    Assert.True(Room.isInActiveGame disconnecting.Id updated)
 
 [<Fact>]
 let ``cancelPendingRequestsFor is a no-op when the player has no pending requests`` () =

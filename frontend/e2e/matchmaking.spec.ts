@@ -207,3 +207,42 @@ test('the waiting player’s time limit and verse restriction reach the game', a
     await ctxB.close()
   }
 })
+
+// Two duels in one room run side by side. A second game used to replace
+// the first one on the server, leaving its players stuck on a round that
+// could never resolve — see docs/web/congregation ("Several duels per
+// room").
+test('two matched duels in the same room both keep running', async ({ browser }) => {
+  const contexts = await Promise.all([0, 1, 2, 3].map(() => browser.newContext()))
+  const [pageA, pageB, pageC, pageD] = await Promise.all(contexts.map((c) => c.newPage()))
+
+  try {
+    const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)}`
+    const roomCode = await createRoom(pageA, `Alice${suffix}two`)
+    await joinRoom(pageB, `Bob${suffix}two`, roomCode)
+    await joinRoom(pageC, `Cleo${suffix}two`, roomCode)
+    await joinRoom(pageD, `Dan${suffix}two`, roomCode)
+
+    await pageA.getByRole('button', { name: 'Play someone random' }).click()
+    await expect(pageA.getByText(/waiting for another player/i)).toBeVisible()
+    await pageB.getByRole('button', { name: 'Play someone random' }).click()
+    await expect(pageA.getByText('Round 1 /')).toBeVisible({ timeout: 10_000 })
+
+    await pageC.getByRole('button', { name: 'Play someone random' }).click()
+    await expect(pageC.getByText(/waiting for another player/i)).toBeVisible()
+    await pageD.getByRole('button', { name: 'Play someone random' }).click()
+    await expect(pageC.getByText('Round 1 /')).toBeVisible({ timeout: 10_000 })
+
+    // The FIRST duel must still be alive: both its players guessing moves
+    // it on to round 2.
+    for (const page of [pageA, pageB]) {
+      await page.locator('bg-guess-form').getByRole('radio', { name: '1.Mosebog' }).check()
+      await page.getByRole('button', { name: 'Guess' }).click()
+    }
+    await expect(pageA.getByText('Round 2 /')).toBeVisible({ timeout: 10_000 })
+    await expect(pageB.getByText('Round 2 /')).toBeVisible({ timeout: 10_000 })
+    await expect(pageC.getByText('Round 1 /')).toBeVisible()
+  } finally {
+    for (const context of contexts) await context.close()
+  }
+})

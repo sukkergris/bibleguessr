@@ -37,13 +37,18 @@
       </p>
       <p>
         Nor does a queue entry outlive a game: whenever a game starts — by a match or by accepting a challenge —
-        both its players leave the queue (<code>Room.startGame</code>, <code>Room.acceptPlayRequest</code>).
+        both its players leave the queue (<code>Room.startDuel</code>, <code>Room.acceptPlayRequest</code>).
         Otherwise a player who accepted a challenge while waiting would, once that game ended, be matched into a
         game with their old entry's game type that they no longer asked for.
       </p>
       <p>
         A player holds at most one place in the queue, so asking again with different settings updates their entry
         rather than queueing them twice.
+      </p>
+      <p>
+        Nobody can join the queue while a <a href="../congregation/index.html">Congregation</a> has the room, and
+        opening a Congregation lobby empties it. Matched duels otherwise run side by side with any other duels in the
+        room.
       </p>
 
       <h2>Which settings the game uses</h2>

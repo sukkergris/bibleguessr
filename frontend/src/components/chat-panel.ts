@@ -46,6 +46,12 @@ export class ChatPanel extends LitElement {
   @property({ attribute: false })
   busyPlayerIds: Set<string> = new Set();
 
+  /** False while a Congregation has the room (see
+   * docs/web/congregation): nobody can be challenged then, so names are
+   * plain text rather than buttons that could only be refused. */
+  @property({ attribute: false })
+  challengesAllowed = true;
+
   @state()
   private _input = '';
 
@@ -128,6 +134,12 @@ export class ChatPanel extends LitElement {
           ${dot}${player.name}
           <span class="you">(you)</span>
         </li>
+      `;
+    }
+
+    if (!this.challengesAllowed) {
+      return html`
+        <li>${dot}${player.name}</li>
       `;
     }
 

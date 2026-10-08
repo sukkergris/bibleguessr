@@ -111,7 +111,7 @@ let ``a player already in a game cannot join the queue`` () =
     let bob = makePlayer "Bob"
 
     let session =
-        GameSession.start
+        GameSession.startDuel
             (GameId(Guid.NewGuid()))
             alice.Id
             bob.Id
@@ -123,7 +123,7 @@ let ``a player already in a game cannot join the queue`` () =
 
     let room =
         roomWith [ alice; bob ]
-        |> Room.startGame session
+        |> Room.startDuel session
         |> Room.joinMatchmaking (entryFor alice 0)
 
     Assert.False(Room.isWaitingForMatch alice.Id room)
@@ -135,7 +135,7 @@ let ``a waiting player who starts a game is no longer matchable`` () =
     let carol = makePlayer "Carol"
 
     let session =
-        GameSession.start
+        GameSession.startDuel
             (GameId(Guid.NewGuid()))
             alice.Id
             bob.Id
@@ -148,7 +148,7 @@ let ``a waiting player who starts a game is no longer matchable`` () =
     let room =
         roomWith [ alice; bob; carol ]
         |> Room.joinMatchmaking (entryFor alice 0)
-        |> Room.startGame session
+        |> Room.startDuel session
 
     Assert.True((Room.findMatchFor carol.Id room).IsNone)
 
@@ -172,14 +172,16 @@ let ``a player who accepts a challenge while waiting is not matched after that g
 
     let verse = { Book = "John"; BookNumber = 43; Chapter = 3; VerseNumber = 16 }
 
+    let gameId = GameId(Guid.NewGuid())
+
     let room, _ =
         roomWith [ alice; bob; carol ]
         |> Room.joinMatchmaking { entryFor alice 0 with GameType = Chapters(Map.ofList [ 8, [ 1 ] ]) }
         |> Room.joinMatchmaking (entryFor bob 1)
         |> Room.sendPlayRequest request
-        |> Room.acceptPlayRequest (GameId(Guid.NewGuid())) bob.Id alice.Id verse DateTimeOffset.UtcNow
+        |> Room.acceptPlayRequest gameId bob.Id alice.Id verse DateTimeOffset.UtcNow
 
-    let afterTheGame = Room.endGame room
+    let afterTheGame = Room.endGame gameId room
 
     Assert.False(Room.isWaitingForMatch alice.Id afterTheGame)
     Assert.False(Room.isWaitingForMatch bob.Id afterTheGame)
@@ -191,7 +193,7 @@ let ``both players leave the queue when their game starts`` () =
     let bob = makePlayer "Bob"
 
     let session =
-        GameSession.start
+        GameSession.startDuel
             (GameId(Guid.NewGuid()))
             alice.Id
             bob.Id
@@ -205,7 +207,7 @@ let ``both players leave the queue when their game starts`` () =
         roomWith [ alice; bob ]
         |> Room.joinMatchmaking (entryFor alice 0)
         |> Room.joinMatchmaking (entryFor bob 1)
-        |> Room.startGame session
+        |> Room.startDuel session
 
     Assert.Empty(room.WaitingForMatch)
 

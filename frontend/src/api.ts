@@ -1,4 +1,4 @@
-import type { Room, Verse, VerseReference, VerseRestriction, VerseSource } from './types'
+import type { CongregationRules, Room, Verse, VerseReference, VerseRestriction, VerseSource } from './types'
 
 // API requests are always same-origin and are routed by the serving web server.
 const API_BASE_URL = ''
@@ -156,6 +156,8 @@ export const api = {
     return getJson<Verse>(`/api/verses/lookup?${params}`);
   },
   createRoom: () => postJson<Room>('/api/rooms'),
+  // The limits a Congregation lobby must respect — see docs/web/congregation.
+  getCongregationRules: () => getJson<CongregationRules>('/api/congregation/rules'),
   // Sends a Bible-file upload error report — see
   // docs/SCRUM/Feature.ErrorMessageBibleLoader.md and
   // bible-sources/report-error.ts. Rate-limited server-side (5/IP/day, 100

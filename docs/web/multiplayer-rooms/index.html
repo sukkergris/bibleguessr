@@ -37,13 +37,16 @@
       RecentMessages: ChatMessage list
       PendingRequests: PlayRequest list
       DisconnectedPlayers: Map&lt;PlayerId, DateTimeOffset&gt;
-      ActiveGame: GameSession option }</code></pre>
+      Activity: RoomActivity
+      LastCongregation: CongregationGame option
+      WaitingForMatch: MatchmakingEntry list }</code></pre>
       <p>
         <code>RecentMessages</code> is capped at <code>Room.maxRecentMessages = 20</code>, newest first, trimmed on
         every <code>Room.addMessage</code> call — enough for a new joiner to land in a chat with context, without
         keeping unbounded history for a long-lived room. <code>PendingRequests</code>,
-        <code>DisconnectedPlayers</code>, and <code>ActiveGame</code> belong to the play-request, presence, and
-        round-sync features respectively — see their
+        <code>DisconnectedPlayers</code>, <code>Activity</code> and <code>WaitingForMatch</code> belong to the
+        play-request, presence, round-sync/<a href="../congregation/index.html">Congregation</a> and matchmaking
+        features respectively — see their
         own pages.
       </p>
 
@@ -202,14 +205,14 @@
           A synced, server-authoritative multiplayer round loop — verse picking, guessing, scoring, round
           advancement, a timer with a background timeout sweep, forfeit, and a final results screen — is fully
           built on top of the room/chat foundation documented on this page. It lives on <code>GameSession</code>,
-          nested inside <code>Room.ActiveGame</code> (see below), not on the legacy <code>Room.Round</code> field.
+          nested inside <code>Room.Activity</code> (see below), not on the legacy <code>Room.Round</code> field.
           See <a href="../multiplayer-round-sync/index.html">Multiplayer round sync</a> for the full write-up.
         </p>
       </div>
       <p>
         Note: <code>Room.Round: RoundState</code> is still present on the <code>Room</code> type shown above, but it
         is superseded — never read or transitioned by any hub code path. The real round state for an active game is
-        <code>GameSession.Round</code>, reached via <code>Room.ActiveGame: GameSession option</code>. It was kept
+        <code>GameSession.Round</code>, reached via <code>Room.Activity</code>. It was kept
         rather than removed purely so existing code/tests that reference it don't need churn for zero functional
         gain (per its doc comment in <span class="file-ref">backend/Domain/Game.fs</span>).
       </p>

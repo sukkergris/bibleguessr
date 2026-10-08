@@ -44,7 +44,7 @@ type GeneralBugReportRequest =
       ReplyTo: string }
 
 [<Literal>]
-let BackendRevision = 11
+let BackendRevision = 12
 
 [<Literal>]
 let StartupLogCategory = "BibleGuessr.Api.Startup"
@@ -112,6 +112,18 @@ let main args =
             |> Option.defaultValue (TimeSpan.FromSeconds 30.0) }
 
     builder.Services.AddSingleton<GameHub.PresenceSettings>(presenceSettings) |> ignore
+
+    // The limits of a Congregation game — player count, time-limit range
+    // and how long a scored round stays revealed. See Lobby.fs's
+    // CongregationRules and docs/web/congregation. An invalid combination
+    // stops the server at startup rather than surfacing as a lobby nobody
+    // can ever start.
+    let congregationRules =
+        match CongregationRules.fromConfig (fun key -> builder.Configuration[key] |> Option.ofObj) with
+        | Ok rules -> rules
+        | Error message -> failwith $"Invalid Congregation configuration: {message}"
+
+    builder.Services.AddSingleton<CongregationRules>(congregationRules) |> ignore
 
     // Periodically removes players who've been disconnected for more than
     // presenceSettings.DisconnectGracePeriod, so a closed tab/dropped
@@ -611,6 +623,22 @@ let main args =
                     |> List.map (fun v -> v.VerseNumber)
                     |> List.distinct
                     |> List.sort)
+    )
+    |> ignore
+
+    // The Congregation limits the client needs to offer valid settings —
+    // see Lobby.fs's CongregationRules. Served rather than duplicated in
+    // the frontend so the two can't drift apart.
+    app.MapGet(
+        "/api/congregation/rules",
+        Func<CongregationRules, _>(fun rules ->
+            {| minPlayers = rules.MinPlayers
+               maxPlayers = rules.MaxPlayers
+               minTimeLimitSeconds = int rules.MinTimeLimit.TotalSeconds
+               maxTimeLimitSeconds = int rules.MaxTimeLimit.TotalSeconds
+               revealSeconds = int rules.RevealPause.TotalSeconds
+               minRoundCount = CongregationLobby.minRoundCount
+               maxRoundCount = CongregationLobby.maxRoundCount |})
     )
     |> ignore
 

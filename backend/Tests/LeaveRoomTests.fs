@@ -40,10 +40,10 @@ let ``leave is a no-op for a player who isn't in the room`` () =
     let stranger = PlayerId(Guid.NewGuid())
     let room = Room.create (RoomCode "1234")
 
-    let updated, forfeitedOpponent = Room.leave stranger room
+    let updated, impact = Room.leave stranger room
 
     Assert.Equal<Player list>([], updated.Players)
-    Assert.True(forfeitedOpponent.IsNone)
+    Assert.Equal(NothingAffected, impact)
 
 [<Fact>]
 let ``leave immediately frees up the leaver's name for someone else to join under`` () =
@@ -138,16 +138,19 @@ let ``leave ends the leaver's active game, freeing their opponent`` () =
     let room = Room.sendPlayRequest request room
     let room, _ = Room.acceptPlayRequest (GameId(Guid.NewGuid())) alice.Id bob.Id verse DateTimeOffset.UtcNow room
 
-    let updated, forfeitedOpponent = Room.leave alice.Id room
+    let updated, impact = Room.leave alice.Id room
 
-    Assert.True(updated.ActiveGame.IsNone)
-    Assert.Equal(Some bob.Id, forfeitedOpponent)
+    Assert.Empty(Room.games updated)
+
+    match impact with
+    | DuelsForfeited [ _, survivor ] -> Assert.Equal(Some bob.Id, survivor)
+    | other -> failwith $"expected one forfeited duel, got %A{other}"
 
 [<Fact>]
 let ``leave returns no forfeited opponent when the leaver had no active game`` () =
     let alice = makePlayer "Alice"
     let room = { Room.create (RoomCode "1234") with Players = [ alice ] }
 
-    let _, forfeitedOpponent = Room.leave alice.Id room
+    let _, impact = Room.leave alice.Id room
 
-    Assert.True(forfeitedOpponent.IsNone)
+    Assert.Equal(NothingAffected, impact)

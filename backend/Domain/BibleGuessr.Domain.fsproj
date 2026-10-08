@@ -13,7 +13,9 @@
     <Compile Include="GameTypes/Books.fs" />
     <Compile Include="GameTypes/Chapters.fs" />
     <Compile Include="GameTypes/GameType.fs" />
+    <Compile Include="Lobby.fs" />
     <Compile Include="Game.fs" />
+    <Compile Include="Leaderboard.fs" />
     <Compile Include="DailyQuiz.fs" />
     <Compile Include="BibleFileUploadReport.fs" />
     <Compile Include="AbuseReport.fs" />

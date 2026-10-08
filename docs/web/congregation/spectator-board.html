@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spectator board — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="index.html">← Congregation</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Spectator board</h1>
+      <p class="subtitle">
+        The live leaderboard of a room's <a href="index.html">Congregation</a>, for a projector or TV — opened by
+        anyone with the link, with no name and no joining.
+      </p>
+
+      <h2>Opening it</h2>
+      <p>
+        The link is <span class="pill">https://&lt;site&gt;/#/watch/&lt;room code&gt;</span>. The host sees it in the
+        lobby, and players who aren't taking part get a <em>Watch the live leaderboard</em> link while the game runs. It
+        is a hash route (<span class="file-ref">frontend/src/congregation/watch-route.ts</span>), so the web server
+        needs nothing special: the page loads as usual, <code>bg-app</code> reads the room code from the hash and shows
+        the board in place of the usual screens.
+      </p>
+      <p>
+        The board follows the room through its whole life: "No Congregation yet", the lobby filling up, the game, and
+        the final standings — which stay up until the next lobby opens, so a projector that reloads after the game still
+        shows them.
+      </p>
+
+      <h2>What a spectator can see</h2>
+      <p>
+        Spectators get exactly one thing from the server: the <code>LeaderboardSnapshot</code>
+        (<span class="file-ref">backend/Domain/Leaderboard.fs</span>) — as the return value of <code>WatchRoom</code>
+        and as <code>LeaderboardUpdated</code> on every change. It holds names, scores, ranks, whether each player has
+        guessed this round, and the round's state.
+      </p>
+      <ul>
+        <li>
+          <strong>Never the verse while it is being guessed.</strong> <code>BoardRound.Guessing</code> has fields for the
+          round number and the deadline only — there is nowhere to put a reference, so the board can't leak one by
+          mistake. Only <code>Revealed</code>, after the round is scored, carries it.
+        </li>
+        <li>
+          <strong>Never what anyone guessed</strong> — only whether they have.
+        </li>
+        <li>
+          <strong>Never verse text.</strong> The server never sends text to anyone (see the data-security rule in
+          <code>CLAUDE.md</code>), and the board's code can't even reach a Bible source: the architecture test forbids
+          its files from importing <code>bible-sources/</code>, the verse card or the guess form.
+        </li>
+      </ul>
+
+      <h2>Why spectators have their own group</h2>
+      <p>
+        Every room event goes to the room's SignalR group, and <code>RoundStarted</code> must carry the reference of
+        the round being guessed — each player's client needs it to show the verse from their own Bible. A spectator in
+        that group would receive it too. So <code>WatchRoom</code> adds the connection to a separate group,
+        <span class="pill">&lt;code&gt;:spectators</span>, and never registers it as a player or adds it to the room
+        group. Every player-only hub method therefore answers a spectator with "You haven't joined a room".
+      </p>
+      <div class="callout limitation">
+        <span class="callout-title">The guarantee covers the spectator channel only</span>
+        <p>
+          Players do receive the reference of the round they are guessing — they need it, and a determined player can
+          see it in the browser's developer tools. That is the same trust model as duels. The board's guarantee is that
+          a screen everyone in the room can see doesn't give the answer away.
+        </p>
+      </div>
+      <p>
+        The leak is tested twice: <span class="file-ref">backend/Tests/LeaderboardTests.fs</span> serializes a board
+        mid-round with the hub's own JSON converter and checks it holds no reference, and
+        <span class="file-ref">frontend/e2e/congregation.spec.ts</span> checks every WebSocket frame the spectator page
+        received before the first reveal.
+      </p>
+      <p>
+        SignalR forgets group membership when a connection reconnects, so the board calls <code>WatchRoom</code> again
+        from <code>onReconnected</code>.
+      </p>
+
+      <h2>Accessibility</h2>
+      <ul>
+        <li>
+          The leaderboard is a native <code>&lt;table&gt;</code> with a caption and column headers
+          (<span class="file-ref">leaderboard-table.ts</span>). Status is written out — "Guessed", "Waiting", "+110",
+          "No guess", "Left", "(offline)" — never shown by color alone.
+        </li>
+        <li>
+          One <code>role="status"</code> live region speaks only the moments a sighted viewer would notice: the lobby
+          opening, the start, each scored round with the leader, and the winner
+          (<span class="file-ref">board-announcer.ts</span>). Individual guesses and the ticking clock are never
+          announced; with twenty players they would drown everything else out. The countdown is
+          <code>aria-hidden</code>.
+        </li>
+        <li>
+          Type sizes use <code>clamp()</code> to read across a room on a big screen and still fit a phone, and there is
+          no motion to reduce.
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

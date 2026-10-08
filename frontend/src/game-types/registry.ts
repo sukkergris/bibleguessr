@@ -172,6 +172,13 @@ function definitionForWire<R>(
   }
 }
 
+/** The name of a received game type's kind ("The Bible", "Books"…),
+ * for a viewer with no Bible of their own to describe it in — the
+ * Congregation spectator board. */
+export function nameOfWire(wire: GameType): string {
+  return definitionForWire(wire, (definition) => definition.name)
+}
+
 /** A short description of a received game type, in the VIEWER'S own
  * spelling (`verseSource` is the viewer's, not the sender's). One that
  * selects nothing reads as the game it plays as. */

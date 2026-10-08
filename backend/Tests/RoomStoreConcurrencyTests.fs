@@ -97,9 +97,9 @@ let ``concurrent guesses from both players are never lost (the reported bug)`` (
     let playerB = PlayerId(Guid.NewGuid())
     let verse: VerseReference = { Book = "John"; BookNumber = 43; Chapter = 3; VerseNumber = 16 }
 
-    let session = GameSession.start (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 Unlimited verse DateTimeOffset.UtcNow
+    let session = GameSession.startDuel (GameId(Guid.NewGuid())) playerA playerB AllVerses 5 Unlimited verse DateTimeOffset.UtcNow
 
-    store.Update(code, fun room -> Room.startGame session room) |> ignore
+    store.Update(code, fun room -> Room.startDuel session room) |> ignore
 
     let guessFor playerId : Guess =
         { PlayerId = playerId
@@ -110,10 +110,44 @@ let ``concurrent guesses from both players are never lost (the reported bug)`` (
           SubmittedAt = DateTimeOffset.UtcNow }
 
     let submit playerId () =
-        store.Update(code, Room.updateGame (GameSession.submitGuess playerId (guessFor playerId))) |> ignore
+        store.Update(code, Room.updateGame session.GameId (GameSession.submitGuess playerId (guessFor playerId))) |> ignore
 
     System.Threading.Tasks.Parallel.Invoke(Action(submit playerA), Action(submit playerB))
 
-    match store.TryGet(code) with
-    | Some { ActiveGame = Some updatedSession } -> Assert.True(GameSession.bothGuessed updatedSession)
-    | _ -> failwith "expected an ActiveGame with both guesses recorded"
+    match store.TryGet(code) |> Option.map Room.games with
+    | Some [ updatedSession ] -> Assert.True(GameSession.allExpectedGuessed (fun _ -> true) updatedSession)
+    | _ -> failwith "expected one running game with both guesses recorded"
+
+
+[<Fact>]
+let ``simultaneous Congregation joins never overfill the lobby`` () =
+    let store, code = makeRoom ()
+    let rules = { CongregationRules.defaults with MaxPlayers = 20 }
+    let host = { Id = PlayerId(Guid.NewGuid()); Name = "Host" }
+
+    store.Update(
+        code,
+        fun room ->
+            match Room.openCongregation rules host AllVerses 5 (TimeSpan.FromSeconds 30.0) room with
+            | Ok(opened, _) -> opened
+            | Error e -> failwith $"expected the lobby to open, got %A{e}"
+    )
+    |> ignore
+
+    let join i =
+        let joiner = { Id = PlayerId(Guid.NewGuid()); Name = $"Player {i}" }
+
+        store.Update(
+            code,
+            fun room ->
+                match Room.joinCongregation rules joiner room with
+                | Ok joined -> joined
+                | Error _ -> room
+        )
+        |> ignore
+
+    System.Threading.Tasks.Parallel.For(0, 50, (fun i -> join i)) |> ignore
+
+    match store.TryGet(code) |> Option.map (fun r -> r.Activity) with
+    | Some(Gathering lobby) -> Assert.Equal(rules.MaxPlayers, lobby.Members.Length)
+    | other -> failwith $"expected an open lobby, got %A{other}"

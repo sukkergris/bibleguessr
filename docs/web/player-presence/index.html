@@ -70,7 +70,7 @@
             <td>
               Drops any pending invitation naming <code>playerId</code> (sent or received) — the instant they
               disconnect, not waiting for the grace period. Leaves <code>Players</code>, <code>DisconnectedPlayers</code>,
-              and <code>ActiveGame</code> untouched — this is the one thing that DOES change immediately on
+              and <code>Activity</code> untouched — this is the one thing that DOES change immediately on
               disconnect, everything else waits. Returns <code>(updatedRoom, canceledRequests)</code> so the caller
               knows which withdrawn/denied-equivalent event to broadcast per request.
             </td>
@@ -287,7 +287,7 @@
           semantics, the 2-minute <code>disconnectGracePeriod</code> value itself, and
           <code>cancelPendingRequestsFor</code>'s full behavior (drops a request naming the disconnecting player on
           either side, leaves unrelated requests and the disconnecting player's own <code>Players</code>/
-          <code>ActiveGame</code> untouched, handles multiple requests targeting the same player, no-ops when
+          <code>Activity</code> untouched, handles multiple requests targeting the same player, no-ops when
           there's nothing to cancel).
         </li>
         <li>

@@ -15,6 +15,10 @@
     <Compile Include="PlayRequestTests.fs" />
     <Compile Include="GameSessionTests.fs" />
     <Compile Include="RoomActiveGameTests.fs" />
+    <Compile Include="RoomActivityTests.fs" />
+    <Compile Include="CongregationTests.fs" />
+    <Compile Include="LeaderboardTests.fs" />
+    <Compile Include="CongregationRulesConfigTests.fs" />
     <Compile Include="DisconnectCleanupTests.fs" />
     <Compile Include="VerseRestrictionTests.fs" />
     <Compile Include="BookNumberTests.fs" />

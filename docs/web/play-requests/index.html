@@ -47,6 +47,15 @@
         error-and-recovery UI path for what's usually just a misclick or a change of mind.
       </p>
 
+      <h2>When nobody can be challenged</h2>
+      <p>
+        While a <a href="../congregation/index.html">Congregation</a> lobby is open or its game is running, the room
+        belongs to it: <code>SendPlayRequest</code> and <code>AcceptPlayRequest</code> refuse, and the players list
+        shows names as plain text instead of challenge buttons (<code>challengesAllowed</code> on
+        <code>&lt;bg-chat-panel&gt;</code>). Opening a lobby withdraws every pending request, broadcasting
+        <code>PlayRequestWithdrawn</code> for each. Otherwise, any number of duels can run in a room side by side.
+      </p>
+
       <h2>Domain model</h2>
       <p><span class="file-ref">backend/Domain/Game.fs</span></p>
       <pre><code>type GameType =

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Congregation — BibleGuessr Docs</title>
+    <link rel="stylesheet" href="../shared/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <p class="breadcrumb"><a href="../index.html">← Developer docs</a></p>
+      <span class="eyebrow">Feature</span>
+      <h1>Congregation</h1>
+      <p class="subtitle">
+        A group game for a whole room: three or more players guess the same verses at the same time, each for their
+        own score, with a live leaderboard anyone can put on a screen.
+      </p>
+
+      <h2>How a game goes</h2>
+      <ol class="flow">
+        <li>
+          In a private room, the host picks a game type (The Bible, Books or Chapters), a round count and a time
+          limit, and presses <em>Host a Congregation</em>. A lobby opens.
+        </li>
+        <li>
+          The other players in the room join the lobby, or don't. The host sees who has joined and a link for the
+          <a href="spectator-board.html">spectator board</a>.
+        </li>
+        <li>
+          The host presses <em>Start the game</em> once enough players have joined. Only members who are connected
+          at that moment take part, and nobody can join afterwards.
+        </li>
+        <li>
+          Each round, everyone sees the same verse — in their own Bible — and guesses. The round is scored as soon as
+          every connected player has guessed, or when the time is up.
+        </li>
+        <li>
+          The scored round stays revealed for a short pause (the same moment for players and the spectator board),
+          then the next verse follows. After the last round, everyone sees the final standings.
+        </li>
+      </ol>
+
+      <h2>Rules</h2>
+      <h3>One activity per room</h3>
+      <p>
+        A room either hosts any number of independent duels, or is given over entirely to one Congregation — never
+        both. The room's state is a single union, <code>RoomActivity</code>, so the mixed state can't even be
+        represented:
+      </p>
+      <ul>
+        <li><code>Duels of GameSession list</code> — zero or more one-vs-one games; empty means the room is idle.</li>
+        <li><code>Gathering of CongregationLobby</code> — a lobby is open.</li>
+        <li><code>Congregating of CongregationGame</code> — a Congregation is being played.</li>
+      </ul>
+      <p>
+        A lobby can only open in an idle room. Opening it withdraws every pending play request and empties the
+        matchmaking queue. While a lobby is open or a game runs, nobody can challenge anyone or ask to be matched; the
+        server refuses, and the room screen doesn't offer it in the first place.
+      </p>
+      <p>
+        Duels can run side by side. Before this union existed, the room had a single game slot, and a second duel
+        silently replaced the first on the server — its players were left on a round that could never resolve. That is
+        now impossible, and covered by <span class="file-ref">backend/Tests/RoomActivityTests.fs</span> and the
+        "two matched duels" test in <span class="file-ref">frontend/e2e/matchmaking.spec.ts</span>.
+      </p>
+
+      <h3>A time limit is required</h3>
+      <p>
+        With twenty players, one idle phone must not stall everyone. A Congregation therefore always has a time
+        limit, within the configured range. The lobby stores it as a plain <code>TimeSpan</code> rather than a
+        <code>TimeLimit</code>, so "unlimited" can't be represented. The room screen disables
+        <em>Host a Congregation</em> with the reason beside it while the time slider is at "No limit".
+      </p>
+
+      <h3>Who a round waits for</h3>
+      <p>
+        <code>GameSession.allExpectedGuessed</code> decides when a round can be scored early. A duel waits for both
+        players, connected or not, as it always has. A Congregation waits only for participants who are connected and
+        haven't left. If nobody fits that description — everyone is offline — the round is <em>not</em> ready; it
+        waits for the timer instead of racing through every remaining round.
+      </p>
+      <p>
+        Every check is made inside the atomic room update that scores the round (see <code>resolveRound</code>'s
+        <code>ResolveTrigger</code>), so two near-simultaneous triggers — a last guess and the timer, say — can't score
+        the same round twice or score the next round by mistake.
+      </p>
+
+      <h3>Leaving, disconnecting and coming back</h3>
+      <ul>
+        <li>
+          <strong>Leaving the game</strong> (the <em>Leave the game</em> button) takes a player out; the others play
+          on. The leaver keeps their score and stays on the leaderboard, marked "Left".
+        </li>
+        <li>
+          <strong>Losing the connection</strong> only stops the round waiting for that player. After the usual
+          disconnect grace period they are removed from the room and count as having left.
+        </li>
+        <li>
+          <strong>Coming back</strong> — a reloaded page, a phone that was locked — means joining the room again under
+          the same name while still marked disconnected. The newcomer then takes over the old seat: score, this
+          round's guess and, for the host, the host role (<code>Room.admit</code>,
+          <code>GameSession.rebind</code>). Duels keep their old behavior: the stale player is removed and the duel
+          forfeited.
+        </li>
+        <li>
+          <strong>The last participant leaving</strong> ends the game with <code>GameOver(Abandoned)</code> and frees
+          the room.
+        </li>
+        <li>
+          <strong>The host leaving the lobby</strong> cancels it. During the game the host has no special powers, so
+          the game goes on without them.
+        </li>
+      </ul>
+
+      <h2>Configuration</h2>
+      <p>
+        Read at startup by <code>CongregationRules.fromConfig</code> in
+        <span class="file-ref">backend/Domain/Lobby.fs</span>. Each setting falls back to its default when unset; an
+        impossible combination stops the server rather than producing a lobby nobody can start. The frontend reads the
+        same values from <code>GET /api/congregation/rules</code>, so its controls can't drift from the server's.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Default</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Congregation:MinPlayers</code></td>
+            <td>3</td>
+            <td>Connected members needed to start. At least 2 (handy for trying it out alone).</td>
+          </tr>
+          <tr>
+            <td><code>Congregation:MaxPlayers</code></td>
+            <td>20</td>
+            <td>Members a lobby takes.</td>
+          </tr>
+          <tr>
+            <td><code>Congregation:MinTimeLimitSeconds</code></td>
+            <td>10</td>
+            <td>Shortest time limit per verse.</td>
+          </tr>
+          <tr>
+            <td><code>Congregation:MaxTimeLimitSeconds</code></td>
+            <td>60</td>
+            <td>Longest time limit per verse (the slider's own maximum).</td>
+          </tr>
+          <tr>
+            <td><code>Congregation:RevealSeconds</code></td>
+            <td>5</td>
+            <td>How long a scored round stays revealed before the next verse.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The round count uses the same 3–10 range as every other mode (<code>CongregationLobby.minRoundCount</code>,
+        <code>maxRoundCount</code>).
+      </p>
+
+      <h2>Hub API</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Who</th>
+            <th>Effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>OpenCongregation(gameType, roundCount, timeLimitSeconds)</code></td>
+            <td>Anyone in an idle private room</td>
+            <td>Opens a lobby with the caller as host.</td>
+          </tr>
+          <tr>
+            <td><code>JoinCongregation()</code> / <code>LeaveCongregation()</code></td>
+            <td>Room members</td>
+            <td>Join or leave the lobby. The capacity check happens inside the atomic update.</td>
+          </tr>
+          <tr>
+            <td><code>CancelCongregation()</code> / <code>StartCongregation()</code></td>
+            <td>The host</td>
+            <td>Close the lobby, or start the game with the connected members.</td>
+          </tr>
+          <tr>
+            <td><code>ForfeitGame()</code></td>
+            <td>A participant</td>
+            <td>For a Congregation: leave the game, keeping the score.</td>
+          </tr>
+          <tr>
+            <td><code>WatchRoom(roomCode)</code> / <code>UnwatchRoom(roomCode)</code></td>
+            <td>Anyone</td>
+            <td>The spectator board — see <a href="spectator-board.html">its own page</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Events, besides the usual <code>RoundStarted</code>, <code>RoundScored</code> and <code>GameOver</code>:</p>
+      <ul>
+        <li>
+          <code>RoomActivityChanged(RoomActivityView)</code> — to the room, on every change of what the room is doing
+          (a duel starting or ending, the lobby changing, the game starting, someone leaving it), and to each player
+          right after they join. It is also how a late joiner learns who is busy in a duel.
+        </li>
+        <li>
+          <code>LeaderboardUpdated(LeaderboardSnapshot)</code> — to the room <em>and</em> the spectators, whenever the
+          board changes: a guess (who, never what), a departure, a scored round, the end.
+        </li>
+        <li>
+          <code>GameOver</code> now carries <code>(gameId, scores, participants, reason)</code>, with the new reason
+          <code>Abandoned</code>.
+        </li>
+      </ul>
+
+      <h2>Implementation</h2>
+      <p>
+        <strong>Domain.</strong> <span class="file-ref">backend/Domain/Lobby.fs</span> holds the rules and the lobby;
+        <span class="file-ref">backend/Domain/Game.fs</span> generalizes <code>GameSession</code> from two players to
+        <code>Participants</code> with a <code>Format</code> (<code>Duel</code> or <code>Congregation of host</code>),
+        so duels and Congregations share scoring, the timeout sweep and <code>resolveRound</code>.
+        <code>RemovalImpact</code> describes what removing a player did to the room's games, and every removal path
+        broadcasts it the same way. <span class="file-ref">backend/Domain/Leaderboard.fs</span> projects the board.
+      </p>
+      <p>
+        <strong>Hub.</strong> <span class="file-ref">backend/Api/GameHub.fs</span>. A Congregation round is only
+        scored by <code>resolveRound</code>; <code>RoundTimeoutService</code> moves it on once the reveal pause is over
+        (<code>advanceRevealedRound</code>), so everyone sees the reveal for the same length of time. A duel still
+        advances immediately.
+      </p>
+      <p>
+        <strong>Frontend.</strong> <span class="file-ref">frontend/src/congregation/</span>. The room screen owns a
+        <code>CongregationController</code> that hears every Congregation event from the moment the player joins and
+        folds it into a <code>CongregationState</code> with pure functions
+        (<span class="file-ref">congregation-state.ts</span>). The lobby, game and results components only render what
+        they're given, so none of them can miss an event that arrived before it mounted. Unlike the duel screen, the
+        Congregation game has no flashing final countdown — it's often played around one shared screen.
+      </p>
+
+      <h2>Tests</h2>
+      <ul>
+        <li>
+          Backend: <span class="file-ref">CongregationTests.fs</span> (lobby, rounds, departures, keeping the seat),
+          <span class="file-ref">LeaderboardTests.fs</span>, <span class="file-ref">RoomActivityTests.fs</span>,
+          <span class="file-ref">CongregationRulesConfigTests.fs</span>, and a concurrent-joins test in
+          <span class="file-ref">RoomStoreConcurrencyTests.fs</span>.
+        </li>
+        <li>
+          Frontend: <span class="file-ref">congregation-state.test.ts</span>,
+          <span class="file-ref">board-announcer.test.ts</span>, <span class="file-ref">watch-route.test.ts</span>
+          and the layer rules in <span class="file-ref">architecture.test.ts</span>.
+        </li>
+        <li>
+          End to end: <span class="file-ref">frontend/e2e/congregation.spec.ts</span> — three players and a spectator,
+          leaving mid-game, the timer, reloading mid-game, the room being blocked for duels, and an accessibility
+          audit. Run the backend with <code>Congregation__RevealSeconds=2</code> to keep it quick.
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

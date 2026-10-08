@@ -57,21 +57,36 @@
     | Unlimited
     | LimitedTo of TimeSpan
 
+type GameFormat =
+    | Duel
+    | Congregation of host: PlayerId
+
 type GameSession =
-    { PlayerA: PlayerId
-      PlayerB: PlayerId
+    { GameId: GameId
+      Format: GameFormat
+      Participants: PlayerId list
+      Departed: Set&lt;PlayerId&gt;
       GameType: GameType
       RoundCount: int
       RoundTimeLimit: TimeLimit
+      RevealPause: TimeSpan
       RoundIndex: int
       Round: RoundState
       RoundStartedAt: DateTimeOffset option
+      RoundScoredAt: DateTimeOffset option
       GuessesThisRound: Map&lt;PlayerId, Guess&gt;
       Scores: Map&lt;PlayerId, int&gt; }
 
 type GameOverReason =
     | Completed
-    | Forfeited of remainingPlayer: PlayerId option</code></pre>
+    | Forfeited of remainingPlayer: PlayerId option
+    | Abandoned</code></pre>
+      <p>
+        One session type serves both kinds of multiplayer game: a duel has two <code>Participants</code>, a
+        <a href="../congregation/index.html">Congregation</a> three or more. <code>Departed</code>,
+        <code>RevealPause</code> and <code>Abandoned</code> only matter to a Congregation; a duel's reveal pause is zero,
+        so it advances as it always has.
+      </p>
       <p>
         <code>TimeLimit</code> is a named DU rather than a bare <code>TimeSpan option</code> so "no limit" is a case
         every consumer (the timeout sweep) has to handle explicitly, instead of an ambiguous
@@ -81,12 +96,13 @@ type GameOverReason =
         singleplayer, by the game type's own rule (see <a href="../scoring/index.html">Scoring</a>).
       </p>
       <p>
-        A <code>GameSession</code> lives at <code>Room.ActiveGame: GameSession option</code> — at most one per room
-        at a time, and each player may be in at most one active game across the whole app (enforced at
+        A <code>GameSession</code> lives in the room's <code>Activity</code> — any number of duels side by side, or
+        one Congregation (see <a href="../congregation/index.html">Congregation</a> for why never both) — and each
+        player may be in at most one active game across the whole app (enforced at
         <code>SendPlayRequest</code>/<code>AcceptPlayRequest</code>, not in the domain itself — see the concurrency
         section below). <code>RoundIndex</code> is 0-based; <code>GuessesThisRound</code> is cleared on every
         <code>advanceRound</code>; <code>Scores</code> is a running total across the whole game, seeded to 0 for
-        both players at <code>start</code> — deliberately not <code>Player.Score</code>, which stays unused, since a
+        every participant at <code>startDuel</code>/<code>startCongregation</code> — deliberately not <code>Player.Score</code>, which stays unused, since a
         game's score belongs to the game, not a player record that outlives many games in the same room.
       </p>
       <p>
@@ -95,7 +111,8 @@ type GameOverReason =
         simultaneous disconnect sweep), in which case it's <code>None</code> and neither side is declared a winner.
       </p>
       <p>
-        The <code>GameSession</code> module (<code>start</code>, <code>submitGuess</code>, <code>bothGuessed</code>,
+        The <code>GameSession</code> module (<code>startDuel</code>, <code>submitGuess</code>,
+        <code>allExpectedGuessed</code>,
         <code>scoreRound</code>, <code>advanceRound</code>, <code>isOver</code>, <code>isRoundExpired</code>) is
         pure — every timestamp it needs (<code>startedAt</code>, <code>now</code>) is passed
         in rather than read from <code>DateTimeOffset.UtcNow</code> internally, which is what makes all of it
@@ -263,7 +280,7 @@ type RoundState =
             <td><code>GameOver</code></td>
             <td>server → room group</td>
             <td>
-              <code>(Scores, PlayerA, PlayerB, Reason)</code> — <code>Scores</code> is the full final running total
+              <code>(GameId, Scores, Participants, Reason)</code> — <code>Scores</code> is the full final running total
               per player id, <code>Reason</code> is a <code>GameOverReason</code>
             </td>
           </tr>
@@ -310,8 +327,8 @@ type RoundState =
           guess for the same round at nearly the same instant could each <code>TryGet</code> the same starting
           snapshot, compute two different updates from it, and then <code>Set</code> one after the other — the
           second <code>Set</code> silently discarding the first caller's entire change. This could lose a guess
-          outright (the round never resolves, since <code>bothGuessed</code> never becomes true for either caller)
-          or resurrect an already-ended <code>ActiveGame</code>, permanently stuck-blocking that room's players
+          outright (the round never resolves, since <code>allExpectedGuessed</code> (then <code>bothGuessed</code>) never became true for either caller)
+          or resurrect an already-ended game, permanently stuck-blocking that room's players
           ("You can't send a play request while a game is in progress" with no game visibly running, even after a
           real game had already finished).
         </p>
@@ -336,7 +353,7 @@ type RoundState =
       </p>
       <p>
         <span class="file-ref">backend/Api/GameHub.fs</span>'s <code>RoundTimeoutService</code> is a
-        <code>BackgroundService</code> that sweeps every room's <code>ActiveGame</code> — every
+        <code>BackgroundService</code> that sweeps every game in every room — every
         <code>RoundTimeoutSettings.SweepInterval</code> (1 second by default, configurable via
         <code>RoundTimeout:SweepIntervalSeconds</code> in <span class="file-ref">backend/Api/Program.fs</span>,
         same seconds-not-<code>TimeSpan</code>-string/DI-singleton pattern as
@@ -376,7 +393,7 @@ type RoundState =
         <li>
           <strong>Voluntary leave — <code>GameHub.LeaveRoom</code>.</strong> Clicking "← Home" or "Back to chat
           selection" mid-game (see <a href="../unique-player-names/index.html">Unique player names</a>'
-          <code>Room.leave</code>) also ends any <code>ActiveGame</code> the leaver was in, broadcasting
+          <code>Room.leave</code>) also ends any duel the leaver was in, broadcasting
           <code>PlayerLeft</code> then <code>GameOver(Forfeited)</code> — no grace period, since this is a
           deliberate departure, not a dropped connection.
         </li>
@@ -385,7 +402,7 @@ type RoundState =
           disconnects and stays gone longer than <code>PresenceSettings.DisconnectGracePeriod</code> (2 minutes by
           default, configurable — see <a href="../player-presence/index.html">Player presence</a>),
           <code>PlayerCleanupService</code>'s periodic sweep removes them and, because
-          <code>Room.removeStaleDisconnections</code> also ends any <code>ActiveGame</code> they were part of,
+          <code>Room.removeStaleDisconnections</code> also ends any duel they were part of,
           broadcasts <code>PlayerLeft</code> then <code>GameOver(Forfeited)</code> naming whoever's left.
         </li>
       </ul>
@@ -445,7 +462,7 @@ type RoundState =
       </ul>
       <p>
         See <span class="file-ref">backend/Tests/RoomActiveGameTests.fs</span> for the pure-domain side of this
-        (<code>Room.isInActiveGame</code>, <code>startGame</code>, <code>updateGame</code>, <code>endGame</code>,
+        (<code>Room.isInActiveGame</code>, <code>startDuel</code>, <code>updateGame</code>, <code>endGame</code>,
         <code>forfeitGame</code>).
       </p>
 
@@ -518,7 +535,7 @@ type RoundState =
       <ul>
         <li>
           Backend unit: <span class="file-ref">backend/Tests/GameSessionTests.fs</span> (start/submitGuess/
-          bothGuessed/scoreRound/advanceRound/isOver/isRoundExpired mechanics),
+          allExpectedGuessed/scoreRound/advanceRound/isOver/isRoundExpired mechanics),
           <span class="file-ref">backend/Tests/RoomActiveGameTests.fs</span> (accept starts a game, forfeit/endGame,
           stale-disconnect auto-forfeit and its surviving-opponent bookkeeping),
           <span class="file-ref">backend/Tests/BookNumberTests.fs</span> and

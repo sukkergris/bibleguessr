@@ -145,17 +145,16 @@ let PlayRequestReceivedEvent = "PlayRequestReceived"
 /// list by FromPlayerId. Also sent from OnDisconnectedAsync (not just the
 /// explicit WithdrawPlayRequest hub method) when a disconnecting player
 /// was the SENDER of a still-pending request — see
-/// Room.cancelPendingRequestsFor.
+/// Room.cancelPendingRequestsFor — and when opening a Congregation drops
+/// every pending request in the room.
 [<Literal>]
 let PlayRequestWithdrawnEvent = "PlayRequestWithdrawn"
 
 /// Sent to the room when the challenged player accepts a play request (see
 /// docs/SCRUM/Feature.RequestToStartMPGame.md) — payload is the
 /// (FromPlayerId, ToPlayerId) pair identifying which request, same
-/// broadcast-to-whole-group tradeoff as PlayRequestReceived. Actually
-/// starting a synced game isn't wired up yet; this just tells both clients
-/// the request was resolved so they can update their UI (e.g. "Bob accepted
-/// your challenge").
+/// broadcast-to-whole-group tradeoff as PlayRequestReceived. Followed by
+/// RoundStarted for the game the request started.
 [<Literal>]
 let PlayRequestAcceptedEvent = "PlayRequestAccepted"
 
@@ -167,7 +166,8 @@ let PlayRequestAcceptedEvent = "PlayRequestAccepted"
 [<Literal>]
 let WaitingForMatchEvent = "WaitingForMatch"
 
-/// Sent to the caller when they stop waiting without being matched.
+/// Sent to the caller when they stop waiting without being matched — and
+/// to the whole room when opening a Congregation empties the queue.
 [<Literal>]
 let MatchmakingCancelledEvent = "MatchmakingCancelled"
 
@@ -179,14 +179,15 @@ let MatchmakingCancelledEvent = "MatchmakingCancelled"
 [<Literal>]
 let PlayRequestDeniedEvent = "PlayRequestDenied"
 
-/// Sent to the room's two active-game players once the final round of a
-/// GameSession has been scored (game completed normally), or as soon as a
-/// game ends early via forfeit (a player left/disconnected past the grace
-/// period, or explicitly forfeited — see GameHub.ForfeitGame and
-/// PlayerCleanupService). Payload: (Scores, PlayerA, PlayerB, Reason) — see
-/// GameOverReason. Broadcast to the whole room group, same
-/// broadcast-and-filter tradeoff as every other play-request/game event
-/// here (see PlayRequestReceivedEvent's doc comment).
+/// Sent to the room once the final round of a GameSession has been scored
+/// (game completed normally), or as soon as a game ends early: a duel via
+/// forfeit (a player left/disconnected past the grace period, or
+/// explicitly forfeited — see GameHub.ForfeitGame and
+/// PlayerCleanupService), a Congregation when its last participant left.
+/// Payload: (GameId, Scores, Participants, Reason) — see GameOverReason.
+/// Broadcast to the whole room group, same broadcast-and-filter tradeoff
+/// as every other play-request/game event here (see
+/// PlayRequestReceivedEvent's doc comment).
 [<Literal>]
 let GameOverEvent = "GameOver"
 
@@ -211,10 +212,78 @@ let PlayerLeftEvent = "PlayerLeft"
 [<Literal>]
 let PlayerDisconnectedEvent = "PlayerDisconnected"
 
+/// Sent to the room whenever what the room is doing changes — a duel
+/// starts or ends, a Congregation lobby opens, changes, starts or closes —
+/// and to a player right after they join. Payload: a RoomActivityView.
+/// This is how every client knows whether it may challenge someone, open
+/// a lobby, or should show the Congregation instead.
+[<Literal>]
+let RoomActivityChangedEvent = "RoomActivityChanged"
+
+/// The Congregation leaderboard (a LeaderboardSnapshot), sent to the room
+/// AND to its spectators whenever it changes. The only event spectators
+/// ever receive — see WatchRoom.
+[<Literal>]
+let LeaderboardUpdatedEvent = "LeaderboardUpdated"
+
+/// Spectators of a room join their own SignalR group, never the room's:
+/// the room group receives RoundStarted, which carries the verse reference
+/// of the round being guessed (players need it to show the verse), and
+/// the spectator board must not reveal that before the round is scored.
+[<Literal>]
+let SpectatorGroupSuffix = ":spectators"
+
+/// Room codes are 4 digits or WORLD, so this can never collide with a
+/// room's own group name.
+let spectatorGroupOf (roomCode: string) = roomCode + SpectatorGroupSuffix
+
 /// Chat messages are capped to keep a single overlong paste from bloating
 /// every other client's message list; empty/whitespace-only messages are
 /// dropped rather than broadcast.
 let private maxChatMessageLength = 500
+
+/// What a room is doing, as its players see it — RoomActivity minus the
+/// duels' round state, which only the two players in each duel act on
+/// (they get it from RoundStarted/RoundScored). Duels are reduced to who
+/// is busy, so a late joiner knows who can't be challenged.
+type RoomActivityView =
+    | RoomOpen of playersInDuels: PlayerId list
+    | RoomGathering of CongregationLobby
+    | RoomCongregating of CongregationGame
+
+module RoomActivityView =
+    let ofRoom (room: Room) =
+        match room.Activity with
+        | Duels duels -> RoomOpen(duels |> List.collect (fun s -> s.Participants))
+        | Gathering lobby -> RoomGathering lobby
+        | Congregating game -> RoomCongregating game
+
+/// Where a room's broadcasts go: its players' group and its spectators'
+/// group. Built from a live hub call's Clients or from an IHubContext's,
+/// so the shared helpers below work from either.
+type RoomChannels =
+    { Players: IClientProxy
+      Spectators: IClientProxy }
+
+let private channelsOf (clients: IHubClients<IClientProxy>) (roomCode: string) =
+    { Players = clients.Group(roomCode)
+      Spectators = clients.Group(spectatorGroupOf roomCode) }
+
+let private sendGameOver (channels: RoomChannels) (session: GameSession) (reason: GameOverReason) =
+    channels.Players.SendAsync(GameOverEvent, session.GameId, session.Scores, session.Participants, reason)
+
+let private announceActivity (channels: RoomChannels) (room: Room) =
+    channels.Players.SendAsync(RoomActivityChangedEvent, RoomActivityView.ofRoom room)
+
+/// Pushes the room's leaderboard to players and spectators alike. The
+/// snapshot carries no in-progress verse reference (see BoardRound), so it
+/// is safe for both.
+let private pushLeaderboard (channels: RoomChannels) (rules: CongregationRules) (room: Room) =
+    task {
+        let board = Leaderboard.ofRoom rules room
+        do! channels.Players.SendAsync(LeaderboardUpdatedEvent, board)
+        do! channels.Spectators.SendAsync(LeaderboardUpdatedEvent, board)
+    }
 
 /// Picks a random verse REFERENCE (book/chapter/verseNumber — never text,
 /// see VerseReference's doc comment) matching `gameType`'s restriction
@@ -251,6 +320,26 @@ let private pickRandomVerse
     else
         Some(Verse.referenceOfIn numbersByBookName candidates[Random.Shared.Next(candidates.Length)])
 
+/// Everything the round-resolving helpers below need besides the room
+/// itself — bundled so the hub, the timeout sweep and the presence sweep
+/// pass the same thing.
+type GameServices =
+    { Rooms: RoomStore
+      Verses: Verse list
+      Famous: FamousVerses.Settings
+      Rules: CongregationRules }
+
+/// Why a round is being resolved. The matching condition is re-checked
+/// INSIDE the atomic room update, so a resolve that lost a race (the round
+/// was already scored, or a new one has started since) does nothing
+/// rather than scoring the wrong round.
+type private ResolveTrigger =
+    /// Everyone the round waits for has guessed — see
+    /// GameSession.allExpectedGuessed.
+    | EveryoneGuessed
+    /// The round's time limit has elapsed — see GameSession.isRoundExpired.
+    | TimeUp of now: DateTimeOffset
+
 /// What resolving a round actually decided to do — reported out of the
 /// RoomStore.Update closure below via a mutable capture (see resolveRound)
 /// so the caller knows which event(s) to broadcast, without resolveRound
@@ -264,19 +353,21 @@ type private RoundResolution =
     /// fresh InProgress) by the other. No broadcast for this caller; the
     /// other caller's own resolveRound call already sent one.
     | NothingToResolve
-    | GameCompleted of scored: GameSession
-    | RoundAdvanced of scored: GameSession * advanced: GameSession
+    | DuelCompleted of scored: GameSession
+    | DuelAdvanced of scored: GameSession * advanced: GameSession
+    /// A Congregation round was scored; it stays revealed for the
+    /// session's RevealPause before RoundTimeoutService moves on (see
+    /// advanceRevealedRound).
+    | CongregationRoundRevealed of scored: GameSession
 
-/// Scores the CURRENT round of the room at `roomCode`'s ActiveGame, then
-/// either ends the game or advances to a freshly-picked verse, broadcasting
-/// accordingly — shared by GameHub.SubmitGuess (both players guessed) and
-/// RoundTimeoutService's sweep (deadline elapsed), so both paths use
-/// identical resolve-then-advance-or-end logic. `group` is the room's
-/// already-resolved IClientProxy (this.Clients.Group(roomCode) from a live
-/// hub call, or hubContext.Clients.Group(roomCode) from the sweep) rather
-/// than the whole Clients object, so this works from either caller without
-/// depending on which (incompatible) IHubClients-family interface each one
-/// actually implements.
+/// Scores the CURRENT round of game `gameId` in the room at `roomCode`,
+/// if `trigger` still holds, broadcasting accordingly — shared by
+/// GameHub.SubmitGuess (everyone guessed), disconnects and departures
+/// (whoever is left has all guessed) and RoundTimeoutService's sweep
+/// (deadline elapsed), so every path uses identical logic. A duel then
+/// either ends or advances to a freshly-picked verse straight away, as it
+/// always has; a Congregation round stays revealed until its reveal pause
+/// is over (see advanceRevealedRound).
 ///
 /// The whole "is this round still the one I think it is, and if so, what
 /// does resolving it produce" decision happens INSIDE one RoomStore.Update
@@ -287,85 +378,221 @@ type private RoundResolution =
 /// stale view and clobber each other's result. `f`'s own body is pure and
 /// side-effect-free (safe for Update to retry under contention); it
 /// reports what it decided via the `resolution` mutable capture, which
-/// only reflects whichever attempt's write actually won — a retried
-/// attempt overwrites it with that attempt's own (equally valid) decision,
-/// and if the round turns out to already be resolved, it's left as
-/// NothingToResolve and nothing is broadcast (the winning racer already
-/// did).
+/// only reflects whichever attempt's write actually won.
 let private resolveRound
-    (group: IClientProxy)
-    (verses: Verse list)
-    (famous: FamousVerses.Settings)
-    (rooms: RoomStore)
+    (services: GameServices)
+    (channels: RoomChannels)
     (roomCode: string)
+    (gameId: GameId)
+    (trigger: ResolveTrigger)
     : Task =
     task {
         let mutable resolution = NothingToResolve
 
-        rooms.Update(
-            roomCode,
-            fun room ->
-                match room.ActiveGame with
-                | None -> room
-                | Some session ->
-                    match session.Round with
-                    | Scored _
-                    | WaitingForPlayers -> room // already resolved by a winning racer — leave as-is
-                    | InProgress _ ->
-                        let scored = GameSession.scoreRound session
+        let updatedRoom =
+            services.Rooms.Update(
+                roomCode,
+                fun room ->
+                    resolution <- NothingToResolve
 
-                        let endCompleted () =
-                            resolution <- GameCompleted scored
-                            Room.endGame (Room.updateGame (fun _ -> scored) room)
+                    match Room.games room |> List.tryFind (fun s -> s.GameId = gameId) with
+                    | None -> room
+                    | Some session ->
+                        let ready =
+                            match session.Round, trigger with
+                            | InProgress _, EveryoneGuessed -> GameSession.allExpectedGuessed (Room.isConnected room) session
+                            | InProgress _, TimeUp now -> GameSession.isRoundExpired now session
+                            | _ -> false // already resolved by a winning racer — leave as-is
 
-                        if GameSession.isOver scored then
-                            endCompleted ()
+                        if not ready then
+                            room
                         else
-                            match pickRandomVerse verses famous scored.GameType with
-                            | None ->
-                                // The book/chapter selection stopped
-                                // matching anything (shouldn't normally
-                                // happen — it matched at game start) — end
-                                // the game rather than get stuck InProgress
-                                // forever.
-                                endCompleted ()
-                            | Some nextVerse ->
-                                let advanced = GameSession.advanceRound nextVerse DateTimeOffset.UtcNow scored
-                                resolution <- RoundAdvanced(scored, advanced)
-                                Room.updateGame (fun _ -> advanced) room
-        )
-        |> ignore
+                            let now = DateTimeOffset.UtcNow
+                            let scored = GameSession.scoreRound now session
 
-        match resolution with
-        | NothingToResolve -> ()
-        | GameCompleted scored ->
-            do! group.SendAsync(RoundScoredEvent, scored)
-            do! group.SendAsync(GameOverEvent, scored.GameId, scored.Scores, scored.PlayerA, scored.PlayerB, Completed)
-        | RoundAdvanced(scored, advanced) ->
-            do! group.SendAsync(RoundScoredEvent, scored)
-            do! group.SendAsync(RoundStartedEvent, advanced)
+                            match session.Format with
+                            | Congregation _ ->
+                                resolution <- CongregationRoundRevealed scored
+                                Room.updateGame gameId (fun _ -> scored) room
+                            | Duel ->
+                                let endCompleted () =
+                                    resolution <- DuelCompleted scored
+                                    Room.endGame gameId room
+
+                                if GameSession.isOver scored then
+                                    endCompleted ()
+                                else
+                                    match pickRandomVerse services.Verses services.Famous scored.GameType with
+                                    | None ->
+                                        // The book/chapter selection stopped
+                                        // matching anything (shouldn't
+                                        // normally happen — it matched at
+                                        // game start) — end the game rather
+                                        // than get stuck InProgress forever.
+                                        endCompleted ()
+                                    | Some nextVerse ->
+                                        let advanced = GameSession.advanceRound nextVerse now scored
+                                        resolution <- DuelAdvanced(scored, advanced)
+                                        Room.updateGame gameId (fun _ -> advanced) room
+            )
+
+        match resolution, updatedRoom with
+        | NothingToResolve, _
+        | _, None -> ()
+        | DuelCompleted scored, Some room ->
+            do! channels.Players.SendAsync(RoundScoredEvent, scored)
+            do! sendGameOver channels scored Completed
+            do! announceActivity channels room
+        | DuelAdvanced(scored, advanced), Some _ ->
+            do! channels.Players.SendAsync(RoundScoredEvent, scored)
+            do! channels.Players.SendAsync(RoundStartedEvent, advanced)
+        | CongregationRoundRevealed scored, Some room ->
+            do! channels.Players.SendAsync(RoundScoredEvent, scored)
+            do! pushLeaderboard channels services.Rules room
     }
 
-type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings) =
+type private RevealOutcome =
+    | NothingToAdvance
+    | CongregationCompleted of GameSession
+    | NextRoundStarted of GameSession
+
+/// Moves the room's Congregation on once its scored round has been
+/// revealed for the full reveal pause: to the next round, or — after the
+/// last one — to the end of the game, which frees the room again. Same
+/// decide-inside-one-Update discipline as resolveRound.
+let private advanceRevealedRound (services: GameServices) (channels: RoomChannels) (roomCode: string) (now: DateTimeOffset) : Task =
+    task {
+        let mutable outcome = NothingToAdvance
+
+        let updatedRoom =
+            services.Rooms.Update(
+                roomCode,
+                fun room ->
+                    outcome <- NothingToAdvance
+
+                    match room.Activity with
+                    | Congregating game when GameSession.isRevealOver now game.Session ->
+                        let session = game.Session
+
+                        let complete () =
+                            outcome <- CongregationCompleted session
+                            Room.endGame session.GameId room
+
+                        if GameSession.isOver session then
+                            complete ()
+                        else
+                            match pickRandomVerse services.Verses services.Famous session.GameType with
+                            | None -> complete ()
+                            | Some nextVerse ->
+                                let advanced = GameSession.advanceRound nextVerse now session
+                                outcome <- NextRoundStarted advanced
+                                Room.updateGame session.GameId (fun _ -> advanced) room
+                    | _ -> room
+            )
+
+        match outcome, updatedRoom with
+        | NothingToAdvance, _
+        | _, None -> ()
+        | CongregationCompleted session, Some room ->
+            do! sendGameOver channels session Completed
+            do! announceActivity channels room
+            do! pushLeaderboard channels services.Rules room
+        | NextRoundStarted advanced, Some room ->
+            do! channels.Players.SendAsync(RoundStartedEvent, advanced)
+            do! pushLeaderboard channels services.Rules room
+    }
+
+/// Broadcasts what a removal (voluntary leave, stale-disconnect sweep,
+/// same-name rejoin, leaving a Congregation) did to the room's games — see
+/// RemovalImpact. Shared by every removal path so they can never disagree.
+/// `room` is the room as stored after the removal.
+let private broadcastRemovalImpact
+    (services: GameServices)
+    (channels: RoomChannels)
+    (roomCode: string)
+    (room: Room)
+    (impact: RemovalImpact)
+    : Task =
+    task {
+        match impact with
+        | NothingAffected -> ()
+        | DuelsForfeited forfeits ->
+            for session, survivor in forfeits do
+                do! sendGameOver channels session (Forfeited survivor)
+
+            do! announceActivity channels room
+        | CongregantsDeparted game ->
+            // The activity carries who has left, so a participant who just
+            // left sees the game as someone else's from now on.
+            do! announceActivity channels room
+            do! pushLeaderboard channels services.Rules room
+            // Whoever just left may have been the last one the round was
+            // waiting for.
+            do! resolveRound services channels roomCode game.Session.GameId EveryoneGuessed
+        | CongregationAbandoned game ->
+            do! sendGameOver channels game.Session Abandoned
+            do! announceActivity channels room
+            do! pushLeaderboard channels services.Rules room
+        | LobbyMembersRemoved _
+        | LobbyCanceled _ ->
+            do! announceActivity channels room
+            do! pushLeaderboard channels services.Rules room
+    }
+
+let private lobbyErrorMessage (rules: CongregationRules) (error: LobbyError) =
+    match error with
+    | RoomBusy -> "A game is already running in this room. Wait until it's over."
+    | RoundCountOutOfRange ->
+        $"Choose between {CongregationLobby.minRoundCount} and {CongregationLobby.maxRoundCount} rounds."
+    | TimeLimitOutOfRange ->
+        $"A Congregation needs a time limit between {int rules.MinTimeLimit.TotalSeconds} and {int rules.MaxTimeLimit.TotalSeconds} seconds."
+    | LobbyFull -> "This Congregation is full."
+    | NoLobby -> "There is no open Congregation in this room."
+    | NotHost -> "Only the host can do that."
+    | NotAMember -> "You haven't joined this Congregation."
+    | TooFewPlayers(have, need) -> $"A Congregation needs at least {need} connected players. It has {have}."
+
+[<Literal>]
+let private NotInRoomMessage = "You haven't joined a room"
+
+[<Literal>]
+let private CongregationHasRoomMessage =
+    "A Congregation is using this room right now. Wait until it's over."
+
+type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings, rules: CongregationRules) =
     inherit Hub()
 
-    /// Adds the caller to `room` as a new player, registers the connection,
-    /// broadcasts PlayerJoined, and sends the joiner (only) recent chat
-    /// history — shared by JoinRoom and JoinWorldChat, which differ only in
-    /// how they find/create the room to join. Returns the newly-created
-    /// Player (via the invoke's return value) so the caller learns its own
-    /// stable id — needed client-side to know which players-list entry is
-    /// "me" (see chat-panel.ts's myPlayerId) and to target play requests.
+    let services =
+        { Rooms = rooms
+          Verses = verses
+          Famous = famous
+          Rules = rules }
+
+    member private this.Channels(roomCode: string) =
+        channelsOf (this.Clients :> IHubClients<IClientProxy>) roomCode
+
+    member private this.SendError(message: string) =
+        this.Clients.Caller.SendAsync("Error", message)
+
+    /// Adds the caller to the room as a new player, registers the
+    /// connection, broadcasts PlayerJoined, and sends the joiner (only)
+    /// recent chat history, the roster and what the room is doing — shared
+    /// by JoinRoom and JoinWorldChat, which differ only in how they
+    /// find/create the room to join. Returns the newly-created Player (via
+    /// the invoke's return value) so the caller learns its own stable id —
+    /// needed client-side to know which players-list entry is "me" (see
+    /// chat-panel.ts's myPlayerId) and to target play requests.
     ///
     /// Enforces unique names within the room (see
-    /// docs/SCRUM/Featue.UniquePlayerName.md) via Room.prepareJoin: fails
+    /// docs/SCRUM/Featue.UniquePlayerName.md) via Room.admit: fails
     /// outright (caller-only Error, no PlayerJoined) if `playerName` is
     /// already held by a currently-connected player. If it's held by a
-    /// DISCONNECTED player instead, that stale entry is silently removed
-    /// first (with the same PlayerLeft/GameOver broadcasts the periodic
-    /// stale-disconnect sweep sends, so everyone else's roster/game state
-    /// stays in sync) — this is what makes reconnecting under your own
-    /// name work rather than being rejected as a duplicate.
+    /// DISCONNECTED player instead, that stale entry is replaced — with
+    /// the same PlayerLeft/GameOver broadcasts the periodic stale-
+    /// disconnect sweep sends — or, if they were playing the running
+    /// Congregation, the joiner takes over their seat and score. This is
+    /// what makes reconnecting under your own name work rather than being
+    /// rejected as a duplicate.
     member private this.JoinExistingRoom(roomCode: string, playerName: string) : Task<Player> =
         task {
             let player =
@@ -374,77 +601,51 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                   Score = 0 }
 
             // The whole "is this name actually free, and if a stale
-            // disconnected player is being replaced, what was removed"
+            // disconnected player is being replaced, what did that do"
             // decision happens INSIDE one RoomStore.Update call — reading
-            // the room fresh on every (possibly retried) attempt, not off
-            // a snapshot the caller already had lying around — so a
+            // the room fresh on every (possibly retried) attempt — so a
             // concurrent join, disconnect, or game-ending event touching
             // the same room can't be silently discarded by this join's
             // write (see RoomStoreConcurrencyTests.fs).
-            let mutable rejected = false
-            let mutable removedStalePlayer: Player option = None
-            let mutable forfeitedSession: GameSession option = None
-            let mutable forfeitedOpponent: PlayerId option = None
+            let mutable admission: Room.Admission option = None
 
             let updatedRoom =
                 rooms.Update(
                     roomCode,
                     fun room ->
-                        match Room.prepareJoin playerName room with
+                        match Room.admit player room with
                         | Error() ->
-                            rejected <- true
+                            admission <- None
                             room
-                        | Ok preparedRoom ->
-                            rejected <- false
-
-                            if preparedRoom.Players.Length < room.Players.Length then
-                                let removed = room.Players |> List.find (fun p -> not (preparedRoom.Players |> List.contains p))
-                                removedStalePlayer <- Some removed
-
-                                match room.ActiveGame with
-                                | Some session when session.PlayerA = removed.Id || session.PlayerB = removed.Id ->
-                                    forfeitedSession <- Some session
-                                    forfeitedOpponent <- Some(if session.PlayerA = removed.Id then session.PlayerB else session.PlayerA)
-                                | _ ->
-                                    forfeitedSession <- None
-                                    forfeitedOpponent <- None
-                            else
-                                removedStalePlayer <- None
-                                forfeitedSession <- None
-                                forfeitedOpponent <- None
-
-                            { preparedRoom with Players = player :: preparedRoom.Players }
+                        | Ok admitted ->
+                            admission <- Some admitted
+                            admitted.Room
                 )
 
-            match updatedRoom with
-            | None ->
-                do! this.Clients.Caller.SendAsync("Error", "Room not found")
+            match updatedRoom, admission with
+            | None, _ ->
+                do! this.SendError "Room not found"
                 return failwith "Room not found"
-            | Some _ when rejected ->
-                do! this.Clients.Caller.SendAsync("Error", "That name is already taken in this room. Please choose another.")
+            | Some _, None ->
+                do! this.SendError "That name is already taken in this room. Please choose another."
                 return failwith "Name already taken"
-            | Some updated ->
-                // A stale disconnected player of the same name was removed
-                // to make room for this join — tell everyone else, exactly
-                // like PlayerCleanupService's periodic sweep does.
-                match removedStalePlayer with
+            | Some updated, Some admitted ->
+                let channels = this.Channels roomCode
+
+                // A stale disconnected player of the same name was replaced
+                // by this join — tell everyone else, exactly like
+                // PlayerCleanupService's periodic sweep does.
+                match admitted.Replaced with
                 | Some removed ->
                     let (PlayerId removedGuid) = removed.Id
-                    do! this.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string removedGuid)
-
-                    match forfeitedSession with
-                    | Some session ->
-                        do!
-                            this.Clients
-                                .Group(roomCode)
-                                .SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
-                    | None -> ()
+                    do! channels.Players.SendAsync(PlayerLeftEvent, string removedGuid)
+                    do! broadcastRemovalImpact services channels roomCode updated admitted.Impact
                 | None -> ()
 
                 rooms.RegisterConnection(this.Context.ConnectionId, RoomCode roomCode, player)
 
                 do! this.Groups.AddToGroupAsync(this.Context.ConnectionId, roomCode)
-                do! this.Clients.Group(roomCode).SendAsync(PlayerJoinedEvent, player)
+                do! channels.Players.SendAsync(PlayerJoinedEvent, player)
 
                 // RecentMessages is stored newest-first (see Room.addMessage);
                 // reverse so the client receives/renders oldest-first.
@@ -455,6 +656,14 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                 // players who joined earlier are visible right away, not
                 // just future PlayerJoined broadcasts.
                 do! this.Clients.Caller.SendAsync(RoomPlayersEvent, updated.Players)
+
+                // What the room is doing, so a late joiner knows who is
+                // busy and whether a Congregation has the room — and a
+                // reseated participant gets their game back.
+                do! this.Clients.Caller.SendAsync(RoomActivityChangedEvent, RoomActivityView.ofRoom updated)
+
+                if admitted.Reseated then
+                    do! pushLeaderboard channels rules updated
 
                 return player
         }
@@ -470,14 +679,14 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     member this.SendChatMessage(text: string) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, player) ->
                 let trimmed = text.Trim()
 
                 if trimmed = "" then
-                    do! this.Clients.Caller.SendAsync("Error", "Message can't be empty")
+                    do! this.SendError "Message can't be empty"
                 elif trimmed.Length > maxChatMessageLength then
-                    do! this.Clients.Caller.SendAsync("Error", $"Message is too long (max {maxChatMessageLength} characters)")
+                    do! this.SendError $"Message is too long (max {maxChatMessageLength} characters)"
                 else
                     let message: ChatMessage =
                         { PlayerId = player.Id
@@ -503,27 +712,29 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     /// challenged player can see what they're being invited to.
     /// `timeLimitSeconds` is None (or 0) for "no limit" — translated to
     /// TimeLimit here rather than asking the client to construct a
-    /// {Case:'Unlimited'}-shaped DU value by hand.
+    /// {Case:'Unlimited'}-shaped DU value by hand. Refused while a
+    /// Congregation has the room.
     member this.SendPlayRequest(toPlayerId: string, gameType: GameType, roundCount: int, timeLimitSeconds: int option) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, sender) ->
                 match rooms.TryGet(roomCode) with
-                | None -> do! this.Clients.Caller.SendAsync("Error", "Room not found")
+                | None -> do! this.SendError "Room not found"
                 | Some room ->
                     let targetId = PlayerId(Guid.Parse toPlayerId)
 
                     match room.Players |> List.tryFind (fun p -> p.Id = targetId) with
-                    | None -> do! this.Clients.Caller.SendAsync("Error", "That player is no longer in the room")
+                    | None -> do! this.SendError "That player is no longer in the room"
+                    | Some _ when not (Room.allowsDuels room) -> do! this.SendError CongregationHasRoomMessage
                     | Some _ when Room.isInActiveGame sender.Id room ->
-                        do! this.Clients.Caller.SendAsync("Error", "You can't send a play request while a game is in progress")
-                    | Some _ when Room.isInActiveGame targetId room ->
-                        do! this.Clients.Caller.SendAsync("Error", "That player is already in a game")
+                        do! this.SendError "You can't send a play request while a game is in progress"
+                    | Some _ when Room.isInActiveGame targetId room -> do! this.SendError "That player is already in a game"
                     | Some _ ->
                         let timeLimit =
                             match timeLimitSeconds with
-                            | None | Some 0 -> Unlimited
+                            | None
+                            | Some 0 -> Unlimited
                             | Some seconds -> LimitedTo(TimeSpan.FromSeconds(float seconds))
 
                         let request =
@@ -545,7 +756,7 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     member this.WithdrawPlayRequest() : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, sender) ->
                 match rooms.Update(roomCode, Room.withdrawPlayRequest sender.Id) with
                 | None -> ()
@@ -555,32 +766,30 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
         }
 
     /// Accepts the pending request from `fromPlayerId` to the caller —
-    /// resolves the request AND starts the game it described: picks the
+    /// resolves the request AND starts the duel it described: picks the
     /// first verse (impure — Random, via pickRandomVerse, same idiom as
-    /// /api/verses/random), then broadcasts PlayRequestAccepted (unchanged,
-    /// for "they accepted" UI feedback) immediately followed by
-    /// RoundStarted (new) carrying the full GameSession. A no-op (no
-    /// broadcast at all) if the request was no longer there (e.g.
-    /// withdrawn a moment earlier) — naturally means "if it's gone, no
-    /// game starts", no separate guard needed for that race. Guarded by
-    /// the one-active-game-per-player rule: refuses (caller-only Error) if
-    /// either player already has a game running.
+    /// /api/verses/random), then broadcasts PlayRequestAccepted (for "they
+    /// accepted" UI feedback) immediately followed by RoundStarted carrying
+    /// the full GameSession. A no-op (no broadcast at all) if the request
+    /// was no longer there (e.g. withdrawn a moment earlier). Guarded by
+    /// the one-active-game-per-player rule — refuses (caller-only Error) if
+    /// either player already has a game running — and refused while a
+    /// Congregation has the room. Other duels in the room are untouched.
     member this.AcceptPlayRequest(fromPlayerId: string) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, toPlayer) ->
                 let fromId = PlayerId(Guid.Parse fromPlayerId)
 
-                // The whole "are both players actually still free, is the
-                // request still there, and (if so) starting the game with
-                // a freshly-picked verse" decision happens INSIDE one
-                // RoomStore.Update call — reading the room fresh on every
-                // (possibly retried) attempt, not off a snapshot taken
-                // before this method's own guard checks — so a
+                // The whole "is the room free, are both players actually
+                // still free, is the request still there, and (if so)
+                // starting the game with a freshly-picked verse" decision
+                // happens INSIDE one RoomStore.Update call — reading the
+                // room fresh on every (possibly retried) attempt — so a
                 // concurrently-starting/ending game or withdrawn request
                 // can't be missed (see RoomStoreConcurrencyTests.fs).
-                let mutable outcome = Error "You haven't joined a room" // overwritten below on every real path
+                let mutable outcome: Result<GameSession option, string> = Error NotInRoomMessage
 
                 // Minted OUT here, not inside the Update closure below:
                 // that closure is retried on contention (see RoomStore),
@@ -592,7 +801,10 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                     rooms.Update(
                         roomCode,
                         fun room ->
-                            if Room.isInActiveGame fromId room || Room.isInActiveGame toPlayer.Id room then
+                            if not (Room.allowsDuels room) then
+                                outcome <- Error CongregationHasRoomMessage
+                                room
+                            elif Room.isInActiveGame fromId room || Room.isInActiveGame toPlayer.Id room then
                                 outcome <- Error "You or that player already have a game in progress"
                                 room
                             else
@@ -606,24 +818,24 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                                         outcome <- Error "No verses match that game's book/chapter selection"
                                         room
                                     | Some firstVerse ->
-                                        let updated, accepted =
+                                        let updated, started =
                                             Room.acceptPlayRequest gameId fromId toPlayer.Id firstVerse DateTimeOffset.UtcNow room
 
-                                        outcome <- Ok accepted
+                                        outcome <- Ok started
                                         updated
                     )
 
-                match outcome with
-                | Error message -> do! this.Clients.Caller.SendAsync("Error", message)
-                | Ok None -> () // request already gone (withdrawn/retargeted) — no-op, matches the old behavior
-                | Ok(Some _) ->
+                match outcome, updatedRoom with
+                | Error message, _ -> do! this.SendError message
+                | Ok None, _
+                | _, None -> () // request already gone (withdrawn/retargeted) — no-op
+                | Ok(Some session), Some room ->
                     let (PlayerId fromGuid) = fromId
                     let (PlayerId toGuid) = toPlayer.Id
-                    do! this.Clients.Group(roomCode).SendAsync(PlayRequestAcceptedEvent, string fromGuid, string toGuid)
-
-                    match updatedRoom |> Option.bind (fun r -> r.ActiveGame) with
-                    | Some session -> do! this.Clients.Group(roomCode).SendAsync(RoundStartedEvent, session)
-                    | None -> ()
+                    let channels = this.Channels roomCode
+                    do! channels.Players.SendAsync(PlayRequestAcceptedEvent, string fromGuid, string toGuid)
+                    do! channels.Players.SendAsync(RoundStartedEvent, session)
+                    do! announceActivity channels room
         }
 
     /// Denies the pending request from `fromPlayerId` to the caller —
@@ -633,7 +845,7 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     member this.DenyPlayRequest(fromPlayerId: string) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, toPlayer) ->
                 let fromId = PlayerId(Guid.Parse fromPlayerId)
 
@@ -645,23 +857,23 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                     do! this.Clients.Group(roomCode).SendAsync(PlayRequestDeniedEvent, string fromGuid, string toGuid)
         }
 
-    /// Submits the caller's guess for the current round of their active
-    /// game. `bookNumber` is the guessed book's 1-based position in the
-    /// CALLER'S OWN VerseSource's Bible order (see
-    /// frontend/src/shared-kernel/book-numbers.ts) — None if their own source couldn't
-    /// resolve one for what they typed, in which case scoring falls back
-    /// to name matching (see Scoring.correctParts). Errors (caller-only,
-    /// no broadcast) if the caller isn't in a room, isn't in an active
-    /// game, or the game's current round isn't InProgress (e.g. a late
-    /// resubmit racing the round already resolving). On success: records
-    /// the guess, and — if this completes both players' guesses for the
-    /// round — resolves it (see resolveRound). No broadcast on an
-    /// individual submission; the round only announces itself once
-    /// resolved (via RoundScored/RoundStarted/GameOver).
+    /// Submits the caller's guess for the current round of the game they
+    /// are playing. `bookNumber` is the guessed book's 1-based position in
+    /// the CALLER'S OWN VerseSource's Bible order (see
+    /// frontend/src/shared-kernel/book-numbers.ts) — None if their own
+    /// source couldn't resolve one for what they typed, in which case
+    /// scoring falls back to name matching (see Scoring.correctParts).
+    /// Errors (caller-only, no broadcast) if the caller isn't in a room,
+    /// isn't playing a game, or the game's current round isn't InProgress
+    /// (e.g. a late resubmit racing the round already resolving). On
+    /// success: records the guess and resolves the round if everyone it
+    /// waits for has now guessed (see resolveRound). A duel announces
+    /// nothing on an individual guess; a Congregation updates its
+    /// leaderboard, which shows who has guessed (never what).
     member this.SubmitGuess(book: string, bookNumber: int option, chapter: int option, verseNumber: int option) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, player) ->
                 let guess: Guess =
                     { PlayerId = player.Id
@@ -671,53 +883,47 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                       VerseNumber = verseNumber
                       SubmittedAt = DateTimeOffset.UtcNow }
 
-                // Records the guess and decides whether it completed both
-                // players' guesses for the round, all inside one
-                // RoomStore.Update call — reading ActiveGame fresh on
-                // every (possibly retried) attempt rather than off a
-                // separately-read snapshot, so a guess recorded by a
-                // concurrent SubmitGuess from the other player can never
-                // be silently overwritten by this one (see
-                // RoomStoreConcurrencyTests.fs for the bug this fixes).
-                // The three error cases below are re-checked fresh inside
-                // the closure too, for the same reason — not just for the
-                // initial read.
-                let mutable outcome = Error "You don't have an active game"
+                // Records the guess inside one RoomStore.Update call —
+                // reading the game fresh on every (possibly retried)
+                // attempt rather than off a separately-read snapshot, so a
+                // guess recorded by a concurrent SubmitGuess from another
+                // player can never be silently overwritten by this one
+                // (see RoomStoreConcurrencyTests.fs). The error cases are
+                // re-checked fresh inside the closure too.
+                let mutable outcome: Result<GameSession, string> = Error "You don't have an active game"
 
-                rooms.Update(
-                    roomCode,
-                    fun room ->
-                        match room.ActiveGame with
-                        | Some session when session.PlayerA = player.Id || session.PlayerB = player.Id ->
-                            match session.Round with
-                            | Scored _
-                            | WaitingForPlayers ->
-                                outcome <- Error "This round is no longer accepting guesses"
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            match Room.gameOf player.Id room with
+                            | Some session ->
+                                match session.Round with
+                                | Scored _
+                                | WaitingForPlayers ->
+                                    outcome <- Error "This round is no longer accepting guesses"
+                                    room
+                                | InProgress _ ->
+                                    outcome <- Ok session
+                                    Room.updateGame session.GameId (GameSession.submitGuess player.Id guess) room
+                            | None ->
+                                outcome <- Error "You don't have an active game"
                                 room
-                            | InProgress _ ->
-                                let withGuess = Room.updateGame (GameSession.submitGuess player.Id guess) room
+                    )
 
-                                outcome <-
-                                    match withGuess.ActiveGame with
-                                    | Some updated when GameSession.bothGuessed updated -> Ok true
-                                    | _ -> Ok false
+                match outcome, updatedRoom with
+                | Error message, _ -> do! this.SendError message
+                | Ok _, None -> ()
+                | Ok session, Some room ->
+                    let channels = this.Channels roomCode
 
-                                withGuess
-                        | _ -> room // outcome stays the initial "no active game" error
-                )
-                |> ignore
+                    match session.Format with
+                    | Congregation _ -> do! pushLeaderboard channels rules room
+                    | Duel -> ()
 
-                match outcome with
-                | Error message -> do! this.Clients.Caller.SendAsync("Error", message)
-                | Ok true -> do! resolveRound (this.Clients.Group(roomCode)) verses famous rooms roomCode
-                | Ok false -> ()
+                    do! resolveRound services channels roomCode session.GameId EveryoneGuessed
         }
 
-    /// The caller forfeits their active game, if they have one — ends the
-    /// game (Room.forfeitGame) and broadcasts GameOver(Forfeited) naming
-    /// the opponent as the surviving player. A no-op (no error) if the
-    /// caller doesn't have an active game — mirrors WithdrawPlayRequest's
-    /// forgiving semantics.
     /// Asks to be matched with any other waiting player — the single entry
     /// point for both halves of matchmaking (see
     /// docs/SCRUM/TODO/Feature.StartMulitplayerGameWaitForRandomPlayer.md
@@ -727,11 +933,12 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     /// Deliberately one method rather than "create a wait" and "join a
     /// wait": whether you wait or are matched depends entirely on who else
     /// happens to be in the queue at that instant, and splitting it would
-    /// make that a race the client has to resolve.
+    /// make that a race the client has to resolve. Refused while a
+    /// Congregation has the room.
     member this.FindMatch(gameType: GameType, roundCount: int, timeLimitSeconds: int option) : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, player) ->
                 let timeLimit =
                     match timeLimitSeconds with
@@ -743,63 +950,67 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                 let gameId = GameId(Guid.NewGuid())
                 let mutable started: GameSession option = None
                 let mutable waiting = false
+                let mutable refusal = "You already have a game in progress"
 
-                rooms.Update(
-                    roomCode,
-                    fun room ->
-                        started <- None
-                        waiting <- false
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            started <- None
+                            waiting <- false
 
-                        if Room.isInActiveGame player.Id room then
-                            room
-                        else
-                            match Room.findMatchFor player.Id room with
-                            | Some opponent ->
-                                // The waiting player's settings win: they
-                                // asked first, and the joiner opted into
-                                // "whatever is open" rather than a
-                                // particular game.
-                                match pickRandomVerse verses famous opponent.GameType with
-                                | None -> room
-                                | Some firstVerse ->
-                                    let session =
-                                        GameSession.start
-                                            gameId
-                                            opponent.PlayerId
-                                            player.Id
-                                            opponent.GameType
-                                            opponent.RoundCount
-                                            opponent.RoundTimeLimit
-                                            firstVerse
-                                            DateTimeOffset.UtcNow
+                            if not (Room.allowsDuels room) then
+                                refusal <- CongregationHasRoomMessage
+                                room
+                            elif Room.isInActiveGame player.Id room then
+                                refusal <- "You already have a game in progress"
+                                room
+                            else
+                                match Room.findMatchFor player.Id room with
+                                | Some opponent ->
+                                    // The waiting player's settings win:
+                                    // they asked first, and the joiner
+                                    // opted into "whatever is open" rather
+                                    // than a particular game.
+                                    match pickRandomVerse verses famous opponent.GameType with
+                                    | None -> room
+                                    | Some firstVerse ->
+                                        let session =
+                                            GameSession.startDuel
+                                                gameId
+                                                opponent.PlayerId
+                                                player.Id
+                                                opponent.GameType
+                                                opponent.RoundCount
+                                                opponent.RoundTimeLimit
+                                                firstVerse
+                                                DateTimeOffset.UtcNow
 
-                                    started <- Some session
+                                        started <- Some session
+                                        Room.startDuel session room
+                                | None ->
+                                    waiting <- true
 
-                                    room
-                                    |> Room.leaveMatchmaking opponent.PlayerId
-                                    |> Room.leaveMatchmaking player.Id
-                                    |> Room.startGame session
-                            | None ->
-                                waiting <- true
+                                    let entry =
+                                        { PlayerId = player.Id
+                                          GameType = gameType
+                                          RoundCount = roundCount
+                                          RoundTimeLimit = timeLimit
+                                          WaitingSince = DateTimeOffset.UtcNow }
 
-                                let entry =
-                                    { PlayerId = player.Id
-                                      GameType = gameType
-                                      RoundCount = roundCount
-                                      RoundTimeLimit = timeLimit
-                                      WaitingSince = DateTimeOffset.UtcNow }
+                                    Room.joinMatchmaking entry room
+                    )
 
-                                Room.joinMatchmaking entry room
-                )
-                |> ignore
-
-                match started with
-                | Some session -> do! this.Clients.Group(roomCode).SendAsync(RoundStartedEvent, session)
-                | None ->
+                match started, updatedRoom with
+                | Some session, Some room ->
+                    let channels = this.Channels roomCode
+                    do! channels.Players.SendAsync(RoundStartedEvent, session)
+                    do! announceActivity channels room
+                | _ ->
                     if waiting then
                         do! this.Clients.Caller.SendAsync(WaitingForMatchEvent)
                     else
-                        do! this.Clients.Caller.SendAsync("Error", "You already have a game in progress")
+                        do! this.SendError refusal
         }
 
     /// Stops waiting to be matched. A no-op if the caller wasn't waiting,
@@ -807,42 +1018,48 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     member this.CancelMatchmaking() : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, player) ->
                 rooms.Update(roomCode, Room.leaveMatchmaking player.Id) |> ignore
                 do! this.Clients.Caller.SendAsync(MatchmakingCancelledEvent)
         }
 
+    /// The caller gives up the game they're playing. A duel ends
+    /// (GameOver(Forfeited), naming the opponent as the surviving player).
+    /// Leaving a Congregation only takes the caller out of it: the others
+    /// play on, and the caller keeps their place on the leaderboard (see
+    /// Room.leaveCongregationGame).
     member this.ForfeitGame() : Task =
         task {
             match rooms.TryGetConnection(this.Context.ConnectionId) with
-            | None -> do! this.Clients.Caller.SendAsync("Error", "You haven't joined a room")
+            | None -> do! this.SendError NotInRoomMessage
             | Some(RoomCode roomCode, player) ->
-                // Captures the session being forfeited (if any) from
-                // INSIDE the atomic update, not a separately-read
-                // snapshot, so it's always the one actually forfeited by
-                // this call — not a stale view that could disagree with
-                // what Room.forfeitGame just did.
-                let mutable forfeitedSession: GameSession option = None
+                // Captures what was forfeited from INSIDE the atomic
+                // update, not a separately-read snapshot, so it's always
+                // what this call actually did.
+                let mutable impact = NothingAffected
 
-                rooms.Update(
-                    roomCode,
-                    fun room ->
-                        match room.ActiveGame with
-                        | Some session when session.PlayerA = player.Id || session.PlayerB = player.Id ->
-                            forfeitedSession <- Some session
-                            Room.forfeitGame player.Id room
-                        | _ ->
-                            forfeitedSession <- None
-                            room
-                )
-                |> ignore
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            match Room.gameOf player.Id room with
+                            | Some session when session.Format = Duel ->
+                                let opponent = session.Participants |> List.tryFind (fun p -> p <> player.Id)
+                                impact <- DuelsForfeited [ session, opponent ]
+                                Room.forfeitGame player.Id room
+                            | Some _ ->
+                                let updated, departure = Room.leaveCongregationGame player.Id room
+                                impact <- departure
+                                updated
+                            | None ->
+                                impact <- NothingAffected
+                                room
+                    )
 
-                match forfeitedSession with
-                | Some session ->
-                    let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
-                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
-                | None ->
+                match impact, updatedRoom with
+                | NothingAffected, _
+                | _, None ->
                     // There was no game left to forfeit — the opponent's
                     // disconnect/leave already ended it, and this call
                     // raced that. The caller is sitting in a confirm
@@ -850,11 +1067,8 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                     // silently returning here left that dialog stuck on
                     // "Forfeiting…" forever, with no way out (see
                     // docs/SCRUM/BUGS/BUG.CanForfeitAGameWhereConnectionLost.md).
-                    // Not an error — the caller asked for the game to be
-                    // over and it is — so this reports the same outcome
-                    // the winning path would have, addressed to the
-                    // caller alone since nobody else is still in it.
-                    do! this.Clients.Caller.SendAsync("Error", "That game has already ended")
+                    do! this.SendError "That game has already ended"
+                | _, Some room -> do! broadcastRemovalImpact services (this.Channels roomCode) roomCode room impact
         }
 
     /// The caller voluntarily leaves the room (clicking "← Home" or "Back
@@ -866,11 +1080,10 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     /// make Room.prepareJoin correctly (but unhelpfully) reject their own
     /// attempt to come back into the room under the same name. Removes
     /// the caller immediately (no grace period, unlike a dropped
-    /// connection) and broadcasts PlayerLeft/GameOver(Forfeited) the same
-    /// way the other removal paths (stale-disconnect sweep, prepareJoin's
-    /// same-name replacement) do. A no-op if the caller isn't in a room
-    /// (nothing to leave) — mirrors WithdrawPlayRequest/ForfeitGame's
-    /// forgiving semantics; deliberately does NOT drop the connection
+    /// connection) and broadcasts PlayerLeft plus whatever that did to the
+    /// room's games, the same way the other removal paths (stale-disconnect
+    /// sweep, same-name replacement) do. A no-op if the caller isn't in a
+    /// room (nothing to leave); deliberately does NOT drop the connection
     /// itself (RegisterConnection stays as-is), since the same connection
     /// may go on to join a different room next.
     member this.LeaveRoom() : Task =
@@ -878,34 +1091,178 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
             match rooms.TryGetConnection(this.Context.ConnectionId) with
             | None -> ()
             | Some(RoomCode roomCode, player) ->
-                // Captures the session being forfeited (if any) from
-                // INSIDE the atomic update, same as ForfeitGame above —
-                // Room.leave's own opponent-id result isn't enough on its
-                // own to broadcast a real GameOver with actual final
-                // scores, so the pre-removal session is captured here too.
-                let mutable forfeitedSession: GameSession option = None
+                let mutable impact = NothingAffected
 
-                rooms.Update(
-                    roomCode,
-                    fun room ->
-                        forfeitedSession <-
-                            room.ActiveGame
-                            |> Option.filter (fun s -> s.PlayerA = player.Id || s.PlayerB = player.Id)
-
-                        let updated, _ = Room.leave player.Id room
-                        updated
-                )
-                |> ignore
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            let updated, removal = Room.leave player.Id room
+                            impact <- removal
+                            updated
+                    )
 
                 let (PlayerId playerGuid) = player.Id
-                do! this.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string playerGuid)
+                let channels = this.Channels roomCode
+                do! channels.Players.SendAsync(PlayerLeftEvent, string playerGuid)
 
-                match forfeitedSession with
-                | Some session ->
-                    let opponent = if session.PlayerA = player.Id then session.PlayerB else session.PlayerA
-                    do! this.Clients.Group(roomCode).SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited(Some opponent))
+                match updatedRoom with
+                | Some room -> do! broadcastRemovalImpact services channels roomCode room impact
                 | None -> ()
         }
+
+    /// Opens a Congregation lobby in the caller's room, with the caller as
+    /// host and first member — see docs/web/congregation. Only allowed in
+    /// a private room (not World chat, which has no shareable code for the
+    /// spectator board) while nothing else is running there. Opening
+    /// claims the room: pending play requests are withdrawn and the
+    /// matchmaking queue is emptied.
+    member this.OpenCongregation(gameType: GameType, roundCount: int, timeLimitSeconds: int) : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.SendError NotInRoomMessage
+            | Some(RoomCode roomCode, _) when roomCode = WorldChatRoomCode ->
+                do! this.SendError "A Congregation needs a private room. Create one and share its code."
+            | Some(RoomCode roomCode, player) ->
+                let host = { Id = player.Id; Name = player.Name }
+                let timeLimit = TimeSpan.FromSeconds(float timeLimitSeconds)
+                let mutable outcome: Result<PlayRequest list, LobbyError> = Error NoLobby
+
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            match Room.openCongregation rules host gameType roundCount timeLimit room with
+                            | Ok(opened, dropped) ->
+                                outcome <- Ok dropped
+                                opened
+                            | Error error ->
+                                outcome <- Error error
+                                room
+                    )
+
+                match outcome, updatedRoom with
+                | Error error, _ -> do! this.SendError(lobbyErrorMessage rules error)
+                | Ok _, None -> ()
+                | Ok dropped, Some room ->
+                    let channels = this.Channels roomCode
+
+                    for request in dropped do
+                        let (PlayerId fromGuid) = request.FromPlayerId
+                        do! channels.Players.SendAsync(PlayRequestWithdrawnEvent, string fromGuid)
+
+                    do! channels.Players.SendAsync(MatchmakingCancelledEvent)
+                    do! announceActivity channels room
+                    do! pushLeaderboard channels rules room
+        }
+
+    member private this.ChangeLobby(change: Player -> Room -> Result<Room, LobbyError>) : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.SendError NotInRoomMessage
+            | Some(RoomCode roomCode, player) ->
+                let mutable outcome: Result<unit, LobbyError> = Error NoLobby
+
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            match change player room with
+                            | Ok changed ->
+                                outcome <- Ok()
+                                changed
+                            | Error error ->
+                                outcome <- Error error
+                                room
+                    )
+
+                match outcome, updatedRoom with
+                | Error error, _ -> do! this.SendError(lobbyErrorMessage rules error)
+                | Ok(), None -> ()
+                | Ok(), Some room ->
+                    let channels = this.Channels roomCode
+                    do! announceActivity channels room
+                    do! pushLeaderboard channels rules room
+        }
+
+    /// Joins the open Congregation lobby in the caller's room. Joining
+    /// twice is harmless; a full lobby refuses. The capacity check happens
+    /// inside the atomic update, so simultaneous joins can't overfill it.
+    member this.JoinCongregation() : Task =
+        this.ChangeLobby(fun player room -> Room.joinCongregation rules { Id = player.Id; Name = player.Name } room)
+
+    /// Leaves the open lobby. The host leaving cancels it.
+    member this.LeaveCongregation() : Task =
+        this.ChangeLobby(fun player room -> Room.leaveCongregation player.Id room |> Result.map fst)
+
+    /// The host cancels their lobby without starting it.
+    member this.CancelCongregation() : Task =
+        this.ChangeLobby(fun player room -> Room.cancelCongregation player.Id room |> Result.map fst)
+
+    /// The host starts the lobby's game with the members connected right
+    /// now. Nobody can join after this.
+    member this.StartCongregation() : Task =
+        task {
+            match rooms.TryGetConnection(this.Context.ConnectionId) with
+            | None -> do! this.SendError NotInRoomMessage
+            | Some(RoomCode roomCode, player) ->
+                // Minted outside the retried Update closure, for the same
+                // reason as AcceptPlayRequest's.
+                let gameId = GameId(Guid.NewGuid())
+                let mutable outcome: Result<CongregationGame, string> = Error(lobbyErrorMessage rules NoLobby)
+
+                let updatedRoom =
+                    rooms.Update(
+                        roomCode,
+                        fun room ->
+                            match room.Activity with
+                            | Gathering lobby ->
+                                match pickRandomVerse verses famous lobby.GameType with
+                                | None ->
+                                    outcome <- Error "No verses match that game's book/chapter selection"
+                                    room
+                                | Some firstVerse ->
+                                    match Room.startCongregation rules player.Id gameId firstVerse DateTimeOffset.UtcNow room with
+                                    | Ok(started, game) ->
+                                        outcome <- Ok game
+                                        started
+                                    | Error error ->
+                                        outcome <- Error(lobbyErrorMessage rules error)
+                                        room
+                            | _ ->
+                                outcome <- Error(lobbyErrorMessage rules NoLobby)
+                                room
+                    )
+
+                match outcome, updatedRoom with
+                | Error message, _ -> do! this.SendError message
+                | Ok _, None -> ()
+                | Ok game, Some room ->
+                    let channels = this.Channels roomCode
+                    do! announceActivity channels room
+                    do! channels.Players.SendAsync(RoundStartedEvent, game.Session)
+                    do! pushLeaderboard channels rules room
+        }
+
+    /// Opens the read-only spectator board for `roomCode` — anyone with
+    /// the link, no name, no join (see docs/web/congregation). The
+    /// connection is added to the room's SPECTATOR group only: never
+    /// registered as a player (so every player-only method answers "You
+    /// haven't joined a room") and never added to the room group, whose
+    /// RoundStarted carries the reference of the round being guessed.
+    /// Returns the current board; LeaderboardUpdated follows on every
+    /// change.
+    member this.WatchRoom(roomCode: string) : Task<LeaderboardSnapshot> =
+        task {
+            match rooms.TryGet(roomCode) with
+            | None -> return raise (HubException "Room not found")
+            | Some room ->
+                do! this.Groups.AddToGroupAsync(this.Context.ConnectionId, spectatorGroupOf roomCode)
+                return Leaderboard.ofRoom rules room
+        }
+
+    member this.UnwatchRoom(roomCode: string) : Task =
+        this.Groups.RemoveFromGroupAsync(this.Context.ConnectionId, spectatorGroupOf roomCode)
 
     /// Marks the disconnecting player as disconnected (still visible in the
     /// room, just flagged) rather than removing them immediately — a page
@@ -917,10 +1274,8 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
     /// docs/SCRUM/Feature.ConsiderTimeoutForDisconectedPlayers.md and
     /// Room.cancelPendingRequestsFor's own doc comment — broadcasting
     /// PlayRequestWithdrawn (they were the sender) or PlayRequestDenied
-    /// (they were the target) per canceled request, the exact same
-    /// events/payload shapes WithdrawPlayRequest/DenyPlayRequest already
-    /// send for an explicit withdraw/deny, so the frontend needs no new
-    /// handling at all.
+    /// (they were the target) per canceled request. A Congregation stops
+    /// waiting for them, so their round may be ready to score now.
     // Not calling base.OnDisconnectedAsync here — Hub's default
     // implementation is Task.CompletedTask (a no-op), and F# doesn't allow
     // a `base` call inside a computation expression (only directly in a
@@ -952,18 +1307,26 @@ type GameHub(rooms: RoomStore, verses: Verse list, famous: FamousVerses.Settings
                     )
                 with
                 | None -> ()
-                | Some _ ->
+                | Some room ->
+                    let channels = this.Channels roomCode
                     let (PlayerId playerGuid) = player.Id
-                    do! this.Clients.Group(roomCode).SendAsync(PlayerDisconnectedEvent, string playerGuid)
+                    do! channels.Players.SendAsync(PlayerDisconnectedEvent, string playerGuid)
 
                     for request in canceledRequests do
                         let (PlayerId fromGuid) = request.FromPlayerId
                         let (PlayerId toGuid) = request.ToPlayerId
 
                         if request.FromPlayerId = player.Id then
-                            do! this.Clients.Group(roomCode).SendAsync(PlayRequestWithdrawnEvent, string fromGuid)
+                            do! channels.Players.SendAsync(PlayRequestWithdrawnEvent, string fromGuid)
                         else
-                            do! this.Clients.Group(roomCode).SendAsync(PlayRequestDeniedEvent, string fromGuid, string toGuid)
+                            do! channels.Players.SendAsync(PlayRequestDeniedEvent, string fromGuid, string toGuid)
+
+                    match room.Activity with
+                    | Gathering _ -> do! pushLeaderboard channels rules room
+                    | Congregating game ->
+                        do! pushLeaderboard channels rules room
+                        do! resolveRound services channels roomCode game.Session.GameId EveryoneGuessed
+                    | Duels _ -> ()
         }
 
 /// How long a disconnected player stays in the room, and how often
@@ -984,13 +1347,26 @@ type PresenceSettings =
 /// broadcasting PlayerLeft (and cleaning up their play requests — see
 /// Room.removeStaleDisconnections) so every other client's roster drops
 /// them without needing to wait for their own next RoomPlayers snapshot.
-/// If a removed player was mid-game, their ActiveGame is forfeited too
-/// (see removeStaleDisconnections) — this sweep broadcasts GameOver
-/// (Forfeited) to notify the surviving opponent, same "auto-forfeit after
-/// the disconnect grace period" behavior as everywhere else disconnection
-/// is handled in this app.
-type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, settings: PresenceSettings) =
+/// What that does to the room's games is broadcast the same way every
+/// other removal path does (see broadcastRemovalImpact): a duel is
+/// forfeited to the surviving opponent, a Congregation plays on without
+/// them.
+type PlayerCleanupService
+    (
+        rooms: RoomStore,
+        verses: Verse list,
+        famous: FamousVerses.Settings,
+        rules: CongregationRules,
+        hubContext: IHubContext<GameHub>,
+        settings: PresenceSettings
+    ) =
     inherit Microsoft.Extensions.Hosting.BackgroundService()
+
+    let services =
+        { Rooms = rooms
+          Verses = verses
+          Famous = famous
+          Rules = rules }
 
     override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
         task {
@@ -1012,32 +1388,28 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, se
                 for room in rooms.AllRooms() do
                     let (RoomCode roomCode) = room.Code
                     let mutable removedIds: PlayerId list = []
-                    let mutable forfeitedGame: GameSession option = None
-                    let mutable forfeitedOpponent: PlayerId option = None
+                    let mutable impact = NothingAffected
 
                     try
-                        rooms.Update(
-                            roomCode,
-                            fun current ->
-                                forfeitedGame <- current.ActiveGame
-                                let updated, removed, opponent = Room.removeStaleDisconnections cutoff current
-                                removedIds <- removed
-                                forfeitedOpponent <- opponent
-                                updated
-                        )
-                        |> ignore
+                        let updatedRoom =
+                            rooms.Update(
+                                roomCode,
+                                fun current ->
+                                    let updated, removed, removal = Room.removeStaleDisconnections cutoff current
+                                    removedIds <- removed
+                                    impact <- removal
+                                    updated
+                            )
 
-                        if not removedIds.IsEmpty then
+                        match updatedRoom with
+                        | Some updated when not removedIds.IsEmpty ->
+                            let channels = channelsOf (hubContext.Clients :> IHubClients<IClientProxy>) roomCode
+
                             for PlayerId removedGuid in removedIds do
-                                do! hubContext.Clients.Group(roomCode).SendAsync(PlayerLeftEvent, string removedGuid)
+                                do! channels.Players.SendAsync(PlayerLeftEvent, string removedGuid)
 
-                            match forfeitedGame with
-                            | Some session ->
-                                do!
-                                    hubContext.Clients
-                                        .Group(roomCode)
-                                        .SendAsync(GameOverEvent, session.GameId, session.Scores, session.PlayerA, session.PlayerB, Forfeited forfeitedOpponent)
-                            | None -> ()
+                            do! broadcastRemovalImpact services channels roomCode updated impact
+                        | _ -> ()
                     with ex ->
                         eprintfn "[PlayerCleanupService] failed to sweep room %s: %O" roomCode ex
 
@@ -1056,29 +1428,35 @@ type PlayerCleanupService(rooms: RoomStore, hubContext: IHubContext<GameHub>, se
 /// (round timing, not player presence) with its own default.
 type RoundTimeoutSettings = { SweepInterval: TimeSpan }
 
-/// Periodically sweeps every room's ActiveGame for a round whose time
+/// Periodically sweeps every game in every room for a round whose time
 /// limit has elapsed and auto-resolves it (scores whoever guessed,
-/// implicit 0 for whoever didn't, then advances/ends the game) — mirrors
-/// PlayerCleanupService's sweep-and-broadcast-via-IHubContext pattern
-/// exactly, since this is the same shape of problem: something server-
-/// initiated that isn't triggered by any client call. A 1-second default
-/// interval (vs. PlayerCleanupService's 30s) so a short round timer still
-/// feels responsive — still trivially cheap for what's normally a
-/// handful of in-memory rooms. Self-healing against races with
-/// SubmitGuess resolving the same round moments earlier:
-/// GameSession.isRoundExpired only matches a round that's still
-/// InProgress, so a round SubmitGuess already advanced/scored is simply
-/// skipped on the next tick — no cancellation or locking needed,
-/// consistent with RoomStore's atomic ConcurrentDictionary.Set.
+/// implicit 0 for whoever didn't, then advances/ends the game), and moves
+/// a Congregation on once its scored round has been revealed long enough
+/// — mirrors PlayerCleanupService's sweep-and-broadcast-via-IHubContext
+/// pattern exactly, since this is the same shape of problem: something
+/// server-initiated that isn't triggered by any client call. A 1-second
+/// default interval (vs. PlayerCleanupService's 30s) so a short round
+/// timer still feels responsive — still trivially cheap for what's
+/// normally a handful of in-memory rooms. Self-healing against races with
+/// SubmitGuess resolving the same round moments earlier: resolveRound
+/// re-checks the expiry inside its atomic update, so a round already
+/// scored is simply skipped.
 type RoundTimeoutService
     (
         rooms: RoomStore,
         verses: Verse list,
         famous: FamousVerses.Settings,
+        rules: CongregationRules,
         hubContext: IHubContext<GameHub>,
         settings: RoundTimeoutSettings
     ) =
     inherit Microsoft.Extensions.Hosting.BackgroundService()
+
+    let services =
+        { Rooms = rooms
+          Verses = verses
+          Famous = famous
+          Rules = rules }
 
     override _.ExecuteAsync(stoppingToken: Threading.CancellationToken) : Task =
         task {
@@ -1086,8 +1464,8 @@ type RoundTimeoutService
                 let now = DateTimeOffset.UtcNow
 
                 // Each room is swept inside its own try/with: resolveRound
-                // ends in group.SendAsync, which can genuinely throw (a
-                // client disconnecting mid-broadcast, a transport fault).
+                // ends in SendAsync, which can genuinely throw (a client
+                // disconnecting mid-broadcast, a transport fault).
                 // Unguarded, one such throw escapes ExecuteAsync, ends the
                 // while loop and silently kills this BackgroundService for
                 // the lifetime of the process — after which NO room's round
@@ -1097,12 +1475,14 @@ type RoundTimeoutService
                 // next one.
                 for room in rooms.AllRooms() do
                     let (RoomCode roomCode) = room.Code
+                    let channels = channelsOf (hubContext.Clients :> IHubClients<IClientProxy>) roomCode
 
                     try
-                        match room.ActiveGame with
-                        | Some session when GameSession.isRoundExpired now session ->
-                            do! resolveRound (hubContext.Clients.Group(roomCode)) verses famous rooms roomCode
-                        | _ -> ()
+                        for session in Room.games room do
+                            if GameSession.isRoundExpired now session then
+                                do! resolveRound services channels roomCode session.GameId (TimeUp now)
+                            elif GameSession.isRevealOver now session && session.Format <> Duel then
+                                do! advanceRevealedRound services channels roomCode now
                     with ex ->
                         eprintfn "[RoundTimeoutService] failed to resolve round for room %s: %O" roomCode ex
 

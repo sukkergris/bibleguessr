@@ -25,13 +25,12 @@ export const emptyBusyState: RosterBusyState = {
   busyPlayerIds: new Set(),
 }
 
-/** A game started: both of its players are busy, and the game is tracked so
+/** A game started: all of its players are busy, and the game is tracked so
  * its own end can later be recognized. */
-export function gameStarted(state: RosterBusyState, gameId: string, playerA: string, playerB: string): RosterBusyState {
-  return {
-    activeGameIds: new Set(state.activeGameIds).add(gameId),
-    busyPlayerIds: new Set(state.busyPlayerIds).add(playerA).add(playerB),
-  }
+export function gameStarted(state: RosterBusyState, gameId: string, playerIds: readonly string[]): RosterBusyState {
+  const busyPlayerIds = new Set(state.busyPlayerIds)
+  for (const id of playerIds) busyPlayerIds.add(id)
+  return { activeGameIds: new Set(state.activeGameIds).add(gameId), busyPlayerIds }
 }
 
 /**
@@ -44,15 +43,14 @@ export function gameStarted(state: RosterBusyState, gameId: string, playerA: str
  * event from the finished game would mark them available while they are
  * mid-way through the next one.
  */
-export function gameEnded(state: RosterBusyState, gameId: string, playerA: string, playerB: string): RosterBusyState {
+export function gameEnded(state: RosterBusyState, gameId: string, playerIds: readonly string[]): RosterBusyState {
   if (!state.activeGameIds.has(gameId)) return state
 
   const activeGameIds = new Set(state.activeGameIds)
   activeGameIds.delete(gameId)
 
   const busyPlayerIds = new Set(state.busyPlayerIds)
-  busyPlayerIds.delete(playerA)
-  busyPlayerIds.delete(playerB)
+  for (const id of playerIds) busyPlayerIds.delete(id)
 
   return { activeGameIds, busyPlayerIds }
 }
@@ -66,4 +64,11 @@ export function playerLeft(state: RosterBusyState, playerId: string): RosterBusy
   const busyPlayerIds = new Set(state.busyPlayerIds)
   busyPlayerIds.delete(playerId)
   return { activeGameIds: state.activeGameIds, busyPlayerIds }
+}
+
+/** The server's authoritative list of who is in a duel right now (see
+ * RoomActivityChanged) replaces whatever was inferred from individual
+ * events — so a player who joined mid-game still sees who is busy. */
+export function busyPlayersAre(state: RosterBusyState, playerIds: readonly string[]): RosterBusyState {
+  return { activeGameIds: state.activeGameIds, busyPlayerIds: new Set(playerIds) }
 }

@@ -25,15 +25,24 @@ import {
   cancelMatchmaking,
   findMatch,
   onMatchmakingCancelled,
+  onRoomActivityChanged,
   onWaitingForMatch,
+  openCongregation,
   sendChatMessage,
   sendPlayRequest,
   withdrawPlayRequest,
   type ConnectionState,
 } from '../signalr-client'
-import type { ChatMessage, GameSession, PlayRequest, Player } from '../types'
+import type { ChatMessage, CongregationRules, GameSession, PlayRequest, Player } from '../types'
 import { loadRememberedPlayerName, saveRememberedPlayerName } from '../player-name-storage'
-import { gameEnded, gameStarted, playerLeft, type RosterBusyState } from '../roster-busy-state'
+import { busyPlayersAre, gameEnded, gameStarted, playerLeft, type RosterBusyState } from '../roster-busy-state'
+import { CongregationController } from '../congregation/congregation-controller'
+import { congregationViewFor, hostBlockedReason, type CongregationView } from '../congregation/congregation-state'
+import { watchUrlFor } from '../congregation/watch-route'
+import { gameUrl } from '../shared-ui/share-or-copy'
+import '../congregation/congregation-lobby'
+import '../congregation/congregation-game'
+import '../congregation/congregation-results'
 import './chat-panel'
 import './play-requests'
 import './challenge-settings'
@@ -199,6 +208,15 @@ export class RoomSetup extends LitElement {
   @state()
   private connectionState: ConnectionState = 'connected'
 
+  /** The limits a Congregation must respect, from the server (see
+   * docs/web/congregation) — fetched on entering a room. */
+  @state()
+  private congregationRules?: CongregationRules
+
+  /** Follows the room's Congregation — lobby, game, leaderboard, results.
+   * See congregation/congregation-controller.ts. */
+  private congregation = new CongregationController(this)
+
   private _unsubscribePlayerJoined?: () => void
   private _unsubscribeChatMessage?: () => void
   private _unsubscribeChatHistory?: () => void
@@ -218,6 +236,7 @@ export class RoomSetup extends LitElement {
   private _unsubscribeGameOverBusy?: () => void
   private _unsubscribeWaitingForMatch?: () => void
   private _unsubscribeMatchmakingCancelled?: () => void
+  private _unsubscribeRoomActivity?: () => void
 
   disconnectedCallback() {
     // This element is torn down wholesale (not via _onLeaveRoom's own
@@ -249,6 +268,7 @@ export class RoomSetup extends LitElement {
     this._unsubscribeGameOverBusy?.()
     this._unsubscribeWaitingForMatch?.()
     this._unsubscribeMatchmakingCancelled?.()
+    this._unsubscribeRoomActivity?.()
     super.disconnectedCallback()
   }
 
@@ -357,7 +377,7 @@ export class RoomSetup extends LitElement {
                 .initialSession=${this.initialSession}
                 @game-over=${this._onMultiplayerGameOver}
               ></bg-multiplayer-game>`
-            : html`
+            : this._renderCongregationOr(roomCode, html`
                 <bg-challenge-settings
                   .settings=${this.challengeSettings}
                   .verseSource=${this.myTranslationChoice?.verseSource}
@@ -366,17 +386,8 @@ export class RoomSetup extends LitElement {
                 ></bg-challenge-settings>
 
                 ${this._renderMatchmaking()}
-
-                <bg-chat-panel
-                  .players=${this.players}
-                  .messages=${this.messages}
-                  .myPlayerId=${this.myPlayerId}
-                  .connectionState=${this.connectionState}
-                  .disconnectedPlayerIds=${this.disconnectedPlayerIds}
-                  .busyPlayerIds=${this.busyPlayerIds}
-                  @chat-submit=${this._onChatSubmit}
-                  @player-selected=${this._onPlayerSelected}
-                ></bg-chat-panel>
+                ${this._renderHostCongregation(roomCode)}
+                ${this._renderChat(true)}
 
                 <bg-play-requests
                   .requests=${this.playRequests}
@@ -387,13 +398,121 @@ export class RoomSetup extends LitElement {
                   @accept-play-request=${this._onAcceptPlayRequest}
                   @deny-play-request=${this._onDenyPlayRequest}
                 ></bg-play-requests>
-              `}
+              `)}
 
         <button type="button" class="secondary" @click=${this._onLeaveRoom}>
           Back to chat selection
         </button>
       </div>
     `;
+  }
+
+  private _renderChat(challengesAllowed: boolean) {
+    return html`
+      <bg-chat-panel
+        .players=${this.players}
+        .messages=${this.messages}
+        .myPlayerId=${this.myPlayerId}
+        .connectionState=${this.connectionState}
+        .disconnectedPlayerIds=${this.disconnectedPlayerIds}
+        .busyPlayerIds=${this.busyPlayerIds}
+        .challengesAllowed=${challengesAllowed}
+        @chat-submit=${this._onChatSubmit}
+        @player-selected=${this._onPlayerSelected}
+      ></bg-chat-panel>
+    `
+  }
+
+  private get _congregationView(): CongregationView {
+    return congregationViewFor(this.congregation.state, this.myPlayerId)
+  }
+
+  /** The Congregation's screen when one has the room (see
+   * docs/web/congregation), or `otherwise` — the room's usual duel
+   * controls — when none does. */
+  private _renderCongregationOr(roomCode: string | undefined, otherwise: unknown) {
+    const view = this._congregationView
+    switch (view.kind) {
+      case 'none':
+        return otherwise
+      case 'results':
+        return html`<bg-congregation-results
+          .result=${view.result}
+          .myPlayerId=${this.myPlayerId}
+          @back-to-room=${() => this.congregation.dismissResult()}
+        ></bg-congregation-results>`
+      case 'playing':
+        return html`<bg-congregation-game
+          .session=${view.session}
+          .board=${view.board}
+          .myPlayerId=${this.myPlayerId}
+          .translation=${this.myTranslationChoice?.translation}
+          .verseSource=${this.myTranslationChoice?.verseSource}
+        ></bg-congregation-game>`
+      case 'lobby':
+        return html`
+          <bg-congregation-lobby
+            .lobby=${view.lobby}
+            .role=${view.role}
+            .rules=${this.congregationRules}
+            .roomCode=${roomCode ?? ''}
+            .disconnectedPlayerIds=${this.disconnectedPlayerIds}
+            .verseSource=${this.myTranslationChoice?.verseSource}
+            .translation=${this.myTranslationChoice?.translation}
+          ></bg-congregation-lobby>
+          ${this._renderChat(false)}
+        `
+      case 'underway':
+        return html`
+          <p role="status">A Congregation is being played in this room.</p>
+          ${roomCode
+            ? html`<p><a class="watch-link" href=${watchUrlFor(gameUrl(), roomCode)}>Watch the live leaderboard</a></p>`
+            : null}
+          ${this._renderChat(false)}
+        `
+    }
+  }
+
+  /** "Host a Congregation" — a group game for this room, using the
+   * settings above (see docs/web/congregation). Disabled, with the reason
+   * beside it, whenever the server would refuse it. */
+  private _renderHostCongregation(roomCode: string | undefined) {
+    const blocked = hostBlockedReason(
+      this.congregation.state.activity,
+      this.challengeSettings,
+      this.congregationRules,
+      roomCode === undefined,
+    )
+
+    return html`
+      <div class="congregation-host">
+        <button
+          type="button"
+          class="secondary"
+          ?disabled=${blocked !== undefined}
+          aria-describedby="host-congregation-hint"
+          @click=${this._onHostCongregation}
+        >
+          Host a Congregation
+        </button>
+        <p id="host-congregation-hint" class="matchmaking-hint">
+          ${blocked ??
+          `A group game for everyone in this room, with your settings above. You start it when everyone has joined.`}
+        </p>
+      </div>
+    `
+  }
+
+  private _onHostCongregation() {
+    const { choice, roundCount, timeLimitSeconds } = this.challengeSettings
+    const verseSource = this.myTranslationChoice?.verseSource
+    if (!verseSource || timeLimitSeconds === undefined) return
+
+    toWire(choice, verseSource, this.myTranslationChoice?.translation)
+      .then((gameType) => openCongregation(gameType, roundCount, timeLimitSeconds))
+      .catch((err) => {
+        console.error('[bg-room-setup] failed to open a Congregation', err)
+      })
   }
 
   private async _onCreateRoom() {
@@ -533,14 +652,18 @@ export class RoomSetup extends LitElement {
     // the same event.
     this._unsubscribeRoundStarted = onRoundStarted((session) => {
       // Busy-tracking first, and deliberately BEFORE the "is this my
-      // game?" guard below — every game in the room marks its two
-      // players busy for everyone else's roster, not just mine.
-      this._applyBusyState(gameStarted(this._busyState, session.gameId, session.playerA, session.playerB))
+      // game?" guard below — every game in the room marks its players
+      // busy for everyone else's roster, not just mine.
+      this._applyBusyState(gameStarted(this._busyState, session.gameId, session.participants))
+
+      // Everything below is about duels; a Congregation has its own
+      // screen, driven by this.congregation.
+      if (session.format.Case !== 'Duel') return
 
       // Being in the game that just started is what ends the wait — the
       // server never sends a separate "matched" event, since RoundStarted
       // already says everything the client needs.
-      if (session.playerA === this.myPlayerId || session.playerB === this.myPlayerId) {
+      if (session.participants.includes(this.myPlayerId)) {
         this.waitingForMatch = false
 
         // A matched game has no play request behind it, so nothing else
@@ -548,7 +671,7 @@ export class RoomSetup extends LitElement {
         // mounts. Resolved from the session itself, which is the only
         // place a matched player learns who they were paired with.
         if (!this.activeGameOpponent) {
-          const opponentId = session.playerA === this.myPlayerId ? session.playerB : session.playerA
+          const opponentId = session.participants.find((id) => id !== this.myPlayerId) ?? ''
           const opponent = this.players.find((p) => p.id === opponentId)
           this.activeGameOpponent = { id: opponentId, name: opponent?.name ?? 'Your opponent' }
           this.initialSession = session
@@ -557,19 +680,31 @@ export class RoomSetup extends LitElement {
 
       const opponentId = this.activeGameOpponent?.id
       if (!opponentId) return
-      const pair = new Set([session.playerA, session.playerB])
-      if (pair.has(this.myPlayerId) && pair.has(opponentId)) this.initialSession = session
+      const players = new Set(session.participants)
+      if (players.has(this.myPlayerId) && players.has(opponentId)) this.initialSession = session
     })
+    // The server's own account of who is busy in a duel (sent on every
+    // change and once on joining) — the only way a player who joined
+    // mid-game learns it, since they missed those games' RoundStarted.
+    this._unsubscribeRoomActivity = onRoomActivityChanged((activity) => {
+      if (activity.Case === 'RoomOpen') this._applyBusyState(busyPlayersAre(this._busyState, activity.Fields[0]))
+      else this.waitingForMatch = false
+    })
+    this.congregation.start()
+    api
+      .getCongregationRules()
+      .then((rules) => (this.congregationRules = rules))
+      .catch((err) => console.error('[bg-room-setup] failed to load the Congregation rules', err))
     this._unsubscribeWaitingForMatch = onWaitingForMatch(() => {
       this.waitingForMatch = true
     })
     this._unsubscribeMatchmakingCancelled = onMatchmakingCancelled(() => {
       this.waitingForMatch = false
     })
-    this._unsubscribeGameOverBusy = onGameOver((gameId, _scores, playerA, playerB) => {
-      // Matched by game id, not merely by the player pair — see
+    this._unsubscribeGameOverBusy = onGameOver((gameId, _scores, participants) => {
+      // Matched by game id, not merely by the players — see
       // roster-busy-state.ts, where that rule lives and is tested.
-      this._applyBusyState(gameEnded(this._busyState, gameId, playerA, playerB))
+      this._applyBusyState(gameEnded(this._busyState, gameId, participants))
     })
     this._unsubscribePlayRequestDenied = onPlayRequestDenied((fromPlayerId, toPlayerId) => {
       this._resolvePlayRequest(fromPlayerId, toPlayerId)
@@ -628,6 +763,8 @@ export class RoomSetup extends LitElement {
     // rejects it anyway (GameHub.fs's SendPlayRequest guard), but there's
     // no reason to send a request that can only come back as an error.
     if (this.busyPlayerIds.has(targetId)) return
+    // Nobody can be challenged while a Congregation has the room.
+    if (this._congregationView.kind !== 'none') return
 
     const { choice, roundCount, timeLimitSeconds } = this.challengeSettings
     const verseSource = this.myTranslationChoice?.verseSource
@@ -767,6 +904,8 @@ export class RoomSetup extends LitElement {
     this._unsubscribeGameOverBusy?.()
     this._unsubscribeWaitingForMatch?.()
     this._unsubscribeMatchmakingCancelled?.()
+    this._unsubscribeRoomActivity?.()
+    this.congregation.stop()
 
     this.players = []
     this.messages = []
@@ -800,6 +939,22 @@ export class RoomSetup extends LitElement {
       margin: 0;
       font-size: 0.85rem;
       opacity: 0.75;
+    }
+
+    .congregation-host {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      align-items: flex-start;
+    }
+
+    .watch-link {
+      color: var(--link);
+    }
+
+    .watch-link:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
 
     /* See chat-panel.ts for why a placeholder can't serve as a label. */

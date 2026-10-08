@@ -1,6 +1,16 @@
 import * as signalR from '@microsoft/signalr'
 import { api } from './api'
-import type { ChatMessage, GameOverReason, GameSession, GameType, Guess, PlayRequest, Player } from './types'
+import type {
+  ChatMessage,
+  GameOverReason,
+  GameSession,
+  GameType,
+  Guess,
+  LeaderboardSnapshot,
+  PlayRequest,
+  Player,
+  RoomActivityView,
+} from './types'
 
 // Event names must match backend/Api/GameHub.fs's *Event literals.
 export const HubEvents = {
@@ -19,6 +29,8 @@ export const HubEvents = {
   PlayRequestDenied: 'PlayRequestDenied',
   PlayerLeft: 'PlayerLeft',
   PlayerDisconnected: 'PlayerDisconnected',
+  RoomActivityChanged: 'RoomActivityChanged',
+  LeaderboardUpdated: 'LeaderboardUpdated',
   Error: 'Error',
 } as const
 
@@ -242,16 +254,16 @@ export async function denyPlayRequest(fromPlayerId: string): Promise<void> {
  * VerseSource — see shared-kernel/book-numbers.ts's bookNumberOfGuess) is what lets the
  * server score by number instead of name; undefined falls back to name
  * matching server-side. The server determines correctness/points and
- * broadcasts RoundScored once both players have guessed or the round's
+ * broadcasts RoundScored once everyone has guessed or the round's
  * time limit elapses — this call's own resolution carries no result. */
 export async function submitGuess(guess: Guess): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('SubmitGuess', guess.book, guess.bookNumber, guess.chapter, guess.verseNumber)
 }
 
-/** Forfeits the caller's active game, if they have one — ends it and
- * notifies the opponent via GameOver(Forfeited). A no-op if the caller
- * doesn't have an active game. */
+/** Gives up the caller's active game, if they have one. A duel ends and
+ * the opponent is notified via GameOver(Forfeited); leaving a Congregation
+ * only takes the caller out of it while the others play on. */
 export async function forfeitGame(): Promise<void> {
   const hub = await getGameHubConnection()
   await hub.invoke('ForfeitGame')
@@ -379,10 +391,11 @@ export function onRoundScored(handler: (session: GameSession) => void): () => vo
 }
 
 /** Subscribes to a multiplayer game ending — either the final round
- * completed normally, or a player forfeited (left/disconnected past the
- * grace period, or explicitly forfeited). Payload is (gameId, scores,
- * playerA, playerB, reason) — scores is a full running total per player
- * id, same as GameSession's, not a delta.
+ * completed normally, a duel player forfeited (left/disconnected past the
+ * grace period, or explicitly forfeited), or every Congregation
+ * participant left. Payload is (gameId, scores, participants, reason) —
+ * scores is a full running total per player id, same as GameSession's,
+ * not a delta.
  *
  * `gameId` identifies WHICH game ended. Handlers must match on it and
  * ignore anything that isn't the game they're currently playing: the
@@ -395,8 +408,7 @@ export function onGameOver(
   handler: (
     gameId: string,
     scores: Record<string, number>,
-    playerA: string,
-    playerB: string,
+    participants: string[],
     reason: GameOverReason,
   ) => void,
 ): () => void {
@@ -404,11 +416,10 @@ export function onGameOver(
   const listener = (
     gameId: string,
     scores: Record<string, number>,
-    playerA: string,
-    playerB: string,
+    participants: string[],
     reason: GameOverReason,
   ) => {
-    if (!canceled) handler(gameId, scores, playerA, playerB, reason)
+    if (!canceled) handler(gameId, scores, participants, reason)
   }
 
   void getGameHubConnection().then((hub) => hub.on(HubEvents.GameOver, listener))
@@ -518,4 +529,95 @@ export function onMatchmakingCancelled(handler: () => void): () => void {
     canceled = true
     void getGameHubConnection().then((hub) => hub.off(HubEvents.MatchmakingCancelled, listener))
   }
+}
+
+/** Subscribes to `event` with a handler taking the event's arguments.
+ * Returns an unsubscribe function — the same contract as every on*
+ * function above. */
+function subscribe<Args extends unknown[]>(event: string, handler: (...args: Args) => void): () => void {
+  let canceled = false
+  const listener = (...args: Args) => {
+    if (!canceled) handler(...args)
+  }
+
+  void getGameHubConnection().then((hub) => hub.on(event, listener as (...args: unknown[]) => void))
+
+  return () => {
+    canceled = true
+    void getGameHubConnection().then((hub) => hub.off(event, listener as (...args: unknown[]) => void))
+  }
+}
+
+/** Subscribes to the connection coming back after an automatic reconnect.
+ * SignalR forgets every group membership on reconnect, so anything that
+ * joined a group (see watchRoom) must join it again from here. */
+export function onReconnected(handler: () => void): () => void {
+  let canceled = false
+
+  void getGameHubConnection().then((hub) =>
+    hub.onreconnected(() => {
+      if (!canceled) handler()
+    }),
+  )
+
+  return () => {
+    canceled = true
+  }
+}
+
+/** Subscribes to what the room is doing — duels, an open Congregation
+ * lobby, or a running Congregation. Sent on every change and once right
+ * after joining. */
+export function onRoomActivityChanged(handler: (activity: RoomActivityView) => void): () => void {
+  return subscribe(HubEvents.RoomActivityChanged, handler)
+}
+
+/** Subscribes to the room's Congregation leaderboard — sent to players and
+ * spectators alike whenever it changes. */
+export function onLeaderboardUpdated(handler: (board: LeaderboardSnapshot) => void): () => void {
+  return subscribe(HubEvents.LeaderboardUpdated, handler)
+}
+
+/** Opens a Congregation lobby in the caller's room with the caller as
+ * host — see docs/web/congregation. A Congregation always has a time
+ * limit. */
+export async function openCongregation(gameType: GameType, roundCount: number, timeLimitSeconds: number): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('OpenCongregation', gameType, roundCount, timeLimitSeconds)
+}
+
+export async function joinCongregation(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('JoinCongregation')
+}
+
+/** Leaves the open lobby. The host leaving cancels it. */
+export async function leaveCongregation(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('LeaveCongregation')
+}
+
+/** The host cancels their lobby without starting it. */
+export async function cancelCongregation(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('CancelCongregation')
+}
+
+/** The host starts the lobby's game with the members connected now. */
+export async function startCongregation(): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('StartCongregation')
+}
+
+/** Opens the read-only spectator board for `roomCode` — no name, no join.
+ * Resolves with the current board; LeaderboardUpdated follows on every
+ * change. Must be called again after a reconnect (see onReconnected). */
+export async function watchRoom(roomCode: string): Promise<LeaderboardSnapshot> {
+  const hub = await getGameHubConnection()
+  return await hub.invoke<LeaderboardSnapshot>('WatchRoom', roomCode)
+}
+
+export async function unwatchRoom(roomCode: string): Promise<void> {
+  const hub = await getGameHubConnection()
+  await hub.invoke('UnwatchRoom', roomCode)
 }
